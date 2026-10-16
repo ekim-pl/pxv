@@ -621,6 +621,24 @@ describe('supervised Seedvault UI operations', () => {
   });
 });
 describe('all persistent full Android users', () => {
+  it.each(['', 'android.os.usertype.'])(
+    'recognizes verbose persistent full users with type prefix %s',
+    async (prefix) => {
+      const android = new FixtureAndroid();
+      android.overrides.set(
+        'cmd user list -v',
+        '2 users:\n\n0: id=0, name=Owner, type=' +
+          prefix +
+          'full.SYSTEM, flags=ADMIN|FULL|INITIALIZED|MAIN|PRIMARY|SYSTEM (running) (current) (visible)\n' +
+          '1: id=10, name=Work, type=' +
+          prefix +
+          'full.SECONDARY, flags=FULL|INITIALIZED (running)',
+      );
+      const inspected = await new SeedvaultAdapter(android).inspect(target, fixturePolicy());
+      expect(inspected.profiles.map((item) => item.user)).toEqual([owner, secondary]);
+      expect(inspected.unsupportedUsers).toEqual([]);
+    },
+  );
   it('discovers reviewed users and exposes guest/work-profile exclusions', async () => {
     const guest = { userId: 11, serialNo: 43, name: 'Guest' };
     const android = new FixtureAndroid();
@@ -690,12 +708,25 @@ describe('Seedvault diagnostic failures', () => {
       await expect(new SeedvaultAdapter(android).inspect(target, fixturePolicy())).rejects.toThrow();
     },
   );
-  it('classifies symbolic/numeric ephemeral full users and managed profiles without silently including them', async () => {
-    for (const suffix of [
-      'type=android.os.usertype.full.SECONDARY, flags=EPHEMERAL',
-      'type=android.os.usertype.full.SECONDARY, flags=0x100',
-      'type=android.os.usertype.profile.MANAGED, flags=PROFILE',
-    ]) {
+  it.each([
+    'type=android.os.usertype.full.SECONDARY, flags=EPHEMERAL',
+    'type=android.os.usertype.full.SECONDARY, flags=0x100',
+    'type=android.os.usertype.profile.MANAGED, flags=PROFILE',
+    'type=full.SECONDARY, flags=FULL|EPHEMERAL',
+    'type=full.SECONDARY, flags=0x100',
+    'type=full.SECONDARY, flags=FULL|GUEST',
+    'type=full.SECONDARY, flags=FULL|PARTIAL',
+    'type=full.SECONDARY, flags=FULL|REMOVING',
+    'type=full.SECONDARY, flags=FULL (partial)',
+    'type=full.SECONDARY, flags=FULL (removing)',
+    'type=full.GUEST, flags=FULL',
+    'type=profile.MANAGED, flags=PROFILE',
+    'type=profile.PRIVATE, flags=PROFILE',
+    'type=full.SECONDARY_EXTRA, flags=FULL',
+    'type=unknown.full.SECONDARY, flags=FULL',
+  ])(
+    'classifies temporary, incomplete or unsupported user types without silently including them: %s',
+    async (suffix) => {
       const android = new FixtureAndroid();
       android.overrides.set(
         'cmd user list -v',
@@ -705,8 +736,8 @@ describe('Seedvault diagnostic failures', () => {
       expect((await new SeedvaultAdapter(android).inspect(target, fixturePolicy())).unsupportedUsers).toEqual(
         [secondary],
       );
-    }
-  });
+    },
+  );
   it('reports deactivated backup and stopped/locked users as diagnostics', async () => {
     const android = new FixtureAndroid();
     android.activated = false;

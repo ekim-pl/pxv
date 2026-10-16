@@ -49,6 +49,14 @@ export function parseNamedUsers(output: string): { userId: number; name: string 
     throw new AdapterError('Android named user listing is missing or ambiguous');
   return users;
 }
+function backupTransportPackage(name: string): string {
+  // bmgr lists transport-defined names; Seedvault registers its class name rather than a component.
+  if (name === 'com.stevesoltys.seedvault.transport.ConfigurableBackupTransport')
+    return 'com.stevesoltys.seedvault';
+  const component = /^([A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z][A-Za-z0-9_]*)+)\/[A-Za-z0-9_.$]+$/.exec(name);
+  if (!component?.[1]) throw new AdapterError('Android backup transports could not be inspected');
+  return component[1];
+}
 export function parseBackupObservation(
   enabledOutput: string,
   transportsOutput: string,
@@ -59,9 +67,9 @@ export function parseBackupObservation(
   for (const raw of transportsOutput.trim().split('\n')) {
     const line = raw.trim();
     if (line === 'No transports available.') continue;
-    const row = /^(\*\s*)?([A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z][A-Za-z0-9_]*)+)\/[A-Za-z0-9_.$]+$/.exec(line);
-    if (!row?.[2]) throw new AdapterError('Android backup transports could not be inspected');
-    if (row[1]) active.push(row[2]);
+    const selected = line.startsWith('*');
+    const transportPackage = backupTransportPackage(selected ? line.slice(1).trimStart() : line);
+    if (selected) active.push(transportPackage);
   }
   if (active.length > 1) throw new AdapterError('Android backup selected transport is ambiguous');
   return { enabled: state[1] === 'enabled', transportPackage: active[0] ?? null };

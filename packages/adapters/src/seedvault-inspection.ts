@@ -36,9 +36,9 @@ function classifyModern(
   if (!type) throw new AdapterError('Android user type is missing');
   const numericFlags = /\bflags=(0x[a-f0-9]+|\d+)(?:,|\s|$)/i.exec(line)?.[1];
   const excluded =
-    /\b(?:EPHEMERAL|GUEST|PARTIAL|REMOVING)\b/.test(line) ||
+    /\b(?:EPHEMERAL|GUEST|PARTIAL|REMOVING)\b|\((?:partial|removing)\)/.test(line) ||
     Boolean(numericFlags && (Number(numericFlags) & (4 | 32 | 256 | 4096)) !== 0);
-  (['android.os.usertype.full.SYSTEM', 'android.os.usertype.full.SECONDARY'].includes(type) && !excluded
+  (/^(?:android\.os\.usertype\.)?full\.(?:SYSTEM|SECONDARY)$/.test(type) && !excluded
     ? full
     : unsupported
   ).push(user);

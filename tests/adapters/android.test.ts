@@ -339,6 +339,49 @@ describe('identity-bound Android adapter', () => {
       transportPackage: 'com.stevesoltys.seedvault',
     });
   });
+  it.each(['enabled', 'disabled'])(
+    'recognizes the selected Seedvault transport name while backup is %s',
+    (state) => {
+      expect(
+        parseBackupObservation(
+          'Backup Manager currently ' + state,
+          'com.android.localtransport/.LocalTransport\n  * com.stevesoltys.seedvault.transport.ConfigurableBackupTransport',
+        ),
+      ).toEqual({ enabled: state === 'enabled', transportPackage: 'com.stevesoltys.seedvault' });
+    },
+  );
+  it('does not select a registered Seedvault name without the selection marker', () => {
+    expect(
+      parseBackupObservation(
+        'Backup Manager currently enabled',
+        'com.stevesoltys.seedvault.transport.ConfigurableBackupTransport',
+      ),
+    ).toEqual({ enabled: true, transportPackage: null });
+    expect(
+      parseBackupObservation(
+        'Backup Manager currently enabled',
+        '* com.android.localtransport/.LocalTransport\ncom.stevesoltys.seedvault.transport.ConfigurableBackupTransport',
+      ),
+    ).toEqual({ enabled: true, transportPackage: 'com.android.localtransport' });
+  });
+  it.each([
+    '* org.example.transport.ConfigurableBackupTransport',
+    '* com.stevesoltys.seedvault.transport.UnknownTransport',
+    '* com.stevesoltys.seedvault.transport.ConfigurableBackupTransportService',
+    'org.example.transport.ConfigurableBackupTransport\n* com.stevesoltys.seedvault.transport.ConfigurableBackupTransport',
+  ])('rejects unknown opaque backup transport names: %s', (transports) => {
+    expect(() => parseBackupObservation('Backup Manager currently enabled', transports)).toThrow(
+      /transports/,
+    );
+  });
+  it('rejects multiple selected transports across named and component formats', () => {
+    expect(() =>
+      parseBackupObservation(
+        'Backup Manager currently enabled',
+        '* com.android.localtransport/.LocalTransport\n* com.stevesoltys.seedvault.transport.ConfigurableBackupTransport',
+      ),
+    ).toThrow(/ambiguous/);
+  });
   it('requires stable Android serial numbers and rejects ambiguous or truncated users', () => {
     expect(parseUsers('UserInfo{0:Owner:c13} serialNo=0\nUserInfo{10:work:10} serialNo=42')).toEqual([
       { userId: 0, name: 'Owner', serialNo: 0 },
