@@ -1,5 +1,7 @@
 # White-label forks
 
+For an ordered, gated rollout checklist, see the [white-label branded rollout plan](WHITE_LABEL_BRAND_PLAN.md).
+
 A branded product is a separately owned fork with its own `product.json`, policy pack, public assets, guide theme, support details, source reviews and release evidence. The fork may use PXV's engine and public contracts, but branding does not qualify its policies or transfer responsibility for a customer's devices and data.
 
 ## Current technical stack
