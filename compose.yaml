@@ -1,0 +1,114 @@
+name: pxv
+
+x-image: &image
+  image: ${PXV_IMAGE:?Set PXV_IMAGE to an explicitly built worker image}
+  pull_policy: never
+  platform: linux/amd64
+  user: "${PXV_UID:-1000}:${PXV_GID:-1000}"
+  init: true
+  stop_grace_period: 90s
+  network_mode: host
+  read_only: true
+  tmpfs:
+    - /tmp:rw,nosuid,nodev,mode=1777
+  cap_drop: [ALL]
+
+x-environment: &environment
+  PXV_ROOT: /project
+  PXV_CONTROL_ROOT: /control
+  PXV_EXTENSION_ROOT: /extensions
+  HOME: /adb-home
+  ADB_VENDOR_KEYS: /adb-home/.android
+  ADB_MDNS_AUTO_CONNECT: "0"
+
+x-worker: &worker
+  <<: *image
+  working_dir: /project
+  command: [help]
+  stdin_open: true
+  volumes:
+    - type: bind
+      source: ${PXV_PROJECT:?Set PXV_PROJECT to an initialized isolated project}
+      target: /project
+      bind: { create_host_path: false }
+    - type: bind
+      source: ${PXV_CONTROL_ROOT:-${XDG_STATE_HOME:-${HOME}/.local/state}/pxv-host-control}
+      target: /control
+      bind: { create_host_path: false }
+    - type: bind
+      source: ${PXV_EXTENSION_ROOT:-${XDG_DATA_HOME:-${HOME}/.local/share}/pxv/extensions}
+      target: /extensions
+      read_only: true
+      bind: { create_host_path: false }
+    - type: bind
+      source: ${PXV_CONTROL_ROOT:-${XDG_STATE_HOME:-${HOME}/.local/state}/pxv-host-control}/adb-home
+      target: /adb-home
+      read_only: true
+      bind: { create_host_path: false }
+
+services:
+  # Start this profile explicitly before direct workers. It owns the ADB server
+  # independently of clients and uses the operator's persistent private keys.
+  adb:
+    <<: *image
+    profiles: [adb]
+    group_add: ["${PXV_USB_GID:-46}"]
+    device_cgroup_rules: ['c 189:* rmw']
+    entrypoint: [/opt/platform-tools/adb]
+    command: [-L, "tcp:127.0.0.1:5038", nodaemon, server]
+    environment:
+      HOME: /adb-home
+      ADB_VENDOR_KEYS: /adb-home/.android
+      ADB_MDNS_AUTO_CONNECT: "0"
+    volumes:
+      - type: bind
+        source: ${PXV_CONTROL_ROOT:-${XDG_STATE_HOME:-${HOME}/.local/state}/pxv-host-control}/adb-home
+        target: /adb-home
+        bind: { create_host_path: false }
+      - type: bind
+        source: /dev/bus/usb
+        target: /dev/bus/usb
+        bind: { create_host_path: false }
+
+  direct:
+    <<: *worker
+    profiles: [direct]
+    group_add: ["${PXV_USB_GID:-46}"]
+    device_cgroup_rules: ['c 189:* rmw']
+    environment:
+      <<: *environment
+      PXV_DOCKER_MODE: direct
+      PXV_HOST_ADB_HOST: 127.0.0.1
+      PXV_HOST_ADB_PORT: "5038"
+    volumes:
+      - type: bind
+        source: ${PXV_PROJECT:?Set PXV_PROJECT to an initialized isolated project}
+        target: /project
+        bind: { create_host_path: false }
+      - type: bind
+        source: ${PXV_CONTROL_ROOT:-${XDG_STATE_HOME:-${HOME}/.local/state}/pxv-host-control}
+        target: /control
+        bind: { create_host_path: false }
+      - type: bind
+        source: ${PXV_EXTENSION_ROOT:-${XDG_DATA_HOME:-${HOME}/.local/share}/pxv/extensions}
+        target: /extensions
+        read_only: true
+        bind: { create_host_path: false }
+      - type: bind
+        source: ${PXV_CONTROL_ROOT:-${XDG_STATE_HOME:-${HOME}/.local/state}/pxv-host-control}/adb-home
+        target: /adb-home
+        read_only: true
+        bind: { create_host_path: false }
+      - type: bind
+        source: /dev/bus/usb
+        target: /dev/bus/usb
+        bind: { create_host_path: false }
+
+  host-adb:
+    <<: *worker
+    profiles: [host-adb]
+    environment:
+      <<: *environment
+      PXV_DOCKER_MODE: host-adb
+      PXV_HOST_ADB_HOST: ${PXV_HOST_ADB_HOST:-127.0.0.1}
+      PXV_HOST_ADB_PORT: ${PXV_HOST_ADB_PORT:-5037}

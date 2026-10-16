@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+set -euo pipefail
+root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)"
+exec node "$root/tools/build-android.mjs" --component e2e --project-root "${PXV_ROOT:-$root}" --resource-root "$root" "$@"

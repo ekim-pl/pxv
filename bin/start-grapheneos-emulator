@@ -1,0 +1,91 @@
+#!/usr/bin/env bash
+set -eo pipefail
+
+usage() {
+  cat <<'USAGE'
+Usage: ./bin/start-grapheneos-emulator GRAPHENEOS_SOURCE_DIR [EMULATOR_ARGS...]
+   or: GRAPHENEOS_SOURCE_DIR=/path/to/grapheneos ./bin/start-grapheneos-emulator [EMULATOR_ARGS...]
+
+Starts the GrapheneOS SDK emulator target (sdk_phone64_x86_64-cur-userdebug)
+from an already-built GrapheneOS source tree. It does not download or build
+GrapheneOS. Starting it boots the built GrapheneOS image in the virtual device.
+Pass optional Android Emulator flags after the source directory.
+
+For a clean first install, pass -wipe-data. Later launches keep the emulator's
+data unless you pass -wipe-data again.
+
+Prepare the source tree and development image using the current official
+GrapheneOS build instructions before running this helper. Automated source
+sync and custom OS builds are outside pxv 0.1.0.
+
+The SDK emulator target is for development and does not provide the full
+security features or monthly updates of supported Pixel devices.
+USAGE
+}
+
+if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
+  usage
+  exit 0
+fi
+
+source_tree="${GRAPHENEOS_SOURCE_DIR:-}"
+if (($#)) && [[ "$1" != -* ]]; then
+  source_tree="$1"
+  shift
+elif [[ -z "$source_tree" ]]; then
+  if (($# == 0)); then
+    usage >&2
+    exit 2
+  fi
+  source_tree="$1"
+  shift
+fi
+
+if [[ "$(uname -s)" != "Linux" || "$(uname -m)" != "x86_64" ]]; then
+  echo "GrapheneOS SDK emulator launch requires an x86_64 Linux build environment." >&2
+  exit 2
+fi
+
+if ! source_tree="$(cd -- "$source_tree" 2>/dev/null && pwd -P)"; then
+  echo "GrapheneOS source directory does not exist." >&2
+  exit 2
+fi
+if [[ ! -f "$source_tree/build/envsetup.sh" ]]; then
+  echo "Not a GrapheneOS/Android source tree: build/envsetup.sh is missing." >&2
+  exit 2
+fi
+if [[ ! -f "$source_tree/.repo/manifest.xml" ]] || ! grep -qi "GrapheneOS" "$source_tree/.repo/manifest.xml"; then
+  echo "The source tree manifest does not identify a GrapheneOS checkout." >&2
+  exit 2
+fi
+
+cd -- "$source_tree"
+# shellcheck disable=SC1091
+source build/envsetup.sh || {
+  echo "Could not initialize the Android build environment." >&2
+  exit 2
+}
+lunch sdk_phone64_x86_64-cur-userdebug || {
+  echo "Could not select the GrapheneOS SDK emulator target." >&2
+  exit 2
+}
+
+if [[ -z "${ANDROID_PRODUCT_OUT:-}" || ! -f "$ANDROID_PRODUCT_OUT/system.img" ]]; then
+  cat >&2 <<'ERROR'
+The GrapheneOS emulator system image is missing from the selected build output.
+Build it from this source tree first:
+  source build/envsetup.sh
+  lunch sdk_phone64_x86_64-cur-userdebug
+  m
+ERROR
+  exit 2
+fi
+
+emulator_bin="$(type -P emulator || true)"
+if [[ -z "$emulator_bin" ]]; then
+  echo "The Android Emulator executable is not available in the build environment." >&2
+  exit 2
+fi
+
+echo "Starting the GrapheneOS SDK emulator (development build; not a production-secure device)." >&2
+exec "$emulator_bin" "$@"

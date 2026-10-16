@@ -1,0 +1,22 @@
+{
+  "name": "@pxv/contracts",
+  "version": "0.1.0",
+  "private": false,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "dependencies": {
+    "yaml": "2.9.1",
+    "zod": "4.6.7"
+  },
+  "license": "MIT"
+}

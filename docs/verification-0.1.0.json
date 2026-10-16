@@ -1,0 +1,251 @@
+{
+  "schemaVersion": 1,
+  "product": "pxv Community",
+  "engineVersion": "0.1.0",
+  "recordedOn": "2026-10-16",
+  "scope": "Sanitized source-freeze verification snapshot; final artifact identities are recorded separately after derivation.",
+  "qualification": {
+    "status": "incomplete live acceptance",
+    "productionAccepted": false,
+    "policyPacksCertified": false,
+    "uiAdaptersCertified": false
+  },
+  "toolchain": {
+    "node": "24.22.0",
+    "typescriptCompiler": "7.0.2",
+    "pnpm": "12.11.2",
+    "target": "Linux x86_64"
+  },
+  "automated": {
+    "quality": {
+      "status": "passed",
+      "checks": [
+        "strict TypeScript build",
+        "type-aware lint",
+        "package boundaries and cycles",
+        "formatting",
+        "35 public-document command/link checks"
+      ]
+    },
+    "tests": {
+      "status": "passed",
+      "tests": 407,
+      "files": 34
+    },
+    "applicationCoverage": {
+      "lines": {
+        "percent": 94.65,
+        "covered": 3882,
+        "total": 4101
+      },
+      "branches": {
+        "percent": 87.43,
+        "covered": 3272,
+        "total": 3742
+      },
+      "requiredLinesPercent": 90,
+      "requiredBranchesPercent": 85,
+      "status": "passed"
+    },
+    "rustSupervisor": {
+      "status": "passed",
+      "tests": 6,
+      "target": "x86_64-unknown-linux-musl",
+      "linkage": "static PIE",
+      "sha256": "8419689fae534e13d7692f9d5c6981783c8d27ea080cf25181eb4b5943f0da83"
+    },
+    "scenarios": [
+      "six reviewed safety regressions",
+      "real cryptographic verification and tampering",
+      "native owner death, cancellation, escaped descendants and durable fences",
+      "SQLite crash/idempotency/atomic submission and retained malformed evidence",
+      "extension integrity, offline invocation and credential redaction",
+      "two white-label fork identities",
+      "distribution execution and private-file exclusions"
+    ],
+    "nativeBaseline": {
+      "status": "passed actual execution",
+      "host": {
+        "lease": true,
+        "mutationExitCode": 0,
+        "cleanupProven": true,
+        "remainingReservations": 0
+      },
+      "debian12": {
+        "uid": 1000,
+        "readOnlyRoot": true,
+        "network": "none",
+        "capabilities": "dropped ALL",
+        "lease": true,
+        "mutationExitCode": 0,
+        "cleanupProven": true,
+        "remainingReservations": 0
+      },
+      "note": "Static supervisor mounted into the existing Debian 12 OCI runtime; final rebuilt artifacts require separate post-build validation."
+    },
+    "productionDependencyAudit": {
+      "dependencies": 144,
+      "totalVulnerabilities": 0,
+      "critical": 0,
+      "high": 0,
+      "moderate": 0,
+      "low": 0
+    },
+    "nativeShutdownOutcome": {
+      "declaration": "Only the final USB-debugging-disable command declares normal exit codes0/255",
+      "rawReceiptCodeRetained": true,
+      "physicalCustodyConfirmationRequired": true,
+      "signalsTimeoutsCleanupFailureAndPostconditionFailureAlwaysFence": true,
+      "fullCliRegression": "passed simulated-device CLI workflow with real supervisor: declared normal 255 receipt, no residual fence after validated disconnect, separate physical-custody confirmation gate"
+    }
+  },
+  "documents": {
+    "status": "passed document QA",
+    "editions": 6,
+    "pages": 24,
+    "locales": [
+      "en",
+      "pl"
+    ],
+    "format": "A4 PDF and HTML",
+    "qaRecord": "guides/qa/manifest.json",
+    "visualReview": "guides/qa/review.json",
+    "deviceEvidence": false
+  },
+  "packaging": {
+    "previouslyTestedCandidate": "0.1.0-preview.20261016095137.40c0e4a1",
+    "verifiedFormats": [
+      "portable archive outside the checkout working directory",
+      "Debian package installed with dpkg on Debian 12",
+      "npm tarball installed offline",
+      "OCI image under caller UID 1000 and read-only root filesystem"
+    ],
+    "finalArtifacts": {
+      "status": "post-freeze derivation and separate verification record required",
+      "identityRecord": "final-distribution/artifacts.json, retained outside the frozen candidate source snapshot",
+      "publication": "not performed",
+      "note": "Final candidate must include the static musl correction; exact derived hashes and actual packaged-native checks are recorded after build outside the source snapshot."
+    },
+    "note": "The final Docker foreground/default-mode correction follows the previously tested candidate. Final derived formats require their own retained checksums, provenance and execution evidence.",
+    "nativeBaselineCorrection": {
+      "oldCandidateStatus": "Disqualified for supported Debian 12 distribution: original GNU supervisor required GLIBC_2.39. Earlier entrypoint/doctor checks did not prove native leases. OS/live results measured on Ubuntu remain recorded facts.",
+      "correctedTarget": "x86_64-unknown-linux-musl",
+      "correctedLinkage": "static",
+      "hostActualLease": "passed",
+      "debian12ActualLease": "passed UID1000/read-only root; code0 cleanupProven and no reservations",
+      "finalArtifacts": "rebuilt artifacts and exact hashes recorded separately after correction",
+      "correctedSupervisorSha256": "8419689fae534e13d7692f9d5c6981783c8d27ea080cf25181eb4b5943f0da83"
+    }
+  },
+  "live": {
+    "physical": {
+      "deviceClass": "Google Pixel 8a",
+      "codename": "akita",
+      "candidate": "0.1.0-preview.20261016095137.40c0e4a1",
+      "authorization": "Explicit disposable-device erasure and installation authorization retained privately",
+      "os": {
+        "name": "GrapheneOS",
+        "release": "2026100600",
+        "artifact": "official akita-install-2026100600",
+        "verification": [
+          "reviewed SHA-256",
+          "official OpenSSH signature"
+        ]
+      },
+      "completed": [
+        {
+          "step": "bootloader unlock",
+          "nativeExitCode": 0,
+          "cleanupProven": true
+        },
+        {
+          "step": "authenticated official installation",
+          "nativeExitCode": 0,
+          "cleanupProven": true
+        },
+        {
+          "step": "bootloader relock",
+          "nativeExitCode": 0,
+          "cleanupProven": true
+        },
+        {
+          "step": "fastboot lock measurement",
+          "observedUnlocked": "no",
+          "status": "passed"
+        }
+      ],
+      "currentStatus": "OS installation/relock, three-profile fixture provisioning, measured reboot persistence and recipient-private normal locks are recorded. The earlier finalization disconnect remained fenced without a handoff record and was explicitly inspected/recovered. Corrected final candidate 4 retest, fresh review/attestations and custody remain pending.",
+      "fullAcceptance": "pending",
+      "verifiedBootObservation": {
+        "candidate": "0.1.0-preview.20261016101337.094df7d0",
+        "bootVerified": true,
+        "roBootFlashLocked": 1
+      },
+      "pending": [
+        "final static-candidate review and required fresh attestations",
+        "remaining policy manual signoffs",
+        "representative cross-user data-isolation checks beyond the fixture observations",
+        "approved application VPN routing and failure/reconnection",
+        "representative backup restore",
+        "full English operator/recipient workflow qualification",
+        "full Polish operator/recipient workflow qualification",
+        "final helper-removal and debugging-shutdown checks",
+        "recipient acceptance and completed custody"
+      ],
+      "nativeRecoveryReservations": 0,
+      "provisioning": {
+        "candidate": "0.1.0-preview.20261016101337.094df7d0",
+        "automatedActionsCompleted": 13,
+        "androidUsers": 3,
+        "layout": "one owner and two secondary profiles",
+        "fixturePackage": "org.pxv.acceptance",
+        "fixtureVersion": "1",
+        "installedAllThree": true,
+        "postNotificationsGrantedAllThree": true,
+        "screenOffTimeoutAllThree": 60000,
+        "vpnAllThree": "null/default",
+        "normalCredentials": "privately confirmed in all three profiles and attested",
+        "userConfirmed": "English and Polish test-profile app launch, normal screen locks and expected system languages",
+        "helpersPresent": false
+      },
+      "reboot": {
+        "status": "passed measured before/after comparison",
+        "stableUserIdentitiesUnchanged": true,
+        "fixtureVersionAndSignerUnchanged": true,
+        "runtimePermissionsUnchanged": true,
+        "requiredSettingsUnchanged": true,
+        "vpnConfigurationUnchanged": true,
+        "bootVerifiedAfterReboot": true
+      },
+      "finalizationAttempt": {
+        "status": "pre-correction shutdown was not accepted as completed handoff",
+        "observed": "The USB-debugging-disable request disconnected ADB and returned 255; prior code retained a native fence and no handoff record.",
+        "operatorResponse": "Physical settings were inspected; explicit inspected recovery was performed. USB was re-enabled for the corrected candidate retest.",
+        "correctedRuntime": "Only the dedicated final USB-disable command declares normal exits 0/255; fresh existing-server/selected-transport validation and physical custody confirmation remain mandatory.",
+        "retest": "pending corrected final candidate 4 build and fresh review; no corrected physical shutdown pass claimed by this snapshot"
+      }
+    },
+    "emulator": {
+      "grapheneOsProvenance": "unavailable; acceptance pending",
+      "availableStockImage": "Google APIs API 36",
+      "stockImageIsGrapheneOsEvidence": false
+    },
+    "duress": {
+      "destructiveActivationPerformed": false,
+      "requirement": "Never activate destructive duress to test it"
+    }
+  },
+  "privacy": {
+    "serialsPublished": false,
+    "rawDeviceLogsPublished": false,
+    "recipientSecretsPublished": false,
+    "registryCredentialsPublished": false,
+    "rawEvidence": "Retained privately by the operator; public data contains only model, OS release and non-sensitive candidate identity"
+  },
+  "limits": [
+    "Offline passes and package checks do not certify a policy pack, UI workflow or physical phone.",
+    "Bootloader relock measurement alone does not establish completed recipient setup or custody.",
+    "The final artifact verification record must identify the exact post-freeze candidate and derived artifact bytes.",
+    "No publishing, global installation or stable-launcher replacement is implied by local preview builds."
+  ]
+}

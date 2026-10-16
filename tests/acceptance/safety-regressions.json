@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 1,
+  "androidUserReuse": {
+    "original": { "userId": 10, "serialNo": 17, "name": "contacts" },
+    "replacement": { "userId": 10, "serialNo": 18, "name": "contacts" },
+    "cleanupAllowed": false
+  },
+  "permissionDrift": {
+    "packageId": "org.example.vpn",
+    "permission": "android.permission.POST_NOTIFICATIONS",
+    "originalGranted": true,
+    "replacementGranted": false,
+    "signoffValid": false
+  },
+  "childResourceScope": {
+    "parentOperation": "provision",
+    "childOperation": "network-probe",
+    "parentResource": "keep-awake",
+    "childResource": "probe-helper",
+    "expectedReleased": ["probe-helper"]
+  },
+  "secretEnvironmentRetention": {
+    "name": "PXV_ACCEPTANCE_SECRET",
+    "sentinel": "acceptance-secret-must-not-be-retained",
+    "durableField": "inheritedEnvironment",
+    "retentionAllowed": false
+  },
+  "allAssetSelection": {
+    "assetId": "all",
+    "selectorKind": "asset",
+    "expectedDeviceSerial": "PIXEL1",
+    "expectedSelectedCount": 1
+  },
+  "emulatorFinalSetup": {
+    "deviceKind": "emulator",
+    "capabilities": ["normal_credentials", "language", "duress"],
+    "requiredEvidence": "emulator_image_provenance",
+    "forbiddenEvidence": "verified_boot"
+  }
+}

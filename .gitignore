@@ -1,0 +1,43 @@
+config/manifest.yaml
+config/inventory.json
+/config/inventory.json.lock
+config/allowed_signers
+cache/*
+!cache/.gitkeep
+state/*
+!state/.gitkeep
+secrets/*
+!secrets/.gitkeep
+backups/*
+!backups/.gitkeep
+
+# Retained local environments and tooling (never distributed)
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.DS_Store
+android/probe/build/
+android/e2e/build/
+*.egg-info/
+build/
+dist/
+.pxv-live-emulator.json
+fixtures/live-lock.json
+
+# Local repository trust inputs
+.env
+.env.*
+!.env.example
+
+android/setup/build/
+
+# TypeScript builds and native outputs
+node_modules/
+**/dist/
+*.tsbuildinfo
+coverage/
+native/supervisor/target/
+.pxv-preview/

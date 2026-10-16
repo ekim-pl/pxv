@@ -1,0 +1,67 @@
+{
+  "schemaVersion": 1,
+  "id": "reference-five",
+  "version": "0.1.0",
+  "name": "Five-profile structural starter",
+  "capabilities": ["normal_credentials", "network", "backup"],
+  "requiredAttestations": [
+    "routes",
+    "network_failure_tests",
+    "backup_recovery",
+    "recipient_acceptance",
+    "operator_signoff"
+  ],
+  "repositories": [],
+  "profiles": [
+    {
+      "id": "owner",
+      "name": "owner",
+      "kind": "owner",
+      "packages": [],
+      "settings": [],
+      "permissions": [],
+      "vpn": { "packageId": null, "alwaysOn": false, "lockdown": false },
+      "language": "en-US"
+    },
+    {
+      "id": "contacts",
+      "name": "contacts",
+      "kind": "secondary",
+      "packages": [],
+      "settings": [],
+      "permissions": [],
+      "vpn": { "packageId": null, "alwaysOn": false, "lockdown": false },
+      "language": "en-US"
+    },
+    {
+      "id": "google",
+      "name": "google",
+      "kind": "secondary",
+      "packages": [],
+      "settings": [],
+      "permissions": [],
+      "vpn": { "packageId": null, "alwaysOn": false, "lockdown": false },
+      "language": "en-US"
+    },
+    {
+      "id": "testing",
+      "name": "testing",
+      "kind": "secondary",
+      "packages": [],
+      "settings": [],
+      "permissions": [],
+      "vpn": { "packageId": null, "alwaysOn": false, "lockdown": false },
+      "language": "en-US"
+    },
+    {
+      "id": "onion",
+      "name": "onion",
+      "kind": "secondary",
+      "packages": [],
+      "settings": [],
+      "permissions": [],
+      "vpn": { "packageId": null, "alwaysOn": false, "lockdown": false },
+      "language": "en-US"
+    }
+  ]
+}

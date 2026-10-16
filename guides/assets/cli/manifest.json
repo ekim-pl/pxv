@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "kind": "CLI help capture",
+  "command": [
+    "pxv",
+    "--help"
+  ],
+  "engineVersion": "0.1.0",
+  "captures": [
+    {
+      "path": "overview.txt",
+      "sha256": "17b76b028bcfb9edde20b4050295e441f33379dc08f5f14db041f5c92bbd4aed"
+    }
+  ],
+  "deviceEvidence": false
+}

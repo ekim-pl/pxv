@@ -1,0 +1,16 @@
+# Docker consumes a generated frozen candidate, never the source checkout.
+**
+!Dockerfile
+!entrypoint.sh
+!candidate/
+!candidate/**
+**/.env*
+**/.npmrc
+**/*.key
+**/*.pem
+**/*.keystore
+**/*.p12
+candidate/state/**
+candidate/secrets/**
+candidate/cache/**
+candidate/backups/**

@@ -1,0 +1,26 @@
+{
+  "name": "@pxv/cli",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "exports": "./dist/index.js",
+  "files": [
+    "dist"
+  ],
+  "dependencies": {
+    "@pxv/contracts": "workspace:*",
+    "@pxv/runtime": "workspace:*",
+    "@pxv/adapters": "workspace:*",
+    "@pxv/engine": "workspace:*",
+    "@pxv/extensions": "workspace:*",
+    "@pxv/mcp": "workspace:*",
+    "@pxv/guides": "workspace:*"
+  },
+  "bin": {
+    "pxv": "./dist/main.js"
+  },
+  "engines": {
+    "node": "24.22.0"
+  }
+}

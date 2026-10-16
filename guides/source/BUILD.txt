@@ -1,0 +1,10 @@
+pxv0.1.0 Node documentation pipeline
+
+Sources: six UTF-8 Markdown editions under source/markdown.
+Renderer: @pxv/release buildDocumentation, pinned marked/Playwright, explicit system Chromium.
+Formats: six A4 PDFs and six HTML files. No office/print split or PDF/X claim.
+Commands: pnpm build; PXV_CHROMIUM=/usr/bin/google-chrome ./guides/rebuild.sh
+Options: --output-dir DIRECTORY, --html-only, --no-render, --chromium EXECUTABLE.
+QA: Poppler pdfinfo, pdftotext and pdftoppm; hashes and every-page PNGs under qa/.
+No package installation, browser download, device command or publication occurs.
+A successful render does not establish policy, emulator or physical-device acceptance.

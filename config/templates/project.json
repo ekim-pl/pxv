@@ -1,0 +1,9 @@
+{
+  "format": "pxv-ts",
+  "schemaVersion": 1,
+  "id": "pilot",
+  "productId": "pxv",
+  "policyFile": "policy.json",
+  "inventoryFile": "inventory.json",
+  "extensions": []
+}

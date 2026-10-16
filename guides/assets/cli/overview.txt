@@ -1,0 +1,22 @@
+pxv 0.1.0 — pxv Community
+
+project init --path NEW_DIRECTORY [--policy FILE]
+policy validate | policy lock
+inventory list | inventory enroll --asset ID --serial SERIAL --model MODEL --codename CODE --yes
+host doctor | host adb-start | host bootstrap --file APPROVED_ARCHIVE.json --license ID --path NEW_DIRECTORY
+host build-helper --type probe|setup|e2e
+host docker-prepare | docker-adb-start --image IMAGE | docker-adb-stop
+device inspect | plan | guided | provision | create-users | deploy | install-os | report | attest | finalize | recover
+  --project-root DIRECTORY --asset ID [--transport usb|wifi|emulator] [--dry-run] [--yes]
+fleet provision --all|--group GROUP [--jobs 2] [--yes]
+agent runs | status --run ID [--after CURSOR] | cancel --run ID | resume --run ID --yes | refresh --run ID | execute --plan ID --review-file FILE --operator NAME
+mcp serve [--allow-mutations]
+extension install|update --package NAME --version EXACT --registry HTTPS
+extension install --file PACKAGE.tgz | list | inspect | remove | invoke
+extension policy|guide|adapter --extension ID --contribution PATH
+lifecycle maintenance|policy-change|loss|retirement --asset ID --operator NAME --note TEXT [--erased]
+handoff accept --asset ID --recipient NAME --debugging-off --yes
+handoff export --asset ID --output DIRECTORY [--locale en|pl]
+guide operator|recipient|project [--locale en|pl]
+Use --execution docker --image EXPLICIT_IMAGE --docker-mode direct|host-adb for container execution.
+All mutations require an enrolled target and explicit review. Physical confirmations remain on the phone.

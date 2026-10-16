@@ -1,0 +1,19 @@
+{
+  "name": "@pxv/extension-sdk",
+  "version": "0.1.0",
+  "type": "module",
+  "license": "MIT",
+  "private": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "dependencies": {
+    "@pxv/contracts": "workspace:*"
+  }
+}

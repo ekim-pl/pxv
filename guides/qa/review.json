@@ -1,0 +1,49 @@
+{
+  "schemaVersion": 1,
+  "kind": "Document visual review; not live device acceptance",
+  "editions": [
+    {
+      "name": "operator-en",
+      "pdfSha256": "8cc7e9731fc67041bea88a6af2bec8d5b04265a3b088d9bbcd27feed5f16a67f",
+      "pages": 6
+    },
+    {
+      "name": "operator-pl",
+      "pdfSha256": "7536d6fbd2cb1388822a6f38a35cc97c9cab9d5b639239ec4a454471b3694246",
+      "pages": 5
+    },
+    {
+      "name": "product-en",
+      "pdfSha256": "faa84883029af2496062aa8130e3bc6160ac567db4b656461004e6beb5c46f8d",
+      "pages": 3
+    },
+    {
+      "name": "product-pl",
+      "pdfSha256": "0cb15bb0b672f8a2c90f8308d82165aa6610a17308f3f8ee3a7be8a8dce3c66e",
+      "pages": 3
+    },
+    {
+      "name": "user-en",
+      "pdfSha256": "ed61276a1580b93ea4477e9d2dbd269818ad9848881b5b25ec788b17dae1413d",
+      "pages": 4
+    },
+    {
+      "name": "user-pl",
+      "pdfSha256": "0296250af5f996a8e6fb54eae6c130d0da11ddbc11db403534d5d71d5e0f27bc",
+      "pages": 3
+    }
+  ],
+  "totalPages": 24,
+  "method": "Every rendered page inspected in six contact sheets; full-size Polish operator/recipient pages inspected additionally",
+  "checks": {
+    "margins": "pass",
+    "noClippedText": "pass",
+    "headings": "pass",
+    "commandWrapping": "pass",
+    "polishGlyphs": "pass",
+    "noBlankPages": "pass",
+    "noOverlappingContent": "pass",
+    "draftStatus": "explicit"
+  },
+  "liveAcceptance": "pending separate controlled evidence"
+}
