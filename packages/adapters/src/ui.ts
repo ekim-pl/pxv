@@ -7,7 +7,7 @@ type AutomatedCapability =
   'language' | 'app-setup' | 'network-recipe' | 'backup-observation' | 'file-selection';
 export interface CapabilityRequest {
   capability: AutomatedCapability;
-  language?: 'en-US' | 'pl-PL';
+  language?: string;
   remotePath?: string;
 }
 export type CapabilityResult =
@@ -30,7 +30,7 @@ export interface AcceptedUiAdapter {
   id: string;
   version: string;
   buildFingerprint: string;
-  languages: ('en-US' | 'pl-PL')[];
+  languages: string[];
   capabilities: AutomatedCapability[];
   acceptance: { path: string; sha256: string };
   execute(context: UiContext): Promise<Record<string, unknown>>;

@@ -21,7 +21,7 @@
   },
   "starter": {
     "policyTemplate": "simple",
-    "language": "en-US",
+    "defaultLocale": "en-US",
     "ownerProfileName": "Employee"
   }
 }

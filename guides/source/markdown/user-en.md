@@ -9,8 +9,8 @@ This edition describes pxv 0.1.0. It is a general guide, not a certificate for a
 Your phone follows a policy selected by your provider. Profile names, allowed applications and available services vary; five profiles are not mandatory. Keep your provider's support details and the device's public asset label.
 
 1. Review which profile is intended for each activity and how to switch users.
-2. Enter your own normal screen lock privately. Do not give the operator passwords, MFA secrets, recovery words or the final lock code.
-3. Complete the agreed app/account setup, then select your final language.
+2. Set or replace and verify the normal screen lock privately for every selected profile. Do not give the operator passwords, MFA secrets, recovery words or the final lock code.
+3. Complete the agreed app/account setup, then confirm the final language in each profile.
 4. If your policy includes a duress credential, configure it only after the normal credential and language steps. Never test destructive duress activation.
 5. Check ordinary calling/network/app behavior with the operator, including what happens when the approved network path fails.
 6. Confirm a representative backup restore and understand where your recovery material is stored outside the phone.
@@ -28,11 +28,17 @@ A hardened configuration reduces particular risks; it cannot guarantee anonymity
 
 ## Private setup and credentials
 
-Set the normal screen lock yourself while the operator gives you privacy. Enter accounts, MFA and recovery information on the phone or through the service's approved recovery process. Do not put these values in an operator's notes, a chat, a guide annotation, a repository or an unapproved photo.
+Set the normal screen lock yourself while the operator gives you privacy. If provisioning supplied an initial PIN or password, privately verify an ordinary unlock in every selected profile and replace the initial value if it is not your intended final credential. Enter accounts, MFA and recovery information on the phone or through the service's approved recovery process. Do not put these values in an operator's notes, a chat, a guide annotation, a repository or an unapproved photo.
 
 When setup hands you a manual import task, it does not leave a temporary file for later selection. Ask for the complete approved private transfer and import procedure. Keep private configuration out of support chats and project attachments.
 
-Finish normal credentials before final language selection and any optional duress configuration. Duress is an optional policy capability with potentially destructive consequences. Never enter a duress credential to see whether it works. Ask your provider how to avoid confusing ordinary and duress credentials and how to handle replacement or retirement safely. The [official GrapheneOS usage guide](https://grapheneos.org/usage) is a primary reference for device features; follow the exact instructions for your installed build.
+Finish normal credentials before final language selection and any optional duress configuration. GrapheneOS uses one owner-managed duress PIN/password pair across the device ([official feature description](https://grapheneos.org/features#duress)). If you change the owner lock before automatic duress setup, privately update the referenced owner value using the approved private input procedure before the run resumes, or complete duress manually under a new reviewed plan. Do not disclose the value to the operator or put it in a note or chat. The owner value used for duress must be the current ordinary unlock credential.
+
+Duress is an optional policy capability with potentially destructive consequences. Never enter a duress credential to see whether it works. Ask your provider how to avoid confusing ordinary and duress credentials and how to handle replacement or retirement safely. The [official GrapheneOS usage guide](https://grapheneos.org/usage) is a primary reference for device features; follow the exact instructions for your installed build.
+
+## Language for each profile
+
+Your provider can set a different initial language and region for every profile, including the owner: for example, owner `en-US`, work `pl-PL` and travel `de-DE`. After verifying ordinary screen locks and before optional duress setup, confirm the intended language in each profile and complete any pending manual language step there. These defaults do not set your time zone. The EN/PL language of this guide and your handoff document is selected separately.
 
 ## Profiles and applications
 
@@ -48,7 +54,7 @@ Know what is backed up, where it is kept, how it is encrypted and what a success
 
 ## Acceptance and everyday use
 
-Before custody transfer, verify the asset label, chosen language, required profiles, expected apps, contact/support information and agreed live checks. Confirm temporary setup/probe helpers are gone and debugging toggles are off. Retain the EN or PL handoff document; it deliberately excludes device credentials and recovery values.
+Before custody transfer, verify the asset label, chosen language in every profile, required profiles, expected apps, contact/support information and agreed live checks. Confirm temporary setup/probe helpers are gone and debugging toggles are off. Retain the EN or PL handoff document; it deliberately excludes device credentials and recovery values.
 
 Arrange maintenance before policy changes, replacing network services or moving recovery destinations. Maintenance produces new evidence and a renewed handoff. If the device is lost, tell support promptly and revoke affected services; a local loss record does not remotely wipe it. At retirement, follow a separately authorized erasure and custody process and retain confirmation.
 

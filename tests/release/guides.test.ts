@@ -27,6 +27,34 @@ async function snapshot(): Promise<HandoffSnapshot> {
 }
 
 describe('recipient handoff artifacts', () => {
+  test('includes accepted owner and secondary locales independently of the document language', async () => {
+    const data = await snapshot();
+    const owner = data.policy.profiles[0]!;
+    delete owner.language;
+    owner.defaultLocale = 'de-DE';
+    data.policy.profiles.push({
+      ...structuredClone(owner),
+      id: 'work',
+      name: 'Work',
+      kind: 'secondary',
+      defaultLocale: 'sr-Latn-RS',
+    });
+    data.resolvedPolicy = resolvePolicy(
+      data.policy,
+      data.resolvedPolicy.project,
+      data.product,
+      data.resolvedPolicy.engineDigest,
+    );
+    data.record.policyDigest = data.resolvedPolicy.digest;
+    for (const locale of ['en', 'pl'] as const) {
+      const result = renderHandoff(data, locale);
+      expect(result.html).toContain(`lang="${locale}"`);
+      expect(result.html).toContain('owner (de-DE)');
+      expect(result.html).toContain('Work (sr-Latn-RS)');
+      expect(result.markdown).toContain('de\\-DE');
+      expect(result.markdown).toContain('sr\\-Latn\\-RS');
+    }
+  });
   test('EN/PL documents derive from accepted policy and exclude private inputs', async () => {
     const data = await snapshot();
     const source = { ...data, password: 'secret-sentinel', state: { account: 'secret-sentinel' } };

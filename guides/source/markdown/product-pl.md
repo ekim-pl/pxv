@@ -12,6 +12,8 @@ Ten przewodnik opisuje pxv 0.1.0. Nie jest certyfikatem telefonu. Dopiero zaakce
 
 Pakiet polityki określa obraz OS i zaufane materiały weryfikacyjne, użytkowników Androida, aplikacje, uprawnienia, ustawienia, sieć, obserwacje kopii, receptury i kontrole ręczne. Wymagany jest dokładnie jeden właściciel. Pozostałe profile i ich nazwy zależą od wdrożenia. Pakiet referencyjny z pięcioma profilami jest przykładem, a nie stałym ograniczeniem architektury.
 
+Każdy profil, także właściciela, może zawierać opcjonalne `defaultLocale`: na przykład właściciel `en-US`, praca `pl-PL`, podróże `de-DE`. Jeden kanoniczny znacznik BCP 47 określa język, region i alfabet. Starsze pole `language` nadal działa, a sprzeczne wartości obu pól są odrzucane. Ustawienie nie zmienia strefy czasowej ani języka EN/PL dokumentów. Przygotowanie ustawia język zaakceptowanym adapterem UI albo ręcznym krokiem po zwykłych danych uwierzytelniających i przed opcjonalnym duress.
+
 Dołączone pakiety pokazują strukturę. Nie zawierają zmyślonych skrótów APK, kluczy OS ani deklaracji testów na urządzeniu. Przed realnym zastosowaniem maintainer musi dodać autentyczne przypięcia, przejrzeć politykę i zachować akceptację konkretnego pakietu oraz wersji telefonu.
 
 Produkt white-label to osobny fork z własnym deskryptorem, zasobami, manifestami, konfiguracją, dokumentacją i tożsamością wydania. Zachowuje marker silnika/API oraz testy bezpieczeństwa, aby można było scalać poprawki upstream. Inne logo nie zmienia współdzielonej granicy własności fizycznego urządzenia na hoście ani nie stanowi kwalifikacji polityki.
@@ -22,7 +24,7 @@ Operator sprawdza host, tworzy prywatny izolowany projekt i rejestruje dokładny
 
 Instalacja OS sprawdza podpis i treść obrazu przed uruchomieniem uwierzytelnionego skryptu przez wrapper fastboot związany z numerem telefonu. Wymaga oddzielnej zgody na wymazanie, bezpośredniego USB oraz fizycznej kontroli odblokowania i ponownego zablokowania. CLI, MCP i pełne przygotowanie korzystają z jednej ścieżki weryfikowanej instalacji aplikacji.
 
-Receptury są przypięte do odcisku OS oraz wersji i podpisu aplikacji. Nieobsługiwany ekran pozostaje zadaniem ręcznym. Receptura z prywatnym plikiem sprawdza zaakceptowaną obsługę wyboru pliku przed przesłaniem danych tymczasowych; nieobsługiwany import wymaga pełnej prywatnej procedury. Odbiorca prywatnie wprowadza końcowe dane, konta, MFA i odzyskiwanie. Kolejność to zwykłe dane uwierzytelniające, język końcowy i opcjonalny duress. Destrukcyjna aktywacja duress nigdy nie jest krokiem testowym.
+Receptury są przypięte do odcisku OS oraz wersji i podpisu aplikacji. Nieobsługiwany ekran pozostaje zadaniem ręcznym. Receptura z prywatnym plikiem sprawdza zaakceptowaną obsługę wyboru pliku przed przesłaniem danych tymczasowych; nieobsługiwany import wymaga pełnej prywatnej procedury. Odbiorca prywatnie ustawia zwykłą blokadę lub sprawdza lub zmienia nadane wartości początkowe, a także prywatnie wprowadza konta, MFA i dane odzyskiwania. Kolejność to zwykłe dane uwierzytelniające, język końcowy i opcjonalny duress. Destrukcyjna aktywacja duress nigdy nie jest krokiem testowym.
 
 ## Dowody i zakończenie
 

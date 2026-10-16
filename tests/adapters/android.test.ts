@@ -15,6 +15,7 @@ import {
   parseUsers,
   parseBackupObservation,
   parseNamedUsers,
+  parsePrimaryLocale,
   probeAdbServer,
   type AdbServerEndpoint,
 } from '../../packages/adapters/src/index.js';
@@ -100,6 +101,7 @@ class FakeRunner implements CommandRunner {
   failedListing = false;
   mutations: string[][] = [];
   calls: { args: string[]; options?: CommandOptions }[] = [];
+  localeValues = new Map<number, string>();
   values = new Map([
     ['secure:always_on_vpn_app', 'null'],
     ['secure:always_on_vpn_lockdown', 'null'],
@@ -187,6 +189,10 @@ class FakeRunner implements CommandRunner {
       const get = command.indexOf('get');
       const put = command.indexOf('put');
       const deletion = command.indexOf('delete');
+      if (get >= 0 && command[get + 1] === 'system' && command[get + 2] === 'system_locales') {
+        const value = this.localeValues.get(Number(command[command.indexOf('--user') + 1]));
+        if (value !== undefined) return result(`${value}\n`);
+      }
       if (get >= 0)
         return result(`${this.values.get(`${command[get + 1]}:${command[get + 2]}`) ?? 'null'}\n`);
       if (put >= 0) {
@@ -754,6 +760,18 @@ describe('identity-bound Android adapter', () => {
     expect(result.status).toBe('manual-pending');
     expect(runner.mutations).toHaveLength(0);
   });
+  it.each([
+    [{ userId: 0, serialNo: 0, name: 'Owner' }, 'de-de', 'de-DE'],
+    [user, 'sr-latn-rs', 'sr-Latn-RS'],
+  ] as const)('keeps locale setup scoped to Android user %j', async (identity, locale, canonical) => {
+    const runner = new FakeRunner();
+    await expect(adapter(runner).setupLanguage(target, identity, locale, { lease: {} })).resolves.toEqual({
+      status: 'manual-pending',
+      capability: 'language',
+      instructions: `Set ${canonical} as the primary system locale in Android user ${identity.userId} after entering the normal credential privately.`,
+    });
+    expect(runner.mutations).toHaveLength(0);
+  });
   it('refuses all clients when the configured ADB server is lost', async () => {
     await expect(probeAdbServer({ host: '127.0.0.1', port: 1 })).rejects.toMatchObject({
       code: 'ADB_SERVER_UNAVAILABLE',
@@ -766,6 +784,58 @@ describe('identity-bound Android adapter', () => {
 });
 
 describe('fail-closed observation and mutation boundaries', () => {
+  it.each([
+    ['de-DE', 'de-DE'],
+    ['DE-de,pl-PL', 'de-DE'],
+    ['sr-latn-rs,en-US', 'sr-Latn-RS'],
+    ['iw-IL,en-US', 'he-IL'],
+    ['en-US,pl-PL', 'en-US'],
+    ['', undefined],
+    ['null', undefined],
+    ['unknown', undefined],
+    [',de-DE', undefined],
+    ['invalid_locale,de-DE', undefined],
+    ['und,de-DE', undefined],
+    ['de-DE,', undefined],
+    ['de-DE,,pl-PL', undefined],
+    ['de-DE,null', undefined],
+    ['de-DE,unknown', undefined],
+    ['de-DE,invalid_locale', undefined],
+  ])('observes only a valid primary locale from %j', (serialized, expected) => {
+    expect(parsePrimaryLocale(serialized)).toBe(expected);
+  });
+  it('reads distinct default locales from owner and secondary users without cross-user fallback', async () => {
+    const runner = new FakeRunner();
+    runner.localeValues.set(0, 'DE-de,pl-PL');
+    runner.localeValues.set(10, 'sr-latn-rs,en-US');
+    const configured: PolicyPack = {
+      ...policy,
+      profiles: policy.profiles.map((profile) => ({
+        ...profile,
+        defaultLocale: profile.kind === 'owner' ? 'de-DE' : 'sr-Latn-RS',
+      })),
+    };
+    const android = adapter(runner);
+    let observed = await android.inspect(target, configured);
+    expect(observed.profiles.map((profile) => [profile.user.userId, profile.language])).toEqual([
+      [10, 'sr-Latn-RS'],
+      [0, 'de-DE'],
+    ]);
+    runner.localeValues.set(10, 'null');
+    observed = await android.inspect(target, configured);
+    expect(observed.profiles[0]).not.toHaveProperty('language');
+    expect(observed.profiles[1]?.language).toBe('de-DE');
+    expect(runner.mutations).toHaveLength(0);
+    const localeReads = runner.calls
+      .filter((call) => call.args.at(-1) === "'system_locales'")
+      .map((call) => call.args.slice(call.args.indexOf('shell') + 1).map(decode));
+    expect(localeReads).toEqual([
+      ['settings', '--user', '10', 'get', 'system', 'system_locales'],
+      ['settings', '--user', '0', 'get', 'system', 'system_locales'],
+      ['settings', '--user', '10', 'get', 'system', 'system_locales'],
+      ['settings', '--user', '0', 'get', 'system', 'system_locales'],
+    ]);
+  });
   it('rejects malformed user identities and incomplete named lists before commands', async () => {
     const runner = new FakeRunner();
     const android = adapter(runner);

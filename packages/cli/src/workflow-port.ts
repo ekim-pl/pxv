@@ -1,5 +1,6 @@
 import {
   NetworkProbeService,
+  CredentialDefaultsService,
   observeEmulatorProvenance,
   RecipeService,
   SeedvaultAdapter,
@@ -121,6 +122,18 @@ function recipePort(deps: ApplicationDependencies): Pick<WorkflowPort, 'runRecip
     },
   };
 }
+function credentialPort(
+  deps: ApplicationDependencies,
+): Pick<WorkflowPort, 'credentialDefaultsPreflight' | 'setCredentialDefault' | 'setDuressDefault'> {
+  const defaults = () => new CredentialDefaultsService(deps.android, deps.project.root, deps.project.policy);
+  return {
+    credentialDefaultsPreflight: (target, signal) => defaults().preflight(target, signal),
+    setCredentialDefault: (target, user, profile, context) =>
+      defaults().setCredential(target, user, profile, context),
+    setDuressDefault: (target, user, profile, context) =>
+      defaults().setDuress(target, user, profile, context),
+  };
+}
 export function createWorkflowPort(deps: ApplicationDependencies): WorkflowPort {
-  return { ...corePort(deps), ...recoveryPort(deps), ...recipePort(deps) };
+  return { ...corePort(deps), ...recoveryPort(deps), ...recipePort(deps), ...credentialPort(deps) };
 }

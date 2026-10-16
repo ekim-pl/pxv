@@ -1,5 +1,6 @@
 import { parseDocument as parseYamlDocument } from 'yaml';
 import { z } from 'zod';
+import { canonicalLocale } from './locales.js';
 import type {
   Action,
   AndroidUserIdentity,
@@ -58,7 +59,14 @@ const relativePath = nonempty.refine(
   'Expected a contained relative path',
 );
 const isoDate = z.string().datetime({ offset: true });
-const locale = z.enum(['en-US', 'pl-PL']);
+const locale = z.string().transform((value, context) => {
+  try {
+    return canonicalLocale(value);
+  } catch {
+    context.addIssue({ code: 'custom', message: 'Expected one explicit BCP 47 locale tag' });
+    return z.NEVER;
+  }
+});
 const uniqueStrings = (values: readonly string[]): boolean => new Set(values).size === values.length;
 const distinct = <T>(values: readonly T[], key: (value: T) => string): boolean =>
   uniqueStrings(values.map(key));
@@ -288,6 +296,16 @@ function profileProbeReferences(value: z.infer<typeof profileBaseSchema>, contex
   )
     context.addIssue({ code: 'custom', message: 'Probe failure exercises require enforced VPN lockdown' });
 }
+const defaultCredentialPolicySchema = z.object({ type: z.enum(['pin', 'password']), secretRef: id }).strict();
+const defaultDuressPolicySchema = z.object({ ownerCredentialRef: id, pinRef: id, passwordRef: id }).strict();
+function profileCredentialReferences(
+  value: z.infer<typeof profileBaseSchema>,
+  context: z.RefinementCtx,
+): void {
+  if (!value.defaultDuress) return;
+  if (value.kind !== 'owner')
+    context.addIssue({ code: 'custom', message: 'Default duress requires the owner profile' });
+}
 const profileBaseSchema = z
   .object({
     id,
@@ -297,6 +315,9 @@ const profileBaseSchema = z
     settings: z.array(settingPolicySchema),
     permissions: z.array(permissionPolicySchema),
     vpn: vpnPolicySchema,
+    defaultCredential: defaultCredentialPolicySchema.optional(),
+    defaultDuress: defaultDuressPolicySchema.optional(),
+    defaultLocale: locale.optional(),
     language: locale.optional(),
     recipes: z
       .array(recipePolicySchema)
@@ -307,6 +328,8 @@ const profileBaseSchema = z
   })
   .strict();
 export const profilePolicySchema = profileBaseSchema.superRefine((value, context) => {
+  if (value.defaultLocale && value.language && value.defaultLocale !== value.language)
+    context.addIssue({ code: 'custom', message: 'Profile defaultLocale conflicts with legacy language' });
   if (!distinct(value.packages, (artifact) => artifact.packageId))
     context.addIssue({ code: 'custom', message: 'Duplicate profile package' });
   if (!distinct(value.settings, (setting) => `${setting.namespace}:${setting.key}`))
@@ -316,6 +339,7 @@ export const profilePolicySchema = profileBaseSchema.superRefine((value, context
   profilePackageReferences(value, context);
   profileRecipeReferences(value, context);
   profileProbeReferences(value, context);
+  profileCredentialReferences(value, context);
 });
 export const repositoryPolicySchema = z
   .object({
@@ -367,6 +391,19 @@ function policyArtifactReferences(value: z.infer<typeof policyBaseSchema>, conte
       shared.set(artifact.packageId, identity);
     }
 }
+function policyCredentialReferences(value: z.infer<typeof policyBaseSchema>, context: z.RefinementCtx): void {
+  const normalRefs = new Set(
+    value.profiles.flatMap((profile) => [
+      ...(profile.defaultCredential ? [profile.defaultCredential.secretRef] : []),
+      ...(profile.defaultDuress ? [profile.defaultDuress.ownerCredentialRef] : []),
+    ]),
+  );
+  for (const profile of value.profiles) {
+    const duress = profile.defaultDuress;
+    if (duress && (normalRefs.has(duress.pinRef) || normalRefs.has(duress.passwordRef)))
+      context.addIssue({ code: 'custom', message: 'Duress references must differ from normal credentials' });
+  }
+}
 
 const policyBaseSchema = z
   .object({
@@ -394,6 +431,7 @@ export const policyPackSchema = policyBaseSchema.superRefine((value, context) =>
   if (!distinct(value.repositories, (repository) => repository.id))
     context.addIssue({ code: 'custom', message: 'Duplicate repository ID' });
   policyArtifactReferences(value, context);
+  policyCredentialReferences(value, context);
 });
 
 export const extensionLockSchema = z
@@ -515,6 +553,14 @@ export const actionSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('vpn'), profileId: id, vpn: vpnPolicySchema }).strict(),
   z.object({ kind: z.literal('install-os'), os: osPolicySchema }).strict(),
   z.object({ kind: z.literal('language'), profileId: id, language: locale }).strict(),
+  z
+    .object({
+      kind: z.literal('default-credential'),
+      profileId: id,
+      credential: defaultCredentialPolicySchema,
+    })
+    .strict(),
+  z.object({ kind: z.literal('default-duress'), profileId: id, duress: defaultDuressPolicySchema }).strict(),
   z.object({ kind: z.literal('recipe'), profileId: id, recipe: recipePolicySchema }).strict(),
   z.object({ kind: z.literal('network-probe'), profileId: id, probe: networkProbePolicySchema }).strict(),
   z.object({ kind: z.literal('manual'), capability: id, instructions: nonempty }).strict(),

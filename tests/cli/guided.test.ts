@@ -62,3 +62,24 @@ it('guides manual receipts and review refresh while never replaying interrupted 
     guidedNextSteps(product, { ...base, status: 'completed' }, 'en', '/tmp/project', 'all').join('\n'),
   ).toContain('before finalization');
 });
+
+it('shows distinct owner and secondary default locales independently of the guide language', () => {
+  const owner = structuredClone(policy.profiles[0]!);
+  delete owner.language;
+  owner.defaultLocale = 'de-DE';
+  const work = {
+    ...owner,
+    id: 'work',
+    name: 'Work',
+    kind: 'secondary' as const,
+    defaultLocale: 'sr-Latn-RS',
+  };
+  const selected = { ...policy, profiles: [owner, work] };
+  const en = renderProjectGuide(product, selected, 'pixel', 'en');
+  expect(en).toContain('Locale admin: de-DE');
+  expect(en).toContain('Locale work: sr-Latn-RS');
+  expect(en).toContain('Administrator (owner)');
+  const pl = renderProjectGuide(product, selected, 'pixel', 'pl');
+  expect(pl).toContain('Ustawienia regionalne admin: de-DE');
+  expect(pl).toContain('Ustawienia regionalne work: sr-Latn-RS');
+});

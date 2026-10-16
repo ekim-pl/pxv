@@ -9,8 +9,8 @@ Ten przewodnik opisuje pxv 0.1.0. Nie jest certyfikatem telefonu. Dopiero zaakce
 Telefon działa według polityki wybranej przez dostawcę. Nazwy profili, dozwolone aplikacje i usługi mogą się różnić. Pięć profili nie jest obowiązkowym układem. Zachowaj publiczną etykietę urządzenia, kontakt do wsparcia i dokument przekazania właściwy dla tego telefonu.
 
 1. Ustal przeznaczenie każdego profilu i przećwicz przełączanie użytkowników.
-2. Samodzielnie i prywatnie ustaw zwykłą blokadę ekranu. Nie przekazuj operatorowi kodu końcowego, haseł, MFA ani danych odzyskiwania.
-3. Dokończ uzgodnioną konfigurację aplikacji i kont, a potem wybierz język końcowy.
+2. Prywatnie ustaw lub zmień i sprawdź zwykłą blokadę ekranu każdego wybranego profilu. Nie przekazuj operatorowi kodu końcowego, haseł, MFA ani danych odzyskiwania.
+3. Dokończ uzgodnioną konfigurację aplikacji i kont, a potem potwierdź język końcowy w każdym profilu.
 4. Jeśli polityka obejmuje duress, konfiguruj go dopiero po zwykłych danych i języku. Nigdy nie uruchamiaj destrukcyjnego duress jako testu.
 5. Sprawdź zwykłe połączenia i aplikacje oraz zachowanie przy awarii zatwierdzonej sieci.
 6. Potwierdź reprezentatywne odtworzenie kopii i miejsce przechowywania danych odzyskiwania poza telefonem.
@@ -26,13 +26,19 @@ Zapytaj, jakie zadania wykonuje się w każdym profilu, jakie zmiany wymagają w
 
 ## Sekrety należą do Ciebie
 
-Ustaw zwykłą blokadę przy zapewnionej prywatności. Konta, MFA i dane odzyskiwania wpisuj na telefonie lub w zatwierdzonym procesie danej usługi. Nie dopisuj ich do przewodnika, notatki operatora, repozytorium, rozmowy ze wsparciem ani niezatwierdzonego zdjęcia. Wsparcie nie powinno potrzebować tych wartości w załączniku projektu.
+Ustaw zwykłą blokadę przy zapewnionej prywatności. Jeśli przygotowanie nadało początkowy PIN lub hasło, prywatnie sprawdź zwykłe odblokowanie każdego wybranego profilu i zmień wartość, jeśli nie ma być Twoją końcową blokadą. Konta, MFA i dane odzyskiwania wpisuj na telefonie lub w zatwierdzonym procesie danej usługi. Nie dopisuj ich do przewodnika, notatki operatora, repozytorium, rozmowy ze wsparciem ani niezatwierdzonego zdjęcia. Wsparcie nie powinno potrzebować tych wartości w załączniku projektu.
 
 Jeżeli przygotowanie przekazuje Ci ręczne zadanie importu, plik tymczasowy nie pozostaje do późniejszego wyboru. Poproś o pełną zatwierdzoną procedurę prywatnego transferu i importu. Prywatna konfiguracja nie należy do rozmów ze wsparciem ani załączników projektu.
 
 Ustal sposób przechowywania danych odzyskiwania poza telefonem. Oddziel informacje pozwalające odblokować urządzenie od samego urządzenia. Jeśli potrzebna jest pomoc w odzyskaniu dostępu, poproś o procedurę chroniącą prywatność.
 
-Najpierw kończy się zwykłe dane, potem język, a następnie opcjonalną konfigurację duress. Duress może mieć destrukcyjne skutki. Nie wpisuj takiego kodu, żeby sprawdzić działanie. Poproś dostawcę o dokładną instrukcję unikania pomyłek oraz bezpiecznej wymiany i wycofania telefonu. Korzystaj z oficjalnych instrukcji GrapheneOS dla rzeczywiście zainstalowanej wersji.
+Najpierw kończy się zwykłe dane, potem język, a następnie opcjonalną konfigurację duress. GrapheneOS używa jednej pary PIN/hasło duress zarządzanej przez właściciela dla całego telefonu ([oficjalny opis funkcji](https://grapheneos.org/features#duress)). Jeśli zmienisz zwykłą blokadę właściciela przed automatyczną konfiguracją duress, prywatnie zaktualizuj jej wartość pod odpowiednim odwołaniem zgodnie z zatwierdzoną procedurą prywatnego wejścia przed wznowieniem albo skonfiguruj duress ręcznie według nowego zatwierdzonego planu. Nie ujawniaj wartości operatorowi ani nie zapisuj jej w notatce lub rozmowie. Wartość właściciela używana do ustawienia duress musi odpowiadać aktualnej zwykłej blokadzie.
+
+Duress może mieć destrukcyjne skutki. Nie wpisuj takiego kodu, żeby sprawdzić działanie. Poproś dostawcę o dokładną instrukcję unikania pomyłek oraz bezpiecznej wymiany i wycofania telefonu. Korzystaj z oficjalnych instrukcji GrapheneOS dla rzeczywiście zainstalowanej wersji.
+
+## Język każdego profilu
+
+Dostawca może ustawić inny początkowy język i region każdego profilu, także właściciela: na przykład właściciel `en-US`, praca `pl-PL`, podróże `de-DE`. Po sprawdzeniu zwykłych blokad i przed opcjonalnym duress potwierdź język w każdym profilu i wykonaj w nim ewentualny oczekujący ręczny krok języka. Te ustawienia nie zmieniają strefy czasowej. Język EN/PL przewodnika i dokumentu przekazania wybiera się oddzielnie.
 
 ## Profile i aplikacje
 
@@ -50,7 +56,7 @@ Dowiedz się, co jest kopiowane, dokąd, jak jest szyfrowane i jak wyglądało p
 
 ## Akceptacja i codzienna praca
 
-Przed przyjęciem telefonu sprawdź etykietę, język, wymagane profile, oczekiwane aplikacje, dane wsparcia oraz uzgodnione testy. Potwierdź brak tymczasowych aplikacji przygotowawczych i sond oraz wyłączenie debugowania. Dokument EN lub PL nie zawiera haseł ani wartości odzyskiwania.
+Przed przyjęciem telefonu sprawdź etykietę, język każdego profilu, wymagane profile, oczekiwane aplikacje, dane wsparcia oraz uzgodnione testy. Potwierdź brak tymczasowych aplikacji przygotowawczych i sond oraz wyłączenie debugowania. Dokument EN lub PL nie zawiera haseł ani wartości odzyskiwania.
 
 Jeśli konto lub wymagana aplikacja nie są gotowe, poproś o zapisanie braku. Oczekujące przygotowanie nie powinno być nazywane zakończonym przekazaniem. Rozwiązaniem może być kolejna wizyta albo decyzja o polityce, zamiast doraźnej zmiany bez przeglądu.
 

@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { profileLocale } from './locales.js';
 import {
   validateInventory,
   validateObservation,
@@ -205,7 +206,8 @@ function checkProfile(profile: ProfilePolicy, actual: ObservedProfile, check: Ob
     );
   }
   check(`${profile.id}.vpn`, profile.vpn, actual.vpn);
-  if (profile.language) check(`${profile.id}.language`, profile.language, actual.language);
+  const locale = profileLocale(profile);
+  if (locale) check(`${profile.id}.language`, locale, actual.language);
   if (profile.backup) check(`${profile.id}.backup`, profile.backup, actual.backup);
 }
 
@@ -266,6 +268,17 @@ export function ownedObligations(
   );
 }
 
+function normalCredentialsRequired(policy: PolicyPack): boolean {
+  return (
+    policy.capabilities.includes('normal_credentials') ||
+    policy.profiles.some(
+      (profile) => profileLocale(profile) || profile.defaultCredential || profile.defaultDuress,
+    )
+  );
+}
+function duressRequired(policy: PolicyPack): boolean {
+  return policy.capabilities.includes('duress') || policy.profiles.some((profile) => profile.defaultDuress);
+}
 export function requiredAttestations(
   policy: PolicyPack,
   deviceKind: DeviceTarget['kind'] = 'pixel',
@@ -276,12 +289,8 @@ export function requiredAttestations(
   result.add(deviceKind === 'emulator' ? 'emulator_image_provenance' : 'verified_boot');
   result.add('recipient_acceptance');
   result.add('operator_signoff');
-  if (
-    policy.capabilities.includes('normal_credentials') ||
-    policy.profiles.some((profile) => profile.language)
-  )
-    result.add('normal_credentials');
-  if (policy.capabilities.includes('duress')) result.add('duress');
+  if (normalCredentialsRequired(policy)) result.add('normal_credentials');
+  if (duressRequired(policy)) result.add('duress');
   if (policy.profiles.some((profile) => profile.recipes?.length)) result.add('app_setup');
   if (policy.profiles.some((profile) => profile.networkProbe)) {
     result.add('routes');
@@ -321,12 +330,12 @@ const requirementText: Record<string, { en: string; pl: string }> = {
     pl: 'Sprawdź aktualne pomiary, obowiązki odzyskiwania, usunięcie pomocników i wyłączenie debugowania.',
   },
   normal_credentials: {
-    en: 'The recipient privately sets and verifies normal credentials before language or duress setup.',
-    pl: 'Odbiorca samodzielnie ustawia i sprawdza zwykłe dane uwierzytelniające przed językiem lub przymusem.',
+    en: 'The recipient privately sets and verifies normal credentials, or verifies or replaces configured defaults, before language or duress setup.',
+    pl: 'Odbiorca samodzielnie ustawia i sprawdza zwykłe dane uwierzytelniające lub sprawdza albo zmienia ustawione wartości domyślne przed językiem lub przymusem.',
   },
   duress: {
-    en: 'The recipient privately completes optional duress setup after normal credentials and language. Never activate destructive duress.',
-    pl: 'Odbiorca samodzielnie konfiguruje opcjonalny przymus po zwykłych danych uwierzytelniających i języku. Nigdy nie uruchamiaj destrukcyjnego przymusu.',
+    en: 'The recipient privately completes optional duress setup after normal credentials and language, confirming both duress values differ from every actual normal credential. Never activate destructive duress.',
+    pl: 'Odbiorca samodzielnie kończy opcjonalną konfigurację przymusu po zwykłych danych uwierzytelniających i języku oraz potwierdza, że obie wartości przymusu różnią się od wszystkich aktualnych zwykłych danych uwierzytelniających. Nigdy nie uruchamiaj destrukcyjnego przymusu.',
   },
 };
 
@@ -344,7 +353,9 @@ export function buildReadinessRequirements(
       'operator_signoff',
     ].includes(id)
       ? []
-      : policy.profiles.map((profile) => profile.id),
+      : policy.profiles
+          .filter((profile) => id !== 'duress' || profile.kind === 'owner')
+          .map((profile) => profile.id),
     instructions: requirementText[id] ?? {
       en: `Complete policy check: ${id}.`,
       pl: `Wykonaj kontrolę polityki: ${id}.`,
@@ -355,25 +366,33 @@ export function buildReadinessRequirements(
 /** Private normal credentials precede language setup; duress is always last and never activated. */
 export function finalSetupActions(policy: PolicyPack): Action[] {
   const actions: Action[] = [];
-  if (
-    policy.capabilities.includes('normal_credentials') ||
-    policy.profiles.some((profile) => profile.language)
-  ) {
+  for (const profile of policy.profiles)
+    if (profile.defaultCredential)
+      actions.push({
+        kind: 'default-credential',
+        profileId: profile.id,
+        credential: profile.defaultCredential,
+      });
+  if (normalCredentialsRequired(policy)) {
     actions.push({
       kind: 'manual',
       capability: 'normal_credentials',
-      instructions: `Recipient privately sets and verifies normal credentials for every selected profile: ${policy.profiles.map((profile) => profile.id).join(', ')}. Confirm all profiles before proceeding to language setup. Do not record any value.`,
+      instructions: `Recipient privately sets and verifies normal credentials for every selected profile: ${policy.profiles.map((profile) => profile.id).join(', ')}. Privately verify or replace configured defaults. Confirm all profiles before proceeding to language setup. Do not record any value.`,
     });
   }
-  for (const profile of policy.profiles)
-    if (profile.language)
-      actions.push({ kind: 'language', profileId: profile.id, language: profile.language });
-  if (policy.capabilities.includes('duress'))
+  for (const profile of policy.profiles) {
+    const locale = profileLocale(profile);
+    if (locale) actions.push({ kind: 'language', profileId: profile.id, language: locale });
+  }
+  const owner = policy.profiles.find((profile) => profile.kind === 'owner');
+  if (owner?.defaultDuress)
+    actions.push({ kind: 'default-duress', profileId: owner.id, duress: owner.defaultDuress });
+  if (duressRequired(policy))
     actions.push({
       kind: 'manual',
       capability: 'duress',
       instructions:
-        'Recipient privately configures optional duress credentials after normal credentials and language. Never activate or test destructive duress.',
+        'Recipient privately completes optional duress configuration after normal credentials and language. Confirm both duress values differ from every actual normal profile credential. Never activate or test destructive duress.',
     });
   return actions;
 }

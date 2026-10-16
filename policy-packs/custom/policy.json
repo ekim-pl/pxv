@@ -15,7 +15,7 @@
       "settings": [],
       "permissions": [],
       "vpn": { "packageId": null, "alwaysOn": false, "lockdown": false },
-      "language": "pl-PL"
+      "defaultLocale": "pl-PL"
     },
     {
       "id": "field",
@@ -25,7 +25,7 @@
       "settings": [],
       "permissions": [],
       "vpn": { "packageId": null, "alwaysOn": false, "lockdown": false },
-      "language": "pl-PL"
+      "defaultLocale": "pl-PL"
     },
     {
       "id": "research",
@@ -35,7 +35,7 @@
       "settings": [],
       "permissions": [],
       "vpn": { "packageId": null, "alwaysOn": false, "lockdown": false },
-      "language": "pl-PL"
+      "defaultLocale": "pl-PL"
     }
   ]
 }

@@ -14,7 +14,10 @@ export function basePolicy(): PolicyPack {
   const result = structuredClone(policy);
   result.capabilities = [];
   result.requiredAttestations = ['operator_signoff', 'recipient_acceptance'];
-  for (const profile of result.profiles) delete profile.language;
+  for (const profile of result.profiles) {
+    delete profile.language;
+    delete profile.defaultLocale;
+  }
   return result;
 }
 
@@ -134,7 +137,7 @@ export class MemoryPort implements WorkflowPort {
   language(
     _target: SelectedTarget,
     user: AndroidUserIdentity,
-    language: 'en-US' | 'pl-PL',
+    language: string,
     context: ExecutionContext,
   ): ReturnType<WorkflowPort['language']> {
     this.mark('language', context);

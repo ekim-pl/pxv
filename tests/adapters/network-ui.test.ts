@@ -16,6 +16,7 @@ import {
   type NetworkObservation,
   type OperationOptions,
   type VerifiedArtifact,
+  type AcceptedUiAdapter,
 } from '../../packages/adapters/src/index.js';
 const user: AndroidUserIdentity = { userId: 10, serialNo: 42, name: 'work' };
 const target: SelectedTarget = {
@@ -301,14 +302,14 @@ describe('capability-based UI and emulator provenance', () => {
     await writeFile(acceptance, bytes);
     const android = new ProbeAndroid();
     const options: OperationOptions = { lease: {} };
-    const accepted = {
+    const accepted: AcceptedUiAdapter = {
       id: 'language-pl',
       version: '1.0.0',
       buildFingerprint: 'accepted/build',
-      languages: ['pl-PL' as const],
+      languages: ['pl-PL', 'de-DE'],
       capabilities: ['language' as const],
       acceptance: { path: acceptance, sha256: createHash('sha256').update(bytes).digest('hex') },
-      execute: () => Promise.resolve({ observed: 'pl-PL' }),
+      execute: ({ request }) => Promise.resolve({ observed: request.language }),
     };
     const automation = new UiAutomation([accepted]);
     const measured = await automation.execute(
@@ -319,6 +320,21 @@ describe('capability-based UI and emulator provenance', () => {
       options,
     );
     expect(measured.status).toBe('measured');
+    await expect(
+      automation.execute(android, target, user, { capability: 'language', language: 'de-DE' }, options),
+    ).resolves.toMatchObject({ status: 'measured', evidence: { observed: 'de-DE' } });
+    expect(
+      await automation.supports(
+        android,
+        target,
+        user,
+        { capability: 'language', language: 'de-DE' },
+        options,
+      ),
+    ).toBe(true);
+    await expect(
+      automation.execute(android, target, user, { capability: 'language', language: 'sr-Latn-RS' }, options),
+    ).resolves.toMatchObject({ status: 'manual-pending' });
     expect(
       (
         await automation.execute(

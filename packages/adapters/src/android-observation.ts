@@ -1,5 +1,20 @@
-import type { AndroidUserIdentity } from '@pxv/contracts';
+import { canonicalLocale, type AndroidUserIdentity } from '@pxv/contracts';
 import { AdapterError } from './command.js';
+
+/** Android stores ordered locale tags; only the first is the profile's default. */
+export function parsePrimaryLocale(output: string): string | undefined {
+  try {
+    const locales = output.split(',').map((value) => {
+      const tag = value.trim();
+      if (['', 'null', 'unknown'].includes(tag.toLowerCase())) throw new Error('Missing locale');
+      return canonicalLocale(tag);
+    });
+    return locales[0];
+  } catch {
+    return undefined;
+  }
+}
+
 export function integer(value: string, label: string): number {
   const parsed = Number(value);
   if (!/^\d+$/.test(value) || !Number.isSafeInteger(parsed)) throw new AdapterError(`Invalid ${label}`);

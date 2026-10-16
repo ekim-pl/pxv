@@ -15,7 +15,7 @@
       "settings": [],
       "permissions": [],
       "vpn": { "packageId": null, "alwaysOn": false, "lockdown": false },
-      "language": "en-US"
+      "defaultLocale": "en-US"
     }
   ]
 }

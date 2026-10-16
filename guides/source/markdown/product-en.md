@@ -12,6 +12,8 @@ This edition describes pxv 0.1.0. It is a general guide, not a certificate for a
 
 A policy pack describes the intended OS artifact and verification material, Android users, application packages, permissions, settings, networking, backup observations, recipes and manual checks. Exactly one owner profile is required. Other profiles and names depend on the deployment. The reference five-profile pack is one example; simple and arbitrary layouts are also supported.
 
+Each profile, including the owner, can declare an optional `defaultLocale`: for example, owner `en-US`, work `pl-PL` and travel `de-DE`. One canonical BCP 47 tag selects language, region and script. Legacy `language` remains supported, with conflicting aliases rejected. These defaults do not set a time zone or the EN/PL language of generated documents. Provisioning applies them through an accepted UI adapter or a manual step after normal credentials and before optional duress setup.
+
 The included packs are structural starters. They deliberately contain no invented APK digests, OS keys or assertions of live qualification. Before real use, a maintainer must add authentic artifact pins, review the policy and retain acceptance evidence for the exact pack and device build.
 
 A white-label product is a separate fork containing its product descriptor, assets, manifests, defaults, configuration templates, documentation and release identity. It retains the upstream engine/API marker and safety tests so upstream fixes remain mergeable. Changing a brand does not change the host's shared physical-device ownership boundary.
@@ -22,7 +24,7 @@ The operator diagnoses the host, creates an isolated project and enrolls an exac
 
 OS installation verifies the reviewed image signature and content before running its authenticated installation script through a serial-bound fastboot wrapper. It requires separate erasure authorization, direct USB and physical unlock/relock checks. App installation follows one verified path in the CLI, MCP and provisioning workflows.
 
-Recipes are constrained by OS fingerprint and application version/signer. An unsupported screen remains manual. Private-file recipes check accepted file-selection support before transferring temporary inputs; an unsupported import requires a complete private procedure. Final credentials, accounts, MFA and recovery material are entered privately by the recipient. The expected sequence is normal credentials, final language, then optional duress configuration. Destructive duress activation is never a test step.
+Recipes are constrained by OS fingerprint and application version/signer. An unsupported screen remains manual. Private-file recipes check accepted file-selection support before transferring temporary inputs; an unsupported import requires a complete private procedure. The recipient privately sets normal credentials or verifies or replaces supplied defaults, and enters accounts, MFA and recovery material privately. The expected sequence is normal credentials, final language, then optional duress configuration. Destructive duress activation is never a test step.
 
 ## Evidence and completion
 

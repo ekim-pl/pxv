@@ -4,7 +4,8 @@ import { createServer, type Server } from 'node:net';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { runCli, type CliIo } from '@pxv/cli';
-import { recoveryReservations, supervisorPath } from '@pxv/runtime';
+import { recoveryReservations, SqliteStore, supervisorPath } from '@pxv/runtime';
+import type { PolicyPack } from '@pxv/contracts';
 import { product } from '../contracts/fixtures.js';
 
 let root: string;
@@ -53,10 +54,17 @@ beforeEach(async () => {
       users: [{ userId: 0, serialNo: 0, name: 'Owner' }],
     }),
   );
+  const credentialBin = join(root, 'credential-bin');
+  await mkdir(credentialBin);
+  await writeFile(
+    join(credentialBin, 'locksettings'),
+    `#!${process.execPath}\nimport{readFileSync,writeFileSync}from'node:fs';const file=${JSON.stringify(statePath)};const state=JSON.parse(readFileSync(file,'utf8'));const args=process.argv.slice(2);const command=args[0];if(!['set-pin','set-password','set-duress-credentials'].includes(command))process.exit(2);const userId=command==='set-duress-credentials'?0:Number(args[args.indexOf('--user')+1]);state.credentialCommands??=[];state.credentialCommands.push({command,userId});writeFileSync(file,JSON.stringify(state));process.stdout.write(args.slice(1).join(' ')+'\\n');process.stderr.write(args.slice(1).join(' ')+'\\n');\n`,
+    { mode: 0o700 },
+  );
   const adb = join(root, 'adb');
   await writeFile(
     adb,
-    `#!${process.execPath}\nimport{readFileSync,writeFileSync}from'node:fs';\nconst file=${JSON.stringify(statePath)};const state=JSON.parse(readFileSync(file,'utf8'));const args=process.argv.slice(2).map(x=>x.startsWith("'")&&x.endsWith("'")?x.slice(1,-1).replaceAll("'\\\\''", "'"):x);const at=args.indexOf('shell');const cmd=args.slice(at+1);const out=x=>process.stdout.write(String(x)+'\\n');const save=()=>writeFileSync(file,JSON.stringify(state));\nif(args.includes('version'))out('Android Debug Bridge version 1.0.41\\nVersion 37.0.1');\nelse if(args.includes('devices'))out('List of devices attached\\n'+(state.debug?'SERIAL device product:akita model:Pixel_8a device:akita':'')+'\\n');\nelse if(at>=0){if(cmd[0]==='getprop'){out(({'ro.serialno':'SERIAL','ro.product.model':'Pixel 8a','ro.product.device':'akita','ro.build.version.incremental':'2026100600','ro.build.display.id':'2026100600','ro.boot.verifiedbootstate':'green','ro.boot.flash.locked':'1','ro.boot.vbmeta.device_state':'locked','ro.build.version.release':'17','ro.build.fingerprint':'fixture/build'})[cmd[1]]??'');}\nelse if(cmd[0]==='cmd'&&cmd[1]==='user')out(state.users.map(u=>'UserInfo{'+u.userId+':'+u.name+':4c13} serialNo='+u.serialNo).join('\\n'));\nelse if(cmd[0]==='pm'&&cmd[1]==='list')out('');\nelse if(cmd[0]==='settings'){const action=cmd.includes('get')?'get':'put';const i=cmd.indexOf(action);const key=cmd[i+2];if(action==='get')out(key==='adb_enabled'?(state.debug?'1':'0'):key==='always_on_vpn_lockdown'?'0':key==='always_on_vpn_app'?'null':key==='adb_wifi_enabled'?'0':state.settings[key]??'null');else{state.settings[key]=cmd[i+3];if(key==='adb_enabled'){state.debug=false;save();process.exitCode=255;}else save();}}\nelse{process.stderr.write('Unexpected fixture command '+JSON.stringify(cmd));process.exitCode=2;}}else process.exitCode=2;\n`,
+    `#!${process.execPath}\nimport{readFileSync,writeFileSync}from'node:fs';import{spawnSync}from'node:child_process';\nconst file=${JSON.stringify(statePath)};const state=JSON.parse(readFileSync(file,'utf8'));const args=process.argv.slice(2).map(x=>x.startsWith("'")&&x.endsWith("'")?x.slice(1,-1).replaceAll("'\\\\''", "'"):x);const at=args.indexOf('shell');const cmd=args.slice(at+1);const out=x=>process.stdout.write(String(x)+'\\n');const save=()=>writeFileSync(file,JSON.stringify(state));\nif(args.includes('version'))out('Android Debug Bridge version 1.0.41\\nVersion 37.0.1');\nelse if(args.includes('devices'))out('List of devices attached\\n'+(state.debug?'SERIAL device product:akita model:Pixel_8a device:akita':'')+'\\n');\nelse if(at>=0){if(cmd[0]==='getprop'){out(({'ro.serialno':'SERIAL','ro.product.model':'Pixel 8a','ro.product.device':'akita','ro.build.version.incremental':'2026100600','ro.build.display.id':'2026100600','ro.boot.verifiedbootstate':'green','ro.boot.flash.locked':'1','ro.boot.vbmeta.device_state':'locked','ro.build.version.release':'17','ro.build.fingerprint':'fixture/build'})[cmd[1]]??'');}\nelse if(cmd[0]==='cmd'&&cmd[1]==='user')out(state.users.map(u=>'UserInfo{'+u.userId+':'+u.name+':4c13} serialNo='+u.serialNo).join('\\n'));\nelse if(cmd[0]==='locksettings'&&cmd[1]==='help')out('  set-pin [--user USER_ID] PIN\\n  set-password [--user USER_ID] PASSWORD\\n  set-duress-credentials --owner-credential CREDENTIAL --duress-pin PIN --duress-password PASSWORD');\nelse if(cmd.length===2&&cmd[0]==='sh'&&cmd[1]==='-s'){const result=spawnSync('/bin/sh',['-s'],{input:readFileSync(0,'utf8'),encoding:'utf8',env:{PATH:${JSON.stringify(credentialBin)}}});process.stdout.write(result.stdout??'');process.stderr.write(result.stderr??'');process.exitCode=result.status??2;}\nelse if(cmd[0]==='pm'&&cmd[1]==='list')out('');\nelse if(cmd[0]==='settings'){const action=cmd.includes('get')?'get':'put';const i=cmd.indexOf(action);const key=cmd[i+2];if(action==='get')out(key==='adb_enabled'?(state.debug?'1':'0'):key==='always_on_vpn_lockdown'?'0':key==='always_on_vpn_app'?'null':key==='adb_wifi_enabled'?'0':state.settings[key]??'null');else{state.settings[key]=cmd[i+3];if(key==='adb_enabled'){state.debug=false;save();process.exitCode=255;}else save();}}\nelse{process.stderr.write('Unexpected fixture command '+JSON.stringify(cmd));process.exitCode=2;}}else process.exitCode=2;\n`,
     { mode: 0o700 },
   );
   server = createServer((socket) => {
@@ -107,6 +115,99 @@ function args(values: string[]): string[] {
 function device(values: string[]): string[] {
   return args(['device', ...values, '--asset', 'phone-001']);
 }
+
+const credentialValues = {
+  'owner-lock': '740192638517',
+  'owner-current': 'cli current owner credential 93g',
+  'duress-pin': '830274916405',
+  'duress-password': 'cli duress password 57w',
+};
+async function configureCredentialDefaults(): Promise<string> {
+  const policyPath = join(project, 'policy.yaml');
+  const policy = JSON.parse(await readFile(policyPath, 'utf8')) as PolicyPack;
+  const owner = policy.profiles[0]!;
+  owner.defaultCredential = { type: 'pin', secretRef: 'owner-lock' };
+  owner.defaultDuress = {
+    ownerCredentialRef: 'owner-current',
+    pinRef: 'duress-pin',
+    passwordRef: 'duress-password',
+  };
+  await writeFile(policyPath, JSON.stringify(policy));
+  expect(await runCli(args(['policy', 'lock', '--yes']), io)).toBe(0);
+  const input = join(project, 'secrets/credentials/phone-001.json');
+  await mkdir(join(project, 'secrets/credentials'), { recursive: true, mode: 0o700 });
+  await writeFile(input, JSON.stringify({ schemaVersion: 1, values: credentialValues }), { mode: 0o600 });
+  return input;
+}
+async function credentialCommands(): Promise<{ command: string; userId: number }[]> {
+  const state = JSON.parse(await readFile(statePath, 'utf8')) as {
+    credentialCommands?: { command: string; userId: number }[];
+  };
+  return state.credentialCommands ?? [];
+}
+async function assertCredentialPrivacy(input?: string): Promise<void> {
+  const store = await SqliteStore.open(join(project, 'state/pxv.sqlite3'), { readOnly: true });
+  try {
+    const plans = await store.entries('plans');
+    expect(plans.length).toBeGreaterThan(0);
+    const files = [
+      ...(await readdir(join(project, 'state'))).map((file) => join(project, 'state', file)),
+      ...(await readdir(join(root, 'control/receipts'))).map((file) => join(root, 'control/receipts', file)),
+      statePath,
+    ];
+    const retained = [
+      output.join('\n'),
+      JSON.stringify(plans),
+      ...(await Promise.all(files.map((file) => readFile(file)))),
+    ];
+    for (const secret of Object.values(credentialValues)) {
+      for (const data of retained) expect(data.includes(secret)).toBe(false);
+      if (input) expect(await readFile(input, 'utf8')).toContain(secret);
+    }
+  } finally {
+    await store.close();
+  }
+}
+
+it('initializes private defaults once through real CLI checkpoints without retaining echoed credentials', async () => {
+  const input = await configureCredentialDefaults();
+  expect(await runCli(device(['provision', '--yes']), io)).toBe(4);
+  const first = JSON.parse(output.at(-1) ?? '{}') as {
+    runs: { id: string; status: string; manualGate?: string }[];
+  };
+  expect(first.runs[0]).toMatchObject({ status: 'pending', manualGate: 'normal_credentials' });
+  const runId = first.runs[0]!.id;
+  expect(await credentialCommands()).toEqual([{ command: 'set-pin', userId: 0 }]);
+  expect(
+    await runCli(device(['attest', '--check', 'normal_credentials', '--operator', 'operator', '--yes']), io),
+  ).toBe(0);
+  expect(await runCli(args(['agent', 'resume', '--run', runId, '--yes']), io)).toBe(0);
+  expect(JSON.parse(output.at(-1) ?? '{}')).toMatchObject({
+    id: runId,
+    status: 'pending',
+    manualGate: 'duress',
+  });
+  expect(await credentialCommands()).toEqual([
+    { command: 'set-pin', userId: 0 },
+    { command: 'set-duress-credentials', userId: 0 },
+  ]);
+  expect(await runCli(device(['attest', '--check', 'duress', '--operator', 'operator', '--yes']), io)).toBe(
+    0,
+  );
+  expect(await runCli(args(['agent', 'resume', '--run', runId, '--yes']), io)).toBe(0);
+  await assertCredentialPrivacy(input);
+  await rm(input);
+  expect(await runCli(device(['plan']), io)).toBe(0);
+  const prepared = JSON.parse(output.at(-1) ?? '{}') as { reviewSummary: string };
+  expect(prepared.reviewSummary).not.toContain('default-credential');
+  expect(prepared.reviewSummary).not.toContain('default-duress');
+  expect(await runCli(device(['provision', '--yes']), io)).toBe(4);
+  expect(await credentialCommands()).toEqual([
+    { command: 'set-pin', userId: 0 },
+    { command: 'set-duress-credentials', userId: 0 },
+  ]);
+  await assertCredentialPrivacy();
+});
 
 it('executes real supervised CLI provisioning, rechecks evidence, shuts down debugging and records custody', async () => {
   expect(await runCli(device(['inspect']), io)).toBe(0);

@@ -1,4 +1,10 @@
-import { integer, parseUsers, parseNamedUsers, parseBackupObservation } from './android-observation.js';
+import {
+  integer,
+  parseUsers,
+  parseNamedUsers,
+  parseBackupObservation,
+  parsePrimaryLocale,
+} from './android-observation.js';
 import type {
   AndroidUserIdentity,
   DeviceObservation,
@@ -13,7 +19,7 @@ import type {
   SharedApkEffect,
   ReviewedApkEffect,
 } from '@pxv/contracts';
-import { canonicalJson, sameAndroidUser } from '@pxv/contracts';
+import { canonicalJson, canonicalLocale, profileLocale, sameAndroidUser } from '@pxv/contracts';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -395,14 +401,11 @@ export class AndroidAdapter {
       );
       observed.backup = parseBackupObservation(enabled, transports);
     }
-    if (profile.language) {
-      const language = await this.readSetting(
-        target,
-        user,
-        { namespace: 'system', key: 'system_locales' },
-        signal,
+    if (profileLocale(profile)) {
+      const language = parsePrimaryLocale(
+        await this.readSetting(target, user, { namespace: 'system', key: 'system_locales' }, signal),
       );
-      if (language === 'en-US' || language === 'pl-PL') observed.language = language;
+      if (language) observed.language = language;
     }
   }
   private async inspectOs(target: SelectedTarget, signal?: AbortSignal): Promise<DeviceObservation['os']> {
@@ -783,17 +786,18 @@ export class AndroidAdapter {
   async setupLanguage(
     target: SelectedTarget,
     user: AndroidUserIdentity,
-    language: 'en-US' | 'pl-PL',
+    language: string,
     options: OperationOptions,
   ): Promise<CapabilityResult> {
     await this.guardUser(target, user, options.signal);
+    const locale = canonicalLocale(language);
     if (!this.ui)
       return {
         status: 'manual-pending',
         capability: 'language',
-        instructions: `Set ${language} in Android user ${user.userId} after entering the normal credential privately.`,
+        instructions: `Set ${locale} as the primary system locale in Android user ${user.userId} after entering the normal credential privately.`,
       };
-    return this.ui.execute(this, target, user, { capability: 'language', language }, options);
+    return this.ui.execute(this, target, user, { capability: 'language', language: locale }, options);
   }
   /** Request debugging shutdown; final toggle state still requires physical confirmation. */
   async finalize(target: SelectedTarget, options: OperationOptions): Promise<void> {

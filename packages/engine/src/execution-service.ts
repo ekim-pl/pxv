@@ -1,4 +1,11 @@
-import { digest, evaluateObservation, observationDigest, sameAndroidUser as sameUser } from '@pxv/contracts';
+import {
+  digest,
+  evaluateObservation,
+  finalSetupActions,
+  observationDigest,
+  profileLocale,
+  sameAndroidUser as sameUser,
+} from '@pxv/contracts';
 import type {
   Action,
   AndroidUserIdentity,
@@ -33,6 +40,7 @@ import type { ProjectOwnership, DeviceOwnership } from './ownership.js';
 import type { Journal } from './journal.js';
 import { checkLanguageDelta, normalReceiptMatches } from './setup-evidence.js';
 import { canonicalEffects } from './reviewed-plan.js';
+import type { CredentialDefaultHistory, DefaultCredentialAction } from './credential-default-history.js';
 export class ExecutionService {
   constructor(
     readonly project: ProjectContext,
@@ -46,6 +54,7 @@ export class ExecutionService {
     readonly devices: DeviceOwnership,
     readonly journal: Journal,
     readonly clock: () => Date,
+    readonly credentialDefaults: CredentialDefaultHistory,
   ) {}
   execute(runId: string, externalSignal?: AbortSignal): Promise<RunRecord> {
     return this.projects.run(() => this.executeOwned(runId, externalSignal));
@@ -118,13 +127,7 @@ export class ExecutionService {
       observedAt: this.clock().toISOString(),
       status: pending.length ? 'pending' : 'verified',
       pending,
-      languageReady: this.project.policy.profiles.every(
-        (profile) =>
-          !profile.language ||
-          observation.profiles.some(
-            (value) => value.profileId === profile.id && value.language === profile.language,
-          ),
-      ),
+      languageReady: this.localesReady(observation),
       completedSetup: run.completedSetup ?? [],
       planId: prepared.plan.id,
       capabilityEvidence: run.capabilityEvidence ?? [],
@@ -251,12 +254,28 @@ export class ExecutionService {
       workflowExpected: await this.store.get('workflow', target.device.assetId),
     };
     if (!(await this.checkExecutionBaseline(active))) return;
+    await this.checkCredentialDefaultsPlan(active);
     await this.checkExecutionEffects(active);
     run.status = 'running';
     delete run.manualGate;
     await this.journal.save(run, resume ? 'resumed' : 'started');
     if (!(await this.executeActions(active))) return;
     await this.completeActions(active);
+  }
+  private async checkCredentialDefaultsPlan(active: ActiveExecution): Promise<void> {
+    if (active.prepared.operation !== 'provision') return;
+    const pending = await this.credentialDefaults.pending(
+      active.target,
+      active.observation,
+      finalSetupActions(this.project.policy),
+    );
+    const remaining = active.prepared.plan.actions.slice(active.run.cursor ?? 0);
+    for (const action of pending)
+      if (
+        (action.kind === 'default-credential' || action.kind === 'default-duress') &&
+        !remaining.some((planned) => digest(planned) === digest(action))
+      )
+        throw new Error('Credential initialization history changed; prepare a fresh reviewed plan');
   }
   private async checkExecutionBaseline(active: ActiveExecution): Promise<boolean> {
     const { run, prepared, target, resume, observation } = active;
@@ -331,6 +350,7 @@ export class ExecutionService {
   private async executeAction(active: ActiveExecution, action: Action, index: number): Promise<boolean> {
     if (action.kind === 'manual') return this.executeManual(active, action, index);
     if (action.kind === 'install-os') {
+      await this.credentialDefaults.clear(active.target);
       await this.port.flash(active.target, this.project.policy, active.context);
       return true;
     }
@@ -381,8 +401,92 @@ export class ExecutionService {
         break;
       case 'language':
         return this.executeLanguage(active, action, index, user, live);
+      case 'default-credential':
+      case 'default-duress':
+        await this.executeCredentialDefault(active, action, profile, user, live);
+        break;
     }
     return true;
+  }
+  private async executeCredentialDefault(
+    active: ActiveExecution,
+    action: DefaultCredentialAction,
+    profile: ProfilePolicy,
+    user: AndroidUserIdentity,
+    live: DeviceObservation,
+  ): Promise<void> {
+    if (await this.credentialDefaults.alreadyAccepted(active.target, action, user)) return;
+    await this.assertCredentialDefaultAllowed(active, action, profile, user, live);
+    active.observation = live;
+    await this.credentialDefaultCheckpoint(active, action.kind === 'default-duress');
+    if (action.kind === 'default-credential') {
+      if (!this.port.setCredentialDefault) throw new Error('Credential defaults adapter is unavailable');
+      await this.port.setCredentialDefault(active.target, user, profile, active.context);
+    } else {
+      if (!this.port.setDuressDefault) throw new Error('Duress defaults adapter is unavailable');
+      await this.port.setDuressDefault(active.target, user, profile, active.context);
+    }
+    await this.credentialDefaults.recordAccepted(active.target, action, user, active.run.id);
+  }
+  private async assertCredentialDefaultAllowed(
+    active: ActiveExecution,
+    action: DefaultCredentialAction,
+    profile: ProfilePolicy,
+    user: AndroidUserIdentity,
+    live: DeviceObservation,
+  ): Promise<void> {
+    if (action.kind === 'default-credential') {
+      if (active.run.completedSetup?.some((value) => value.check === 'normal_credentials'))
+        throw new Error('Initial credential defaults cannot replace completed recipient credentials');
+      return;
+    }
+    if (profile.kind !== 'owner' || user.userId !== 0)
+      throw new Error('Duress defaults require the Android owner');
+    const receipts = await this.evidence.receipts(active.target.device.assetId);
+    const normal = receipts.some((value) =>
+      normalReceiptMatches(value, active.prepared.plan.digest, live, active.run.completedSetup),
+    );
+    if (!normal || !this.localesReady(live))
+      throw new Error('Verify normal credentials and final language before setting duress defaults');
+  }
+  private localesReady(observation: DeviceObservation): boolean {
+    return this.project.policy.profiles.every((profile) => {
+      const locale = profileLocale(profile);
+      return (
+        !locale ||
+        observation.profiles.some((value) => value.profileId === profile.id && value.language === locale)
+      );
+    });
+  }
+  private async credentialDefaultCheckpoint(active: ActiveExecution, duress: boolean): Promise<void> {
+    const assetId = active.target.device.assetId;
+    const previous = await this.store.get('attestations', assetId);
+    const checks = ['duress', 'operator_signoff', 'recipient_acceptance'];
+    if (!duress) checks.push('normal_credentials');
+    const receipts = this.evidence.parseReceipts(previous).filter((value) => !checks.includes(value.check));
+    const handoff = await this.store.get('handoff', assetId);
+    const state = this.workflowState(
+      active.target,
+      active.prepared,
+      active.observation,
+      active.run,
+      duress ? 'duress' : 'normal_credentials',
+    );
+    await this.journal.save(
+      active.run,
+      'credential-default-intent',
+      [
+        { kind: 'set', collection: 'workflow', key: assetId, value: state },
+        { kind: 'set', collection: 'attestations', key: assetId, value: receipts },
+        { kind: 'delete', collection: 'handoff', key: assetId },
+      ],
+      [
+        { collection: 'workflow', key: assetId, value: active.workflowExpected },
+        { collection: 'attestations', key: assetId, value: previous },
+        { collection: 'handoff', key: assetId, value: handoff },
+      ],
+    );
+    active.workflowExpected = state;
   }
   private async executeApk(
     active: ActiveExecution,

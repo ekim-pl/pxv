@@ -117,9 +117,22 @@ export interface WorkflowPort {
   language(
     target: SelectedTarget,
     user: AndroidUserIdentity,
-    language: 'en-US' | 'pl-PL',
+    language: string,
     context: ExecutionContext,
   ): Promise<void | { status: 'manual-pending'; instructions: string } | { status: 'measured' }>;
+  credentialDefaultsPreflight?(target: SelectedTarget, signal?: AbortSignal): Promise<void>;
+  setCredentialDefault?(
+    target: SelectedTarget,
+    user: AndroidUserIdentity,
+    profile: ProfilePolicy,
+    context: ExecutionContext,
+  ): Promise<void>;
+  setDuressDefault?(
+    target: SelectedTarget,
+    user: AndroidUserIdentity,
+    profile: ProfilePolicy,
+    context: ExecutionContext,
+  ): Promise<void>;
   flash(target: SelectedTarget, policy: PolicyPack, context: ExecutionContext): Promise<void>;
   finalize(target: SelectedTarget, context: ExecutionContext): Promise<void>;
   runRecipe?(

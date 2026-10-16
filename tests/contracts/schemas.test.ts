@@ -153,6 +153,101 @@ describe('policy validation', () => {
     ).toThrow('requires always-on');
   });
 
+  it('accepts credential references and rejects literal values and unsafe reference names', () => {
+    const owner = policy.profiles[0];
+    if (!owner) throw new Error('Fixture owner missing');
+    const credential = { type: 'pin', secretRef: 'owner-pin' };
+    const duress = {
+      ownerCredentialRef: 'owner-pin',
+      pinRef: 'duress-pin',
+      passwordRef: 'duress-password',
+    };
+    const configured = {
+      ...policy,
+      profiles: [{ ...owner, defaultCredential: credential, defaultDuress: duress }],
+    };
+    expect(validatePolicy(configured).profiles[0]?.defaultDuress).toEqual(duress);
+    for (const defaultCredential of [
+      { ...credential, type: 'pattern' },
+      { ...credential, secretRef: '../owner-pin' },
+      { ...credential, secretRef: 'OwnerPin' },
+      { ...credential, value: '123456' },
+    ])
+      expect(() => validatePolicy({ ...policy, profiles: [{ ...owner, defaultCredential }] })).toThrow();
+    expect(() =>
+      validateAction({
+        kind: 'default-credential',
+        profileId: owner.id,
+        credential: { ...credential, pin: '123456' },
+      }),
+    ).toThrow();
+    expect(() =>
+      validateAction({
+        kind: 'default-duress',
+        profileId: owner.id,
+        duress: { ...duress, password: 'private-value' },
+      }),
+    ).toThrow();
+  });
+
+  it('limits default duress to the owner and accepts a separate current owner credential reference', () => {
+    const owner = policy.profiles[0];
+    if (!owner) throw new Error('Fixture owner missing');
+    const duress = { ownerCredentialRef: 'owner-pin', pinRef: 'duress-pin', passwordRef: 'duress-password' };
+    const secondary = { ...owner, id: 'work', name: 'Work', kind: 'secondary' };
+    expect(() =>
+      validatePolicy({ ...policy, profiles: [owner, { ...secondary, defaultDuress: duress }] }),
+    ).toThrow('owner profile');
+    expect(
+      validatePolicy({
+        ...policy,
+        profiles: [
+          {
+            ...owner,
+            defaultCredential: { type: 'password', secretRef: 'owner-password' },
+            defaultDuress: duress,
+          },
+        ],
+      }).profiles[0]?.defaultDuress,
+    ).toEqual(duress);
+    expect(
+      validatePolicy({ ...policy, profiles: [{ ...owner, defaultDuress: duress }] }).profiles[0]
+        ?.defaultDuress,
+    ).toEqual(duress);
+  });
+
+  it('rejects duress references shared with any normal profile credential', () => {
+    const owner = policy.profiles[0];
+    if (!owner) throw new Error('Fixture owner missing');
+    const duress = {
+      ownerCredentialRef: 'owner-current',
+      pinRef: 'duress-pin',
+      passwordRef: 'duress-password',
+    };
+    const secondary = {
+      ...owner,
+      id: 'work',
+      name: 'Work',
+      kind: 'secondary',
+      defaultCredential: { type: 'pin', secretRef: 'work-pin' },
+    };
+    for (const normalRef of ['owner-pin', 'owner-current', 'work-pin'])
+      for (const field of ['pinRef', 'passwordRef'])
+        expect(() =>
+          validatePolicy({
+            ...policy,
+            profiles: [
+              {
+                ...owner,
+                defaultCredential: { type: 'pin', secretRef: 'owner-pin' },
+                defaultDuress: { ...duress, [field]: normalRef },
+              },
+              secondary,
+            ],
+          }),
+        ).toThrow('differ from normal credentials');
+  });
+
   it('rejects unknown/duplicate repositories and inconsistent device-wide APK versions', () => {
     const profile = policy.profiles[0];
     const artifact = profile?.packages[0];
@@ -282,6 +377,20 @@ describe('public workflow contracts', () => {
       { kind: 'vpn', profileId: 'admin', vpn: profile.vpn },
       { kind: 'language', profileId: 'admin', language: 'pl-PL' },
       {
+        kind: 'default-credential',
+        profileId: 'admin',
+        credential: { type: 'password', secretRef: 'owner-password' },
+      },
+      {
+        kind: 'default-duress',
+        profileId: 'admin',
+        duress: {
+          ownerCredentialRef: 'owner-password',
+          pinRef: 'duress-pin',
+          passwordRef: 'duress-password',
+        },
+      },
+      {
         kind: 'manual',
         capability: 'normal_credentials',
         instructions: 'Recipient privately enters normal credentials.',
@@ -311,7 +420,7 @@ describe('public workflow contracts', () => {
         actions,
         digest: hashB,
       }).actions,
-    ).toHaveLength(8);
+    ).toHaveLength(10);
     expect(() => validateAction({ kind: 'shell', command: 'wipe' })).toThrow();
   });
 

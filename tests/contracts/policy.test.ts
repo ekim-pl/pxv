@@ -265,6 +265,98 @@ describe('capability-based readiness and private setup', () => {
     expect(fleetProfiles.map((action) => action.kind)).toEqual(['manual', 'language', 'language', 'manual']);
   });
 
+  it('applies all normal defaults before the private gate and owner duress after language', () => {
+    const owner = policy.profiles[0];
+    if (!owner) throw new Error('Fixture owner missing');
+    const configured = validatePolicy({
+      ...policy,
+      capabilities: [],
+      profiles: [
+        {
+          ...owner,
+          defaultCredential: { type: 'password', secretRef: 'owner-password' },
+          defaultDuress: {
+            ownerCredentialRef: 'owner-password',
+            pinRef: 'duress-pin',
+            passwordRef: 'duress-password',
+          },
+        },
+        {
+          ...owner,
+          id: 'work',
+          name: 'Work',
+          kind: 'secondary',
+          defaultCredential: { type: 'pin', secretRef: 'work-pin' },
+        },
+      ],
+    });
+    const actions = finalSetupActions(configured);
+    expect(actions.map((action) => (action.kind === 'manual' ? action.capability : action.kind))).toEqual([
+      'default-credential',
+      'default-credential',
+      'normal_credentials',
+      'language',
+      'language',
+      'default-duress',
+      'duress',
+    ]);
+    expect(actions[0]).toEqual({
+      kind: 'default-credential',
+      profileId: owner.id,
+      credential: configured.profiles[0]?.defaultCredential,
+    });
+    expect(actions[5]).toEqual({
+      kind: 'default-duress',
+      profileId: owner.id,
+      duress: configured.profiles[0]?.defaultDuress,
+    });
+    const normal = actions[2];
+    expect(normal?.kind === 'manual' && normal.instructions).toContain(
+      'verify or replace configured defaults',
+    );
+    const requirements = buildReadinessRequirements(configured);
+    expect(requirements.find((item) => item.id === 'normal_credentials')?.profileIds).toEqual([
+      owner.id,
+      'work',
+    ]);
+    expect(requirements.find((item) => item.id === 'duress')?.profileIds).toEqual([owner.id]);
+  });
+
+  it('requires private normal checks for credential defaults and both private checks for duress defaults', () => {
+    const owner = policy.profiles[0];
+    if (!owner) throw new Error('Fixture owner missing');
+    const cleanOwner = { ...owner };
+    delete cleanOwner.language;
+    const plain = { ...policy, capabilities: [], profiles: [cleanOwner] };
+    const credentials = validatePolicy({
+      ...plain,
+      profiles: [{ ...cleanOwner, defaultCredential: { type: 'pin', secretRef: 'owner-pin' } }],
+    });
+    expect(requiredAttestations(credentials)).toContain('normal_credentials');
+    expect(requiredAttestations(credentials)).not.toContain('duress');
+    expect(finalSetupActions(credentials).map((action) => action.kind)).toEqual([
+      'default-credential',
+      'manual',
+    ]);
+    const duress = validatePolicy({
+      ...plain,
+      profiles: [
+        {
+          ...cleanOwner,
+          defaultDuress: {
+            ownerCredentialRef: 'existing-owner-pin',
+            pinRef: 'duress-pin',
+            passwordRef: 'duress-password',
+          },
+        },
+      ],
+    });
+    expect(requiredAttestations(duress)).toEqual(expect.arrayContaining(['normal_credentials', 'duress']));
+    expect(
+      finalSetupActions(duress).map((action) => (action.kind === 'manual' ? action.capability : action.kind)),
+    ).toEqual(['normal_credentials', 'default-duress', 'duress']);
+  });
+
   it('loads the five-profile, simple and arbitrary-layout starter packs and fork identities', () => {
     for (const name of ['reference-five', 'simple', 'custom']) {
       const loaded = validatePolicy(parseDocument(readFileSync(`policy-packs/${name}/policy.json`, 'utf8')));

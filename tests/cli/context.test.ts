@@ -33,6 +33,10 @@ const mocks = vi.hoisted(() => ({
   repositoryIndex: vi.fn(),
   candidate: vi.fn(),
   validateEvidence: vi.fn(),
+  credentialConstruct: vi.fn(),
+  credentialPreflight: vi.fn(),
+  credentialSet: vi.fn(),
+  duressSet: vi.fn(),
   android: {
     inspect: vi.fn(),
     createUser: vi.fn(),
@@ -90,6 +94,14 @@ vi.mock('@pxv/adapters', () => ({
     constructor() {
       Object.assign(this, mocks.android);
     }
+  },
+  CredentialDefaultsService: class {
+    constructor(android: unknown, projectRoot: string, policy: PolicyPack) {
+      mocks.credentialConstruct(android, projectRoot, policy);
+    }
+    preflight = mocks.credentialPreflight;
+    setCredential = mocks.credentialSet;
+    setDuress = mocks.duressSet;
   },
   RecipeService: class {
     run = mocks.recipeRun;
@@ -275,6 +287,34 @@ describe('production dependency wiring and evidence boundaries', () => {
       source: 'source',
     });
     expect(mocks.emulator).toHaveBeenCalled();
+  });
+
+  it('constructs private default adapters only when their ports run and forwards nonsecret policy references', async () => {
+    const profile = policy.profiles[0]!;
+    profile.defaultCredential = { type: 'pin', secretRef: 'owner-initial' };
+    profile.defaultDuress = {
+      ownerCredentialRef: 'owner-current',
+      pinRef: 'duress-pin',
+      passwordRef: 'duress-password',
+    };
+    await writeFile(join(projectRoot, 'policy.yaml'), JSON.stringify(policy));
+    const app = await openApp();
+    expect(mocks.credentialConstruct).not.toHaveBeenCalled();
+    const signal = new AbortController().signal;
+    const context = { ...execution, signal };
+    await app.engine.port.credentialDefaultsPreflight?.(target, signal);
+    expect(mocks.credentialPreflight).toHaveBeenCalledExactlyOnceWith(target, signal);
+    await app.engine.port.setCredentialDefault?.(target, user, profile, context);
+    expect(mocks.credentialSet).toHaveBeenCalledExactlyOnceWith(target, user, profile, context);
+    await app.engine.port.setDuressDefault?.(target, user, profile, context);
+    expect(mocks.duressSet).toHaveBeenCalledExactlyOnceWith(target, user, profile, context);
+    expect(mocks.credentialConstruct).toHaveBeenCalled();
+    for (const call of mocks.credentialConstruct.mock.calls)
+      expect(call).toEqual([
+        expect.objectContaining({ inspect: mocks.android.inspect }),
+        projectRoot,
+        app.engine.project.policy,
+      ]);
   });
 
   it('resolves project APK paths and captures authenticated repository evidence using measured SDK/ABIs', async () => {

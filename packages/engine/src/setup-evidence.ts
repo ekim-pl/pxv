@@ -21,7 +21,7 @@ export function checkLanguageDelta(
   expected: DeviceObservation,
   actual: DeviceObservation,
   profileId: string,
-): 'en-US' | 'pl-PL' | undefined {
+): string | undefined {
   const normalized = structuredClone(actual);
   const profile = normalized.profiles.find((value) => value.profileId === profileId);
   const prior = expected.profiles.find((value) => value.profileId === profileId);

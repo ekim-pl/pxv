@@ -7,6 +7,7 @@ import {
   validateProduct,
   verifyResolvedPolicy,
   digest,
+  profileLocale,
   type HandoffRecord,
   type PolicyPack,
   type ProductDescriptor,
@@ -42,10 +43,10 @@ const labels = {
     date: 'Recorded',
     profiles: 'Profiles',
     privacy:
-      'Enter passwords, accounts, MFA and recovery material privately on your phone. Keep recovery material in a safe place outside the phone.',
+      'Enter account passwords, MFA and recovery material privately on your phone. Privately verify or replace supplied screen-lock defaults. Keep recovery material in a safe place outside the phone.',
     support: 'Support',
     normal:
-      'Set your normal screen lock before selecting your language and configuring an optional duress credential. Never test destructive duress activation.',
+      'Set or verify your normal screen lock privately for each profile before selecting your language and configuring an optional duress credential. Never test destructive duress activation.',
     maintenance:
       'Arrange a maintenance visit before changing device policy. Review application updates, routing and backups with your operator.',
   },
@@ -58,10 +59,10 @@ const labels = {
     date: 'Data zapisu',
     profiles: 'Profile',
     privacy:
-      'Hasła, konta, MFA i dane odzyskiwania wprowadzaj prywatnie na swoim telefonie. Dane odzyskiwania przechowuj bezpiecznie poza telefonem.',
+      'Hasła do kont, MFA i dane odzyskiwania wprowadzaj prywatnie na swoim telefonie. Prywatnie sprawdź lub zmień nadane początkowe blokady ekranu. Dane odzyskiwania przechowuj bezpiecznie poza telefonem.',
     support: 'Wsparcie',
     normal:
-      'Ustaw zwykłą blokadę ekranu przed wyborem języka i ewentualną konfiguracją kodu przymusu. Nigdy nie testuj destrukcyjnego działania kodu przymusu.',
+      'Ustaw lub sprawdź prywatnie zwykłą blokadę każdego profilu przed wyborem języka i ewentualną konfiguracją kodu przymusu. Nigdy nie testuj destrukcyjnego działania kodu przymusu.',
     maintenance:
       'Przed zmianą polityki urządzenia umów wizytę serwisową. Sprawdź aktualizacje aplikacji, routing i kopie zapasowe z operatorem.',
   },
@@ -119,7 +120,10 @@ export function renderHandoff(
   ];
   if (record.acceptedBy) rows.push([text.accepted, record.acceptedBy]);
   const instructions = [text.privacy, text.normal, text.maintenance];
-  const profiles = policy.profiles.map((profile) => profile.name);
+  const profiles = policy.profiles.map((profile) => {
+    const locale = profileLocale(profile);
+    return locale ? `${profile.name} (${locale})` : profile.name;
+  });
   const support = `${product.support.name}: ${product.support.email} · ${product.support.url}`;
   return {
     markdown: `# ${markdown(product.name)} — ${text.title}\n\n${rows.map(([key, value]) => `**${key}:** ${markdown(value)}`).join('\n\n')}\n\n## ${text.profiles}\n\n${profiles.map((name) => `- ${markdown(name)}`).join('\n')}\n\n${instructions.join('\n\n')}\n\n## ${text.support}\n\n${markdown(support)}\n`,

@@ -61,6 +61,18 @@ export interface VpnPolicy {
   lockdown: boolean;
 }
 
+/** Only references are public; credential values remain in private device input. */
+export interface DefaultCredentialPolicy {
+  type: 'pin' | 'password';
+  secretRef: string;
+}
+
+export interface DefaultDuressPolicy {
+  ownerCredentialRef: string;
+  pinRef: string;
+  passwordRef: string;
+}
+
 export interface ProfilePolicy {
   id: string;
   name: string;
@@ -69,7 +81,11 @@ export interface ProfilePolicy {
   settings: SettingPolicy[];
   permissions: PermissionPolicy[];
   vpn: VpnPolicy;
-  language?: 'en-US' | 'pl-PL';
+  defaultCredential?: DefaultCredentialPolicy;
+  defaultDuress?: DefaultDuressPolicy;
+  defaultLocale?: string;
+  /** Legacy alias for defaultLocale. */
+  language?: string;
   recipes?: RecipePolicy[];
   networkProbe?: NetworkProbePolicy;
   backup?: { enabled: boolean; transportPackage: string };
@@ -212,7 +228,7 @@ export interface ProfileObservation {
   settings: SettingPolicy[];
   permissions: PermissionPolicy[];
   vpn: VpnPolicy;
-  language?: 'en-US' | 'pl-PL';
+  language?: string;
   backup?: { enabled: boolean; transportPackage: string | null };
 }
 
@@ -248,7 +264,9 @@ export type Action =
   | { kind: 'permission'; profileId: string; permission: PermissionPolicy }
   | { kind: 'vpn'; profileId: string; vpn: VpnPolicy }
   | { kind: 'install-os'; os: OsPolicy }
-  | { kind: 'language'; profileId: string; language: 'en-US' | 'pl-PL' }
+  | { kind: 'language'; profileId: string; language: string }
+  | { kind: 'default-credential'; profileId: string; credential: DefaultCredentialPolicy }
+  | { kind: 'default-duress'; profileId: string; duress: DefaultDuressPolicy }
   | { kind: 'recipe'; profileId: string; recipe: RecipePolicy }
   | { kind: 'network-probe'; profileId: string; probe: NetworkProbePolicy }
   | { kind: 'manual'; capability: string; instructions: string };

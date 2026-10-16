@@ -1,6 +1,7 @@
 import {
   buildReadinessRequirements,
   finalSetupActions,
+  profileLocale,
   type DeviceTarget,
   type PolicyPack,
   type ProductDescriptor,
@@ -19,10 +20,10 @@ export function renderProjectGuide(
 ): string {
   const pl = locale === 'pl';
   const profiles = policy.profiles
-    .map(
-      (profile) =>
-        `- ${text(profile.id)}: ${text(profile.name)} (${profile.kind}); ${profile.packages.length} ${pl ? 'aplikacji' : 'apps'}; ${profile.settings.length} ${pl ? 'ustawień' : 'settings'}${profile.language ? `; ${profile.language}` : ''}.`,
-    )
+    .map((profile) => {
+      const locale = profileLocale(profile);
+      return `- ${text(profile.id)}: ${text(profile.name)} (${profile.kind}); ${profile.packages.length} ${pl ? 'aplikacji' : 'apps'}; ${profile.settings.length} ${pl ? 'ustawień' : 'settings'}${locale ? `; ${locale}` : ''}.`;
+    })
     .join('\n');
   const requirements = buildReadinessRequirements(policy, kind)
     .map((requirement) => `- \`${requirement.id}\`: ${requirement.instructions[locale]}`)
@@ -30,7 +31,7 @@ export function renderProjectGuide(
   const phases = finalSetupActions(policy)
     .map((action) =>
       action.kind === 'language'
-        ? `${pl ? 'Język' : 'Language'} ${action.profileId}: ${action.language}`
+        ? `${pl ? 'Ustawienia regionalne' : 'Locale'} ${action.profileId}: ${action.language}`
         : action.kind === 'manual'
           ? action.capability
           : action.kind,

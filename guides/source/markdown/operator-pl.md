@@ -58,6 +58,81 @@ Zastąp przykładowy numer rzeczywiście odczytanym numerem tego telefonu. Poró
 
 Zasób nazwany `all` wybiera się dokładnie przez `--asset all`. Flota wymaga `--all` lub `--group`; nazwa zasobu nie jest symbolem wieloznacznym. Nie używaj planu jednego telefonu do innego.
 
+## Domyślny język i region każdego profilu
+
+Opcjonalne pole `defaultLocale` określa początkowy język każdego profilu, także właściciela. Wartość jest jednym znacznikiem BCP 47 z opcjonalnym regionem lub alfabetem, na przykład `en-US`, `pl-PL`, `de-DE` albo `sr-Latn-RS`. Znaczniki są normalizowane do postaci kanonicznej. Listy, podkreślenia i nieokreślone języki są odrzucane. Starsze pole `language` nadal działa; jeśli podano oba pola, muszą wskazywać ten sam kanoniczny język i region.
+
+Przykład zawiera kompletną minimalną tablicę `profiles`; zachowaj pozostałe wymagane pola polityki:
+
+~~~json
+{
+  "profiles": [
+    {
+      "id": "owner", "name": "Owner", "kind": "owner",
+      "packages": [], "settings": [], "permissions": [],
+      "vpn": { "packageId": null, "alwaysOn": false, "lockdown": false },
+      "defaultLocale": "en-US"
+    },
+    {
+      "id": "work", "name": "Work", "kind": "secondary",
+      "packages": [], "settings": [], "permissions": [],
+      "vpn": { "packageId": null, "alwaysOn": false, "lockdown": false },
+      "defaultLocale": "pl-PL"
+    },
+    {
+      "id": "travel", "name": "Travel", "kind": "secondary",
+      "packages": [], "settings": [], "permissions": [],
+      "vpn": { "packageId": null, "alwaysOn": false, "lockdown": false },
+      "defaultLocale": "de-DE"
+    }
+  ]
+}
+~~~
+
+Po edycji zweryfikuj i zablokuj politykę przed przygotowaniem nowego planu. Konfiguracja języka każdego profilu następuje po `normal_credentials`, a przed opcjonalnym duress. Może ją wykonać zaakceptowany adapter UI; w przeciwnym razie przebieg czeka na ręczne ustawienie w tym profilu. Inspekcja odczytuje główny język z wiersza ustawień danego użytkownika Androida. Typ akcji `language` i punkt `language:<profileId>` pozostają zgodne z dotychczasowymi przebiegami.
+
+`defaultLocale` ustawia język, region i alfabet profilu. Nie zmienia strefy czasowej. Opcja dokumentów i CLI `--locale en|pl` niezależnie wybiera język wskazówek lub dokumentu przekazania. Pominięcie obu pól języka pozostawia te ustawienia profilu poza zarządzaniem polityki.
+
+## Opcjonalna domyślna blokada i dane duress
+
+Profil może zawierać `defaultCredential` z `type: pin` lub `type: password` oraz `secretRef`. PIN wymaga 4–128 cyfr, a hasło 4–128 drukowalnych znaków ASCII; te same ograniczenia dotyczą duress. Tylko profil właściciela może zawierać `defaultDuress`; GrapheneOS używa jednej pary PIN/hasło duress zarządzanej przez właściciela dla całego telefonu, w tym pozostałych profili ([oficjalny opis funkcji](https://grapheneos.org/features#duress)). Wymagane są oba odwołania duress. `ownerCredentialRef` może różnić się od `secretRef` początkowej zwykłej blokady; w chwili ustawiania duress musi zawierać aktualne zwykłe dane odblokowania właściciela. Może korzystać z odwołania blokady domyślnej, jeśli została zachowana i nadal odpowiada zadeklarowanemu typowi. Przykładowe pola istniejącego profilu właściciela, z zachowaniem pozostałych wymaganych pól:
+
+~~~json
+{
+  "id": "owner",
+  "name": "owner",
+  "kind": "owner",
+  "defaultCredential": { "type": "pin", "secretRef": "owner-lock" },
+  "defaultDuress": {
+    "ownerCredentialRef": "owner-current",
+    "pinRef": "duress-pin",
+    "passwordRef": "duress-password"
+  }
+}
+~~~
+
+Gdy krok ustawienia wartości domyślnych ma być wykonany, przechowuj jego wartości wyłącznie w prywatnym pliku wejściowym danego telefonu `$P/secrets/credentials/lab-01.json`, gdzie `lab-01` jest identyfikatorem zarejestrowanego zasobu. Plik jest oddzielony od polityki i zapisów. Musi należeć do bieżącego użytkownika systemu, mieć tryb `0600` i być zwykłym plikiem; on ani katalogi `secrets` i `credentials` nie mogą być dowiązaniami symbolicznymi. Katalog projektu oraz katalogi `secrets` i `credentials` muszą należeć do bieżącego użytkownika i nie mogą zezwalać na zapis grupie ani innym użytkownikom. Użyj prywatnego edytora; sekret nie może trafić do argumentu polecenia ani historii powłoki. Twórz prywatne katalogi z `umask 077`, a po zapisie wykonaj `chmod 600 "$P/secrets/credentials/lab-01.json"`. Poniższe znaczniki zastąp prywatnie; nie są działającymi danymi blokady:
+
+~~~json
+{
+  "schemaVersion": 1,
+  "values": {
+    "owner-lock": "<prywatny początkowy zwykły PIN>",
+    "owner-current": "<aktualne zwykłe dane odblokowania właściciela>",
+    "duress-pin": "<prywatny PIN duress>",
+    "duress-password": "<prywatne hasło duress>"
+  }
+}
+~~~
+
+JSON przyjmuje wyłącznie `schemaVersion: 1` i obiekt `values` z sekretami jako ciągami znaków. Nie dodawaj wartości do polityki, przeglądu, notatek poświadczeń, logów ani dokumentu przekazania. Plik nie należy do kontroli wersji ani artefaktów wydania. Plan pokazuje typ blokady, odwołania i działania; nie zawiera wartości sekretów, ich skrótów ani snapshotów. Plik jest odczytywany przy wykonaniu, więc odbiorca może prywatnie zmienić wartość pod odwołaniem przed wznowieniem bez ujawniania jej w przeglądzie.
+
+Po walidacji i zablokowaniu polityki użyj zwykłego `device provision`. Najpierw ustawia on zwykłe blokady domyślne, potem zatrzymuje się na `normal_credentials`: odbiorca prywatnie odblokowuje każdy wybrany profil i sprawdza lub zmienia blokadę. Następnie wybiera się język końcowy, a potem ustawia domyślne dane duress właściciela i nadal wykonuje ręczną kontrolę `duress`. Przed ustawieniem duress `ownerCredentialRef` musi wskazywać **aktualne zwykłe dane odblokowania właściciela**. Jeśli odbiorca je zmienił, prywatnie zaktualizuj `owner-current` przed wznowieniem, zachowując początkową wartość `owner-lock` zgodną z pierwotnie zadeklarowanym typem albo usuń `defaultDuress`, zablokuj politykę, zatwierdź nowy plan i skonfiguruj duress ręcznie. GrapheneOS uwierzytelnia wartość `ownerCredentialRef`: używaj poprawnej aktualnej zwykłej blokady właściciela, nigdy istniejących danych duress, ponieważ to uwierzytelnienie może wymazać telefon. Silnik porównuje podane wartości, lecz nie wykrywa nieznanych wcześniej ustawionych sekretów duress. Obie wartości duress muszą różnić się od wszystkich skonfigurowanych zwykłych blokad domyślnych oraz aktualnej blokady właściciela. Ich odwołania również muszą różnić się od wszystkich odwołań zwykłych blokad domyślnych i od `ownerCredentialRef`. Ponieważ silnik nie zna prywatnie zmienionych blokad pozostałych profili, przed potwierdzeniem punktu `duress` odbiorca musi prywatnie upewnić się, że obie wartości duress różnią się od wszystkich rzeczywistych zwykłych danych blokady każdego profilu, także prywatnie zmienionych blokad profili dodatkowych.
+
+Przyjęte przez polecenie wartości domyślne są zapamiętywane jednorazowo dla urządzenia i stabilnej tożsamości użytkownika Androida; zapis potwierdza przyjęcie polecenia, nie sprawdzenie blokady. Kolejne przebiegi i wcześniej zatwierdzone plany pomijają je nawet po zmianie odwołań lub prywatnych wartości, więc pominięte kroki nie wymagają prywatnego pliku. Odtworzony użytkownik dodatkowy jest inicjalizowany ponownie; jawne `device install-os` usuwa tę historię przed flashowaniem.
+
+Zwykłe blokady domyślne służą wyłącznie do inicjalizacji profilu bez istniejącej blokady; nie zastępują obecnych danych i nie przyjmują poprzedniego hasła. Zainstalowany OS musi obsługiwać wymagane polecenia `locksettings set-pin`/`set-password`, a dla duress także GrapheneOS `set-duress-credentials`. Root nie jest wymagany. Brak obsługi lub istniejąca blokada kończy automatyczny krok błędem; sprawdź przyczynę, usuń odpowiednie pola domyślne i przygotuj nowy zatwierdzony plan prywatnej konfiguracji ręcznej. Powodzenie polecenia nie dowodzi zwykłego odblokowania ani działania wymazania duress. Zachowaj kontrole odbiorcy i nigdy nie aktywuj destrukcyjnego duress jako testu. Pominięcie obu pól zachowuje prywatną konfigurację ręczną.
+
 ## Przegląd i wykonanie
 
 Plan opisuje tożsamość, transport, aktualne obserwacje, utrwalone artefakty i skutki dotyczące innych użytkowników Androida. Kod i wersja APK mogą zmienić się globalnie mimo osobnych danych użytkowników. Sprawdź te skutki przed zatwierdzeniem. `--yes` potwierdza konkretny przegląd w automatyzacji; nie zastępuje sprawdzenia telefonu.

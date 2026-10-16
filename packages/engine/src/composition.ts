@@ -13,6 +13,7 @@ import { HandoffService } from './handoff-service.js';
 import { SeedvaultPlans } from './seedvault-plans.js';
 import { SeedvaultExecution } from './seedvault-execution.js';
 import { SeedvaultService } from './seedvault-service.js';
+import { CredentialDefaultHistory } from './credential-default-history.js';
 type Dependencies = EngineOptions & { clock: () => Date };
 interface Collaborators {
   observations: ObservationService;
@@ -25,7 +26,16 @@ interface Collaborators {
 function operationServices(deps: Dependencies, services: Collaborators) {
   const { project, store, port, artifacts, clock } = deps;
   const { observations, plans, evidence, devices, projects, journal } = services;
-  const preparation = new PreparationService(project, port, artifacts, observations, plans, clock);
+  const credentialDefaults = new CredentialDefaultHistory(store);
+  const preparation = new PreparationService(
+    project,
+    port,
+    artifacts,
+    observations,
+    plans,
+    clock,
+    credentialDefaults,
+  );
   const review = new ReviewService(
     project,
     store,
@@ -50,6 +60,7 @@ function operationServices(deps: Dependencies, services: Collaborators) {
     devices,
     journal,
     clock,
+    credentialDefaults,
   );
   const recovery = new RecoveryService(store, port, observations, devices, journal);
   return { preparation, review, execution, recovery };

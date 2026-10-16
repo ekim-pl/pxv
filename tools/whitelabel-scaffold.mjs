@@ -4,13 +4,15 @@ import { dirname, extname, isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import {
+  canonicalLocale,
   parseDocument,
+  profileLocale,
   validatePolicy,
   validateProduct,
   validateProject,
 } from '../packages/contracts/dist/index.js';
 
-/** @typedef {{schemaVersion:1,product:{id:string,name:string,command:string,packageName:string,debName:string,image:string,support:{name:string,email:string,url:string}},brand:{primary:string,secondary:string,accent:string,fontFamily:string,logoPath?:string,fontFile?:string},starter:{policyTemplate?:'simple'|'reference-five',language?:'en-US'|'pl-PL',ownerProfileName?:string}}} ScaffoldConfig */
+/** @typedef {{schemaVersion:1,product:{id:string,name:string,command:string,packageName:string,debName:string,image:string,support:{name:string,email:string,url:string}},brand:{primary:string,secondary:string,accent:string,fontFamily:string,logoPath?:string,fontFile?:string},starter:{policyTemplate?:'simple'|'reference-five',defaultLocale?:string,language?:string,ownerProfileName?:string}}} ScaffoldConfig */
 /** @typedef {ScaffoldConfig & {configPath:string}} ConfigWithPath */
 /** @typedef {ReturnType<typeof validateProduct>} Product */
 /** @typedef {ReturnType<typeof validatePolicy>} Policy */
@@ -67,20 +69,32 @@ function parseBrand(value) {
 
 /** @param {Record<string, unknown>} value @returns {ScaffoldConfig['starter']} */
 function parseStarter(value) {
-  validateKeys(value, [], 'starter', ['language', 'ownerProfileName', 'policyTemplate']);
+  validateKeys(value, [], 'starter', ['defaultLocale', 'language', 'ownerProfileName', 'policyTemplate']);
   if (
     value['policyTemplate'] !== undefined &&
     !['simple', 'reference-five'].includes(String(value['policyTemplate']))
   )
     throw new Error('starter.policyTemplate must be simple or reference-five');
-  if (value['language'] !== undefined && !['en-US', 'pl-PL'].includes(String(value['language'])))
-    throw new Error('starter.language must be en-US or pl-PL');
+  const locale = starterLocale(value);
   if (
     value['ownerProfileName'] !== undefined &&
     (typeof value['ownerProfileName'] !== 'string' || !value['ownerProfileName'].trim())
   )
     throw new Error('starter.ownerProfileName must be nonempty');
-  return /** @type {ScaffoldConfig['starter']} */ (value);
+  return /** @type {ScaffoldConfig['starter']} */ ({
+    ...value,
+    ...(locale ? { defaultLocale: locale } : {}),
+  });
+}
+
+/** @param {Record<string, unknown>} value */
+function starterLocale(value) {
+  const preferred =
+    value['defaultLocale'] === undefined ? undefined : canonicalLocale(value['defaultLocale']);
+  const legacy = value['language'] === undefined ? undefined : canonicalLocale(value['language']);
+  if (preferred && legacy && preferred !== legacy)
+    throw new Error('starter.defaultLocale conflicts with legacy language');
+  return preferred ?? legacy;
 }
 
 /** @param {unknown} value @returns {ScaffoldConfig} */
@@ -126,6 +140,22 @@ async function saveJson(path, value) {
   await writeFile(path, `${JSON.stringify(value, null, 2)}\n`, { mode: 0o644 });
 }
 
+/** @param {Policy} basePolicy @param {ScaffoldConfig['starter']} starter */
+function generatedProfiles(basePolicy, starter) {
+  return basePolicy.profiles.map((profile) => {
+    const locale = starter.defaultLocale ?? profileLocale(profile);
+    const generated = {
+      ...profile,
+      ...(profile.id === 'owner' && starter.ownerProfileName
+        ? { name: starter.ownerProfileName.trim() }
+        : {}),
+      ...(locale ? { defaultLocale: locale } : {}),
+    };
+    delete generated.language;
+    return generated;
+  });
+}
+
 /** @param {ConfigWithPath} config @returns {Promise<Prepared>} */
 async function prepare(config) {
   const template = config.starter.policyTemplate ?? 'simple';
@@ -160,13 +190,7 @@ async function prepare(config) {
     id: config.product.id,
     version: '0.1.0',
     name: `${product.name} starter policy`,
-    profiles: basePolicy.profiles.map((profile) => ({
-      ...profile,
-      ...(profile.id === 'owner' && config.starter.ownerProfileName
-        ? { name: config.starter.ownerProfileName.trim() }
-        : {}),
-      language: config.starter.language ?? profile.language,
-    })),
+    profiles: generatedProfiles(basePolicy, config.starter),
   });
   const project = validateProject({
     format: 'pxv-ts',

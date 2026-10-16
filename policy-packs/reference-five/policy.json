@@ -3,7 +3,7 @@
   "id": "reference-five",
   "version": "0.1.0",
   "name": "Five-profile structural starter",
-  "capabilities": ["normal_credentials", "network", "backup"],
+  "capabilities": ["normal_credentials", "duress", "network", "backup"],
   "requiredAttestations": [
     "routes",
     "network_failure_tests",
@@ -21,7 +21,13 @@
       "settings": [],
       "permissions": [],
       "vpn": { "packageId": null, "alwaysOn": false, "lockdown": false },
-      "language": "en-US"
+      "defaultCredential": { "type": "password", "secretRef": "owner-password" },
+      "defaultDuress": {
+        "ownerCredentialRef": "owner-current",
+        "pinRef": "duress-pin",
+        "passwordRef": "duress-password"
+      },
+      "defaultLocale": "en-US"
     },
     {
       "id": "contacts",
@@ -31,7 +37,8 @@
       "settings": [],
       "permissions": [],
       "vpn": { "packageId": null, "alwaysOn": false, "lockdown": false },
-      "language": "en-US"
+      "defaultCredential": { "type": "pin", "secretRef": "contacts-pin" },
+      "defaultLocale": "pl-PL"
     },
     {
       "id": "google",
@@ -41,7 +48,8 @@
       "settings": [],
       "permissions": [],
       "vpn": { "packageId": null, "alwaysOn": false, "lockdown": false },
-      "language": "en-US"
+      "defaultCredential": { "type": "pin", "secretRef": "google-pin" },
+      "defaultLocale": "pl-PL"
     },
     {
       "id": "testing",
@@ -51,7 +59,8 @@
       "settings": [],
       "permissions": [],
       "vpn": { "packageId": null, "alwaysOn": false, "lockdown": false },
-      "language": "en-US"
+      "defaultCredential": { "type": "pin", "secretRef": "testing-pin" },
+      "defaultLocale": "pl-PL"
     },
     {
       "id": "onion",
@@ -61,7 +70,8 @@
       "settings": [],
       "permissions": [],
       "vpn": { "packageId": null, "alwaysOn": false, "lockdown": false },
-      "language": "en-US"
+      "defaultCredential": { "type": "pin", "secretRef": "onion-pin" },
+      "defaultLocale": "pl-PL"
     }
   ]
 }

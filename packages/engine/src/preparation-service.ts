@@ -4,6 +4,7 @@ import {
   digest,
   finalSetupActions,
   requiredAttestations,
+  profileLocale,
   validateAction,
   validateArtifact,
 } from '@pxv/contracts';
@@ -28,6 +29,7 @@ import type {
 import type { ObservationReader } from './observation-service.js';
 import type { PlanWriter } from './plan-repository.js';
 import { sameArtifact } from './reviewed-plan.js';
+import type { CredentialDefaultHistory } from './credential-default-history.js';
 export interface Preparation {
   prepare(target: SelectedTarget, operation?: Operation, signal?: AbortSignal): Promise<PreparedOperation>;
   prepareExtension(
@@ -37,6 +39,11 @@ export interface Preparation {
   ): Promise<PreparedOperation>;
   reviewEffects(target: SelectedTarget, actions: Action[], signal?: AbortSignal): Promise<SharedApkEffect[]>;
 }
+function profileSetupAction(
+  action: Action,
+): action is Extract<Action, { kind: 'create-user' | 'default-credential' | 'default-duress' }> {
+  return ['create-user', 'default-credential', 'default-duress'].includes(action.kind);
+}
 export class PreparationService implements Preparation {
   constructor(
     readonly project: ProjectContext,
@@ -45,6 +52,7 @@ export class PreparationService implements Preparation {
     readonly observations: ObservationReader,
     readonly plans: PlanWriter,
     readonly clock: () => Date,
+    readonly credentialDefaults: CredentialDefaultHistory,
   ) {}
   /** Artifact acquisition is allowed; preparation never changes the phone. */
   async prepare(
@@ -93,6 +101,7 @@ export class PreparationService implements Preparation {
     profile: ProfilePolicy,
     action: Exclude<Action, { kind: 'manual' | 'install-os' }>,
   ): boolean {
+    if (profileSetupAction(action)) return this.extensionSetupMatches(profile, action);
     switch (action.kind) {
       case 'install-apk':
         return profile.packages.some((value) => sameArtifact(value, action.artifact));
@@ -103,13 +112,24 @@ export class PreparationService implements Preparation {
       case 'vpn':
         return digest(profile.vpn) === digest(action.vpn);
       case 'language':
-        return profile.language === action.language;
+        return profileLocale(profile) === action.language;
       case 'recipe':
         return this.declaredRecipes(profile).some((value) => digest(value) === digest(action.recipe));
       case 'network-probe':
         return this.declaredProbeMatches(profile, action.probe);
+    }
+  }
+  private extensionSetupMatches(
+    profile: ProfilePolicy,
+    action: Extract<Action, { kind: 'create-user' | 'default-credential' | 'default-duress' }>,
+  ): boolean {
+    switch (action.kind) {
       case 'create-user':
         return profile.kind === 'secondary' && profile.name === action.name;
+      case 'default-credential':
+        return digest(profile.defaultCredential ?? null) === digest(action.credential);
+      case 'default-duress':
+        return profile.kind === 'owner' && digest(profile.defaultDuress ?? null) === digest(action.duress);
     }
   }
   private declaredRecipes(profile: ProfilePolicy): RecipePolicy[] {
@@ -138,6 +158,8 @@ export class PreparationService implements Preparation {
       for (const action of contributions)
         actions.push(await this.snapshotContribution(target, id, actions.length, action, signal));
     } else actions = await this.prepareProfiles(target, id, operation, baseline, signal);
+    actions = await this.credentialDefaults.pending(target, baseline, actions);
+    await this.prepareCredentialDefaults(target, actions, signal);
     const sharedEffects = await this.reviewEffects(target, actions, signal);
     return this.plans.persist({
       id,
@@ -149,6 +171,22 @@ export class PreparationService implements Preparation {
       ...(lifecycleGeneration ? { lifecycleGeneration } : {}),
       ...(osSnapshot ? { osSnapshot } : {}),
     });
+  }
+  private async prepareCredentialDefaults(
+    target: SelectedTarget,
+    actions: Action[],
+    signal?: AbortSignal,
+  ): Promise<void> {
+    const normal = actions.some((action) => action.kind === 'default-credential');
+    const duress = actions.some((action) => action.kind === 'default-duress');
+    if (!normal && !duress) return;
+    if (
+      !this.port.credentialDefaultsPreflight ||
+      (normal && !this.port.setCredentialDefault) ||
+      (duress && !this.port.setDuressDefault)
+    )
+      throw new Error('Configured credential defaults adapter is unavailable');
+    await this.port.credentialDefaultsPreflight(target, signal);
   }
   private async prepareBaseline(
     target: SelectedTarget,

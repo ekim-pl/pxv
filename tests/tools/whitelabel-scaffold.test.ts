@@ -50,7 +50,7 @@ it('generates a simple default brand and fresh project/device starter without ch
   const theme = await json<{ brandName: string; fontAsset: string; colors: Record<string, string> }>(
     join(output, 'guides/assets/brand.json'),
   );
-  const policy = await json<{ profiles: unknown[] }>(join(output, 'starter/policy.json'));
+  const policy = await json<{ profiles: Record<string, unknown>[] }>(join(output, 'starter/policy.json'));
   const project = await json<{ id: string; productId: string }>(join(output, 'starter/pxv.project.json'));
   const inventory = await json<{ devices: unknown[] }>(join(output, 'starter/inventory.json'));
 
@@ -58,6 +58,8 @@ it('generates a simple default brand and fresh project/device starter without ch
   expect(theme).toMatchObject({ brandName: 'Acme Fleet', fontAsset: 'assets/fonts/DejaVuSans.ttf' });
   expect(theme.colors).toEqual({ primary: '#17324D', secondary: '#2F6873', accent: '#D9952B' });
   expect(policy.profiles).toHaveLength(1);
+  expect(policy.profiles[0]).toMatchObject({ id: 'owner', defaultLocale: 'en-US' });
+  expect(policy.profiles[0]).not.toHaveProperty('language');
   expect(project).toEqual({
     format: 'pxv-ts',
     schemaVersion: 1,
@@ -71,7 +73,7 @@ it('generates a simple default brand and fresh project/device starter without ch
   expect(await readFile(join(repo, 'product.json'), 'utf8')).toBe(communityBefore);
 });
 
-it('validates alternate starter policies, Polish language and optional brand assets', async () => {
+it('accepts a legacy Polish locale override and optional brand assets', async () => {
   const root = await scratch();
   const config = await json<Record<string, unknown>>(join(repo, 'config/templates/white-label.example.json'));
   const product = config['product'] as Record<string, unknown>;
@@ -80,6 +82,7 @@ it('validates alternate starter policies, Polish language and optional brand ass
   product['id'] = 'acme-reference';
   product['name'] = 'Acme Reference';
   starter['policyTemplate'] = 'reference-five';
+  delete starter['defaultLocale'];
   starter['language'] = 'pl-PL';
   starter['ownerProfileName'] = 'Koordynator';
   brand['logoPath'] = 'logo.svg';
@@ -90,15 +93,66 @@ it('validates alternate starter policies, Polish language and optional brand ass
   const result = scaffold(await configFile(root, config), output);
   expect(result.status, result.stderr).toBe(0);
 
-  const policy = await json<{ profiles: { id: string; name: string; language: string }[] }>(
-    join(output, 'starter/policy.json'),
-  );
+  const policy = await json<{
+    profiles: { id: string; name: string; defaultLocale: string; language?: string }[];
+  }>(join(output, 'starter/policy.json'));
   const theme = await json<{ logo?: string; fontAsset: string }>(join(output, 'guides/assets/brand.json'));
   expect(policy.profiles).toHaveLength(5);
-  expect(policy.profiles.every((profile) => profile.language === 'pl-PL')).toBe(true);
+  expect(policy.profiles.every((profile) => profile.defaultLocale === 'pl-PL')).toBe(true);
+  expect(policy.profiles.every((profile) => !('language' in profile))).toBe(true);
   expect(policy.profiles.find((profile) => profile.id === 'owner')?.name).toBe('Koordynator');
   expect(theme).toMatchObject({ logo: 'assets/brand-logo.svg', fontAsset: 'assets/fonts/brand-font.ttf' });
   expect(await readFile(join(output, 'guides/assets/brand-logo.svg'), 'utf8')).toContain('<svg');
+});
+
+it('canonicalizes a language-script-region default for every generated profile, including owner', async () => {
+  const root = await scratch();
+  const config = await json<Record<string, unknown>>(join(repo, 'config/templates/white-label.example.json'));
+  const starter = config['starter'] as Record<string, unknown>;
+  starter['policyTemplate'] = 'reference-five';
+  starter['defaultLocale'] = 'SR-latn-rs';
+  const output = join(root, 'out');
+
+  const result = scaffold(await configFile(root, config), output);
+  expect(result.status, result.stderr).toBe(0);
+  const policy = await json<{ profiles: Record<string, unknown>[] }>(join(output, 'starter/policy.json'));
+  expect(policy.profiles).toHaveLength(5);
+  expect(policy.profiles.every((profile) => profile['defaultLocale'] === 'sr-Latn-RS')).toBe(true);
+  expect(policy.profiles.every((profile) => !('language' in profile))).toBe(true);
+});
+
+it('accepts equivalent canonical and legacy locale aliases', async () => {
+  const root = await scratch();
+  const config = await json<Record<string, unknown>>(join(repo, 'config/templates/white-label.example.json'));
+  const starter = config['starter'] as Record<string, unknown>;
+  starter['defaultLocale'] = 'iw-il';
+  starter['language'] = 'he-IL';
+  const output = join(root, 'out');
+
+  const result = scaffold(await configFile(root, config), output);
+  expect(result.status, result.stderr).toBe(0);
+  const policy = await json<{ profiles: Record<string, unknown>[] }>(join(output, 'starter/policy.json'));
+  expect(policy.profiles[0]).toMatchObject({ id: 'owner', defaultLocale: 'he-IL' });
+  expect(policy.profiles[0]).not.toHaveProperty('language');
+});
+
+it.each([
+  [{ defaultLocale: 'de-DE', language: 'pl-PL' }, 'conflicts with legacy language'],
+  [{ defaultLocale: 'en-US,pl-PL' }, 'Expected one explicit BCP 47 locale tag'],
+  [{ defaultLocale: 'pl_PL' }, 'Expected one explicit BCP 47 locale tag'],
+  [{ defaultLocale: 'und' }, 'Expected one explicit BCP 47 locale tag'],
+  [{ defaultLocale: null }, 'Expected one explicit BCP 47 locale tag'],
+  [{ language: 'Europe/Warsaw' }, 'Expected one explicit BCP 47 locale tag'],
+])('rejects conflicting or invalid locale input %j before writing', async (starter, expected) => {
+  const root = await scratch();
+  const config = await json<Record<string, unknown>>(join(repo, 'config/templates/white-label.example.json'));
+  config['starter'] = starter;
+  const output = join(root, 'out');
+
+  const result = scaffold(await configFile(root, config), output);
+  expect(result.status).toBe(1);
+  expect(result.stderr).toContain(expected);
+  await expect(readFile(join(output, 'product.json'), 'utf8')).rejects.toThrow();
 });
 
 it('rejects invalid brand colors without writing a partial product', async () => {

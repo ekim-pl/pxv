@@ -32,8 +32,8 @@ describe('shared private-setup evidence decisions', () => {
       prior = expected.profiles[0];
     if (!profile || !prior) throw new Error('Missing profile fixture');
     delete prior.language;
-    profile.language = 'pl-PL';
-    expect(checkLanguageDelta(expected, actual, prior.profileId)).toBe('pl-PL');
+    profile.language = 'sr-Latn-RS';
+    expect(checkLanguageDelta(expected, actual, prior.profileId)).toBe('sr-Latn-RS');
     expect(prior.language).toBeUndefined();
     const changed = structuredClone(actual);
     changed.debuggingEnabled = !expected.debuggingEnabled;
