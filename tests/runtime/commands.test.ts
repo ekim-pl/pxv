@@ -1,14 +1,13 @@
+import { CommandError } from '../../packages/runtime/src/command-contracts.js';
 import { spawn } from 'node:child_process';
 import { chmod, mkdtemp, readFile, readdir, stat, symlink, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { describe, expect, test, vi } from 'vitest';
 import {
-  CommandError,
   CommandRunner,
   deviceLeaseKeys,
   recoveryReservations,
-  resolveRecoveryReservation,
   hostControlRoot,
   supervisorPath,
   withDeviceLease,
@@ -106,6 +105,7 @@ describe('Linux native ownership', () => {
       expect(await readFile(join(root, 'receipts', file), 'utf8')).not.toContain(sentinel);
       expect((await stat(join(root, 'receipts', file))).mode & 0o777).toBe(0o600);
     }
+    if (!savedLease) throw new Error('Fixture lease missing');
     await expect(runner.run(['/bin/true'], { mutation: true, lease: savedLease })).rejects.toThrow('closed');
   });
   test('locks physical identity across different transports and transport identity across different devices', async () => {
@@ -147,9 +147,7 @@ describe('Linux native ownership', () => {
     await expect(
       withDeviceLease(root, 'physical', 'usb', 'again', () => Promise.resolve(undefined)),
     ).rejects.toThrow('unresolved');
-    await resolveRecoveryReservation(root, 'physical', 'usb', 'timeout', {
-      deviceRecoveryAcknowledged: true,
-    });
+    await withRecoveryLease(root, 'physical', 'usb', 'timeout', () => Promise.resolve());
     await withDeviceLease(root, 'physical', 'usb', 'recovered', () => Promise.resolve(undefined));
   });
   test('recovery executes under the inherited fence and only clears it after successful cleanup', async () => {
@@ -336,7 +334,7 @@ describe('Linux native ownership', () => {
     }
     await writeFile(path, '{broken');
     await expect(nativeReceipts(root, 'receipt-test')).rejects.toThrow('Malformed native receipt');
-    const gated = { ...original, status: 'gated' };
+    const gated: Record<string, unknown> = { ...original, status: 'gated' };
     delete gated['child'];
     delete gated['code'];
     delete gated['cleanup_proven'];
@@ -368,7 +366,7 @@ describe('Linux native ownership', () => {
     expect(await recoveryReservations(root)).toEqual([]);
     await withDeviceLease(root, 'physical', 'usb', 'live', async () => {
       await expect(
-        resolveRecoveryReservation(root, 'physical', 'usb', 'live', { deviceRecoveryAcknowledged: true }),
+        withRecoveryLease(root, 'physical', 'usb', 'live', () => Promise.resolve()),
       ).rejects.toThrow('still alive');
     });
     await expect(
@@ -444,6 +442,67 @@ describe('Linux native ownership', () => {
       ).rejects.toThrow(
         response.cleanup_proven ? 'Invalid native completion receipt' : 'cleanup could not be proven',
       );
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+  test('rejects response backlogs, oversized IPC lines and post-ready native failure', async () => {
+    const root = await mkdtemp('/tmp/pxv-native-protocol-');
+    const program = join(root, 'fake.mjs');
+    try {
+      vi.stubEnv('PXV_SUPERVISOR', program);
+      const scripts = [
+        "for(let i=0;i<5;i++)writeSync(3,JSON.stringify({type:'result',id:'unrequested-'+i})+'\\n');",
+        "writeSync(3,'x'.repeat(33*1024*1024)+'\\n');",
+        "writeSync(3,JSON.stringify({type:'ready'})+'\\n'+JSON.stringify({type:'error',message:'post-ready refusal'})+'\\n');",
+      ];
+      for (const source of scripts) {
+        await writeFile(
+          program,
+          '#!' + node + "\nimport {writeSync} from 'node:fs';" + source + 'setTimeout(()=>{},50);',
+          { mode: 0o700 },
+        );
+        await expect(
+          withDeviceLease(join(root, 'control'), 'device', 'transport', 'protocol', async (lease) => {
+            await delay(10);
+            await runner.run(['/bin/true'], { mutation: true, lease });
+          }),
+        ).rejects.toThrow(/backlog|response exceeded|post-ready refusal/u);
+      }
+    } finally {
+      vi.unstubAllEnvs();
+    }
+    await expect(
+      withRecoveryLease(root, 'device', 'transport', '../escape', () => Promise.resolve()),
+    ).rejects.toThrow('previous operation identity');
+  });
+
+  test('cancellation while a command waits at the gate never authorizes it', async () => {
+    const root = await mkdtemp('/tmp/pxv-native-gate-');
+    const program = join(root, 'fake.mjs');
+    const marker = join(root, 'authorized');
+    await writeFile(
+      program,
+      '#!' +
+        node +
+        '\n' +
+        "import {writeSync,writeFileSync,createReadStream} from 'node:fs';import{createInterface}from'node:readline';" +
+        "const send=v=>writeSync(3,JSON.stringify(v)+'\\n');createInterface({input:createReadStream('',{fd:3})}).on('line',line=>{const m=JSON.parse(line);if(m.type==='acquire')send({type:'ready'});if(m.type==='run')setTimeout(()=>send({type:'gated',id:m.id}),30);if(m.type==='authorize')writeFileSync(" +
+        JSON.stringify(marker) +
+        ", 'bad');});",
+      { mode: 0o700 },
+    );
+    try {
+      vi.stubEnv('PXV_SUPERVISOR', program);
+      const controller = new AbortController();
+      await expect(
+        withDeviceLease(join(root, 'control'), 'device', 'transport', 'gate', async (lease) => {
+          const pending = runner.run(['/bin/true'], { mutation: true, lease, signal: controller.signal });
+          setTimeout(() => controller.abort(new Error('cancelled while gated')), 10);
+          await pending;
+        }),
+      ).rejects.toThrow('cancelled while gated');
+      await expect(stat(marker)).rejects.toMatchObject({ code: 'ENOENT' });
     } finally {
       vi.unstubAllEnvs();
     }

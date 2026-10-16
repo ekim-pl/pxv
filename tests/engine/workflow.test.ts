@@ -1,3 +1,5 @@
+import { recordObligation } from './obligations.js';
+import { DatabaseSync } from 'node:sqlite';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -6,7 +8,7 @@ import { digest, observationDigest, requiredAttestations } from '@pxv/contracts'
 import type { PolicyPack, SelectedTarget } from '@pxv/contracts';
 import { createProject, loadProject, ResourceScope, saveInventory, WorkflowEngine } from '@pxv/engine';
 import type { ArtifactPort, PreparedOperation, ProjectContext, RunRecord } from '@pxv/engine';
-import { deviceLeaseKeys, SqliteStore } from '@pxv/runtime';
+import { commitProjectFile, deviceLeaseKeys, SqliteStore } from '@pxv/runtime';
 import { device, hashA, hashB, policy as setupPolicy, product } from '../contracts/fixtures.js';
 import { basePolicy, MemoryPort } from './fixtures.js';
 
@@ -363,7 +365,8 @@ describe('reviewed workflows, operator and recipient gates', () => {
     if (!observed) throw new Error('Fixture profile missing');
     observed.language = 'en-US';
     await configure(structuredClone(setupPolicy));
-    port.language = () => Promise.resolve({ status: 'manual-pending' });
+    port.language = () =>
+      Promise.resolve({ status: 'manual-pending', instructions: 'Set the language privately.' });
     const { run } = await preparedRun();
     await engine.execute(run.id);
     const normal = await engine.attest(target, 'normal_credentials', 'Alice');
@@ -394,7 +397,7 @@ describe('reviewed workflows, operator and recipient gates', () => {
     let calls = 0;
     port.language = () => {
       calls++;
-      return Promise.resolve({ status: 'manual-pending' });
+      return Promise.resolve({ status: 'manual-pending', instructions: 'Set the language privately.' });
     };
     const { run } = await preparedRun();
     await engine.execute(run.id);
@@ -422,7 +425,8 @@ describe('reviewed workflows, operator and recipient gates', () => {
       if (!observed) throw new Error('Fixture profile missing');
       observed.language = 'en-US';
       await configure(structuredClone(setupPolicy));
-      port.language = () => Promise.resolve({ status: 'manual-pending' });
+      port.language = () =>
+        Promise.resolve({ status: 'manual-pending', instructions: 'Set the language privately.' });
       const { run } = await preparedRun();
       await engine.execute(run.id);
       if (drift === 'language-and-permission') {
@@ -446,13 +450,13 @@ describe('reviewed workflows, operator and recipient gates', () => {
     await expect(engine.refreshReview(run.id)).rejects.toThrow('intentional manual');
     await engine.execute(run.id);
     const scope = new ResourceScope(store, device.canonicalSerial, run.id);
-    await scope.register('helper', 'test-helper', {});
+    await recordObligation(scope, 'helper', 'test-helper', {});
     await expect(engine.refreshReview(run.id)).rejects.toThrow('Recover unresolved');
     await scope.cleanup(
       (user) => Promise.resolve(user),
       () => Promise.resolve(),
     );
-    const cas = vi.spyOn(store, 'compareAndSet').mockResolvedValueOnce(false);
+    const cas = vi.spyOn(store, 'transition').mockResolvedValueOnce(false);
     await expect(engine.refreshReview(run.id)).rejects.toThrow('checkpoint changed');
     cas.mockRestore();
     const retained = (await store.entries<PreparedOperation>('plans')).find(
@@ -511,7 +515,7 @@ describe('reviewed workflows, operator and recipient gates', () => {
     await ready();
     await expect(engine.attest(target, 'unknown_check', 'Alice')).rejects.toThrow('does not belong');
     const scope = new ResourceScope(store, device.canonicalSerial, 'parent');
-    await scope.register('helper', 'probe', {});
+    await recordObligation(scope, 'helper', 'probe', {});
     expect((await engine.readiness(target)).missing).toContain('cleanup');
     await scope.cleanup(
       (user) => Promise.resolve(user),
@@ -796,5 +800,205 @@ describe('reviewed workflows, operator and recipient gates', () => {
     changed.resolvedPolicy.policy.name = 'Forged snapshot';
     await store.set('handoff-snapshots', record.id, changed);
     await expect(engine.acceptedHandoff('all')).rejects.toThrow('snapshot digest mismatch');
+  });
+  it('rejects attestation against a workflow generation changed during live measurement', async () => {
+    const { run } = await preparedRun();
+    await engine.execute(run.id);
+    const before = await engine.state('all');
+    const inspect = port.inspect.bind(port);
+    vi.spyOn(port, 'inspect').mockImplementationOnce(async (...args) => {
+      await store.set('workflow', 'all', { ...before, pending: ['external-evidence-generation'] });
+      return inspect(...args);
+    });
+    await expect(engine.attest(target, 'operator_signoff', 'Alice')).rejects.toThrow('evidence changed');
+    expect(await engine.receipts('all')).toEqual([]);
+    expect((await engine.state('all')).pending).toEqual(['external-evidence-generation']);
+  });
+
+  it('atomically rolls back completed handoff state when its durable event fails', async () => {
+    await ready();
+    const db = new DatabaseSync(join(root, 'state.sqlite'));
+    db.exec(
+      "CREATE TRIGGER handoff_fault BEFORE INSERT ON events WHEN json_extract(NEW.value,'$.type')='ready-for-handoff' BEGIN SELECT RAISE(ABORT,'handoff-audit-fault'); END",
+    );
+    try {
+      await expect(engine.finalize(target, 'Alice')).rejects.toThrow('handoff-audit-fault');
+      expect(port.calls).toContain('finalize');
+      expect(await store.get('handoff', 'all')).toBeUndefined();
+      expect(await store.entries('handoff-snapshots')).toEqual([]);
+      expect(await engine.state('all')).toMatchObject({ status: 'pending', pending: ['debugging-shutdown'] });
+      await expect(engine.acceptCustody('all', 'Recipient', true)).rejects.toThrow('after finalization');
+    } finally {
+      db.close();
+    }
+  });
+
+  it('atomically preserves shutdown-requested custody on audit failure and concurrent generation changes', async () => {
+    await ready();
+    const record = await engine.finalize(target, 'Alice');
+    const db = new DatabaseSync(join(root, 'state.sqlite'));
+    db.exec(
+      "CREATE TRIGGER custody_fault BEFORE INSERT ON events WHEN json_extract(NEW.value,'$.type')='custody-accepted' BEGIN SELECT RAISE(ABORT,'custody-audit-fault'); END",
+    );
+    try {
+      await expect(engine.acceptCustody('all', 'Recipient', true)).rejects.toThrow('custody-audit-fault');
+      expect(await store.get('handoff', 'all')).toEqual(record);
+      expect((await engine.state('all')).status).toBe('shutdown-requested');
+      db.exec('DROP TRIGGER custody_fault');
+      const transition = store.transition.bind(store);
+      vi.spyOn(store, 'transition').mockImplementationOnce(async (input) => {
+        await store.set('handoff', 'all', { ...record, operator: 'Bob' });
+        return transition(input);
+      });
+      await expect(engine.acceptCustody('all', 'Recipient', true)).rejects.toThrow('evidence changed');
+      expect(await store.get('handoff', 'all')).toEqual({ ...record, operator: 'Bob' });
+      expect((await engine.state('all')).status).toBe('shutdown-requested');
+    } finally {
+      db.close();
+    }
+  });
+
+  it('preserves a changed workflow generation and blocks readiness after checkpoint conflict', async () => {
+    const { run } = await preparedRun();
+    const transitions = store.transition.bind(store);
+    let injected = false;
+    vi.spyOn(store, 'transition').mockImplementation(async (input) => {
+      const completed = input.changes.find((item) => item.kind === 'set' && item.collection === 'workflow');
+      if (
+        !injected &&
+        completed?.kind === 'set' &&
+        (completed.value as { status?: string }).status === 'verified'
+      ) {
+        injected = true;
+        await store.set('workflow', 'all', {
+          ...(completed.value as object),
+          status: 'failed',
+          pending: ['storage-fault'],
+        });
+      }
+      return transitions(input);
+    });
+    expect((await engine.execute(run.id)).status).toBe('needs-inspection');
+    expect((await engine.readiness(target)).missing).toContain('execution-inspection');
+  });
+
+  it('invalidates measured workflow evidence when retained native completion bytes are malformed', async () => {
+    const { run } = await preparedRun();
+    const transition = store.transition.bind(store);
+    vi.spyOn(store, 'transition').mockImplementation(async (input) => {
+      const committed = await transition(input);
+      if (
+        input.changes.some(
+          (item) =>
+            item.kind === 'set' &&
+            item.collection === 'workflow' &&
+            (item.value as { status?: string }).status === 'verified',
+        )
+      ) {
+        const directory = join(root, 'control/receipts');
+        await mkdir(directory, { recursive: true });
+        await writeFile(
+          join(directory, run.id + '-00000000-0000-0000-0000-000000000000.json'),
+          '{retained-malformed-native',
+        );
+      }
+      return committed;
+    });
+    expect(await engine.execute(run.id)).toMatchObject({
+      status: 'needs-inspection',
+      error: 'Native completion receipts are malformed or unavailable; preserve them for inspection',
+    });
+    expect((await engine.state('all')).status).toBe('failed');
+    expect((await engine.readiness(target)).missing).toContain('execution-inspection');
+  });
+  it.each(['policy', 'config', 'inventory'] as const)(
+    'rejects stale %s source revisions under project ownership before approval or device execution',
+    async (source) => {
+      const { prepared, run } = await preparedRun();
+      const latest = await loadProject(context.root, product);
+      const files = {
+        policy: latest.config.policyFile,
+        config: 'pxv.project.json',
+        inventory: latest.config.inventoryFile,
+      };
+      const next = {
+        policy: { ...latest.policy, name: 'Changed by a second operator' },
+        config: { ...latest.config, inventoryFile: 'different-inventory.json' },
+        inventory: { ...latest.inventory, devices: [{ ...device, groups: ['updated'] }] },
+      };
+      await commitProjectFile({
+        path: join(latest.root, files[source]),
+        projectId: latest.config.id,
+        controlRoot: engine.controlRoot,
+        expectedSha256: latest.revisions[source],
+        data: JSON.stringify(next[source]),
+      });
+      await expect(engine.submit(prepared.plan.id, prepared.reviewSummary, 'Alice')).rejects.toThrow(
+        'Project source changed',
+      );
+      await expect(engine.execute(run.id)).rejects.toThrow('Project source changed');
+      await expect(engine.executeFleet([run.id], 1)).rejects.toThrow('Project source changed');
+      await expect(engine.refreshReview(run.id)).rejects.toThrow('Project source changed');
+      expect(port.calls).toEqual([]);
+      expect((await store.get<RunRecord>('runs', run.id))?.status).toBe('queued');
+    },
+  );
+
+  it('invalidates cached approvals when actual executable bytes change before acquiring project ownership', async () => {
+    const codeRoot = join(root, 'isolated-code');
+    await mkdir(join(codeRoot, 'packages/core'), { recursive: true });
+    const source = join(codeRoot, 'packages/core/index.js');
+    await writeFile(source, 'export const version=1;');
+    const created = await createProject(join(root, 'isolated-project'), product, basePolicy(), codeRoot);
+    await saveInventory(created, { schemaVersion: 1, devices: [device] });
+    const project = await loadProject(created.root, product, codeRoot);
+    const isolated = new WorkflowEngine({
+      project,
+      port,
+      artifacts,
+      store,
+      controlRoot: engine.controlRoot,
+      clock: () => now,
+    });
+    const prepared = await isolated.prepare(target);
+    const run = await isolated.submit(prepared.plan.id, prepared.reviewSummary, 'Alice');
+    await writeFile(source, 'export const version=2;');
+    await expect(isolated.submit(prepared.plan.id, prepared.reviewSummary, 'Alice')).rejects.toThrow(
+      'Executable build changed',
+    );
+    await expect(isolated.execute(run.id)).rejects.toThrow('Executable build changed');
+    expect(port.calls).toEqual([]);
+  });
+  it('blocks stale-context signoff and finalization before any debugging mutation or handoff write', async () => {
+    await ready();
+    await commitProjectFile({
+      path: join(context.root, context.config.policyFile),
+      projectId: context.config.id,
+      controlRoot: engine.controlRoot,
+      expectedSha256: context.revisions.policy,
+      data: JSON.stringify({ ...context.policy, name: 'Changed after signoff prompt' }),
+    });
+    await expect(engine.attest(target, 'operator_signoff', 'Alice')).rejects.toThrow(
+      'Project source changed',
+    );
+    await expect(engine.finalize(target, 'Alice')).rejects.toThrow('Project source changed');
+    await expect(engine.readiness(target)).rejects.toThrow('Project source changed');
+    expect(port.calls).not.toContain('finalize');
+    expect(await store.get('handoff', 'all')).toBeUndefined();
+  });
+
+  it('blocks stale-context custody when inventory changed after the physical confirmation prompt', async () => {
+    await ready();
+    const record = await engine.finalize(target, 'Alice');
+    await commitProjectFile({
+      path: join(context.root, context.config.inventoryFile),
+      projectId: context.config.id,
+      controlRoot: engine.controlRoot,
+      expectedSha256: context.revisions.inventory,
+      data: JSON.stringify({ schemaVersion: 1, devices: [{ ...device, groups: ['changed-after-prompt'] }] }),
+    });
+    await expect(engine.acceptCustody('all', 'Recipient', true)).rejects.toThrow('Project source changed');
+    expect(await store.get('handoff', 'all')).toEqual(record);
+    expect((await engine.state('all')).status).toBe('shutdown-requested');
   });
 });

@@ -1,4 +1,6 @@
 import tseslint from 'typescript-eslint';
+import js from '@eslint/js';
+import globals from 'globals';
 export default tseslint.config(
   { ignores: ['**/dist/**', '**/node_modules/**', 'coverage/**'] },
   ...tseslint.configs.recommendedTypeChecked.map((config) => ({ ...config, files: ['**/*.ts'] })),
@@ -16,6 +18,15 @@ export default tseslint.config(
   },
   {
     files: ['**/*.mjs'],
-    rules: { 'no-unused-vars': 'error', 'no-unreachable': 'error', 'no-constant-binary-expression': 'error' },
+    languageOptions: { globals: globals.node },
+    rules: { ...js.configs.recommended.rules },
+  },
+  {
+    files: ['packages/*/src/**/*.ts', 'tools/**/*.mjs', 'guides/source/rebuild.mjs'],
+    rules: {
+      complexity: ['error', { max: 10, variant: 'classic' }],
+      'max-depth': ['error', 4],
+      'max-lines-per-function': ['error', { max: 80, skipBlankLines: true, skipComments: true, IIFEs: true }],
+    },
   },
 );

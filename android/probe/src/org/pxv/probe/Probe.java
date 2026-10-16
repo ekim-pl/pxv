@@ -22,57 +22,69 @@ public final class Probe extends Instrumentation {
         start();
     }
 
+    private JSONObject observation() throws Exception {
+        JSONObject result = new JSONObject();
+        result.put("schema_version", 1);
+        result.put("uid", Process.myUid());
+        result.put("request_succeeded", false);
+        result.put("connection_observed", false);
+        ConnectivityManager manager = (ConnectivityManager) getContext().getSystemService(Context.CONNECTIVITY_SERVICE);
+        NetworkCapabilities capabilities = manager.getNetworkCapabilities(manager.getActiveNetwork());
+        result.put("vpn_active", capabilities != null && capabilities.hasTransport(NetworkCapabilities.TRANSPORT_VPN));
+        return result;
+    }
+
+    private HttpsURLConnection connection() throws Exception {
+        URL url = new URL(endpoint);
+        if (!"https".equals(url.getProtocol()) || url.getUserInfo() != null || url.getQuery() != null || url.getRef() != null) {
+            throw new IllegalArgumentException("An approved HTTPS endpoint is required");
+        }
+        HttpsURLConnection result = (HttpsURLConnection) url.openConnection();
+        result.setConnectTimeout(15000);
+        result.setReadTimeout(15000);
+        result.setInstanceFollowRedirects(false);
+        result.setRequestProperty("Accept", "application/json");
+        result.setRequestProperty("User-Agent", "pxv-network-probe/1");
+        return result;
+    }
+
+    private String responseAddress(HttpsURLConnection connection) throws Exception {
+        if (connection.getResponseCode() != 200) throw new IllegalStateException("Unexpected endpoint response");
+        ByteArrayOutputStream response = new ByteArrayOutputStream();
+        try (InputStream input = connection.getInputStream()) {
+            byte[] buffer = new byte[1024];
+            long deadline = android.os.SystemClock.elapsedRealtime() + 30000;
+            int count;
+            while ((count = input.read(buffer)) != -1) {
+                if (response.size() + count > 65536 || android.os.SystemClock.elapsedRealtime() >= deadline) {
+                    throw new IllegalStateException("Probe response exceeds its bounds");
+                }
+                response.write(buffer, 0, count);
+            }
+        }
+        String address = new JSONObject(response.toString("UTF-8")).getString("ip");
+        if (address.length() > 64) throw new IllegalStateException("Invalid address size");
+        return address;
+    }
+
     @Override public void onStart() {
-        JSONObject observation = new JSONObject();
+        JSONObject result = new JSONObject();
         HttpsURLConnection connection = null;
         try {
-            observation.put("schema_version", 1);
-            observation.put("uid", Process.myUid());
-            observation.put("request_succeeded", false);
-            observation.put("connection_observed", false);
-            ConnectivityManager manager = (ConnectivityManager) getContext().getSystemService(Context.CONNECTIVITY_SERVICE);
-            NetworkCapabilities capabilities = manager.getNetworkCapabilities(manager.getActiveNetwork());
-            observation.put("vpn_active", capabilities != null && capabilities.hasTransport(NetworkCapabilities.TRANSPORT_VPN));
-            URL url = new URL(endpoint);
-            if (!"https".equals(url.getProtocol()) || url.getUserInfo() != null || url.getQuery() != null || url.getRef() != null) {
-                throw new IllegalArgumentException("An approved HTTPS endpoint is required");
-            }
-            connection = (HttpsURLConnection) url.openConnection();
-            connection.setConnectTimeout(15000);
-            connection.setReadTimeout(15000);
-            connection.setInstanceFollowRedirects(false);
-            connection.setRequestProperty("Accept", "application/json");
-            connection.setRequestProperty("User-Agent", "pxv-network-probe/1");
+            result = observation();
+            connection = connection();
             connection.connect();
-            observation.put("connection_observed", true);
-            int status = connection.getResponseCode();
-            if (status != 200) throw new IllegalStateException("Unexpected endpoint response");
-            ByteArrayOutputStream response = new ByteArrayOutputStream();
-            try (InputStream input = connection.getInputStream()) {
-                byte[] buffer = new byte[1024];
-                long deadline = android.os.SystemClock.elapsedRealtime() + 30000;
-                int count;
-                while ((count = input.read(buffer)) != -1) {
-                    if (response.size() + count > 65536 || android.os.SystemClock.elapsedRealtime() >= deadline) {
-                        throw new IllegalStateException("Probe response exceeds its bounds");
-                    }
-                    response.write(buffer, 0, count);
-                }
-            }
-            JSONObject body = new JSONObject(response.toString("UTF-8"));
-            String address = body.getString("ip");
-            if (address.length() > 64) throw new IllegalStateException("Invalid address size");
-            observation.put("egress_ip", address);
-            observation.put("request_succeeded", true);
+            result.put("connection_observed", true);
+            result.put("egress_ip", responseAddress(connection));
+            result.put("request_succeeded", true);
         } catch (Exception failure) {
-            // Return the exception type rather than URLs, accounts, or response data.
-            try { observation.put("error_type", failure.getClass().getSimpleName()); }
+            try { result.put("error_type", failure.getClass().getSimpleName()); }
             catch (Exception ignored) { }
         } finally {
             if (connection != null) connection.disconnect();
-            Bundle result = new Bundle();
-            result.putString("pxv_json", observation.toString());
-            finish(0, result);
+            Bundle output = new Bundle();
+            output.putString("pxv_json", result.toString());
+            finish(0, output);
         }
     }
 }

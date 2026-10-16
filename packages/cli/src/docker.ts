@@ -1,9 +1,9 @@
+import type { CommandRunner as Runner } from '@pxv/adapters';
+import { CommandRunner, hostControlRoot } from '@pxv/runtime';
 import { createHash } from 'node:crypto';
 import { lstat, mkdir, realpath } from 'node:fs/promises';
 import { isAbsolute, join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
-import { CommandRunner, hostControlRoot } from '@pxv/runtime';
-import type { CommandRunner as Runner } from '@pxv/adapters';
 
 export interface DockerEnvironment {
   controlRoot: string;
@@ -95,22 +95,11 @@ async function inspectService(runner: Runner, state: DockerEnvironment): Promise
   }
   if (!value || typeof value !== 'object') throw new Error('Docker ADB service inspection is malformed');
   const container = value as Partial<Container>;
-  if (
-    typeof container.Image !== 'string' ||
-    typeof container.State?.Running !== 'boolean' ||
-    container.Config?.User !== userIdentity() ||
-    container.Config.Labels?.[CONTROL_LABEL] !== identity.key ||
-    container.Config.Labels[PORT_LABEL] !== '5038' ||
-    container.HostConfig?.NetworkMode !== 'host' ||
-    !Array.isArray(container.Mounts) ||
-    !container.Mounts.some(
-      (mount) => mount.Destination === '/adb-home' && mount.Source === state.adbHome && mount.RW === true,
-    )
-  )
+  if (!validContainer(container) || !ownedContainer(container, state, identity.key))
     throw new Error(
       'Existing Docker ADB container does not match this operator control directory; inspect it explicitly',
     );
-  return container as Container;
+  return container;
 }
 async function waitForService(runner: Runner, name: string): Promise<void> {
   const deadline = Date.now() + 10_000;
@@ -217,6 +206,37 @@ export async function runInDocker(
     if (service.Image !== resolved)
       throw new Error('Direct USB sidecar and worker must use the same reviewed immutable image');
   }
+  const filtered = workerFlags(args);
+  const options = workerOptions(state, project, mode);
+  const result = await runner.run(
+    ['docker', ...options, resolved, ...filtered, '--project-root', '/project'],
+    { timeoutMs: 86_400_000, check: false },
+  );
+  process.stdout.write(result.stdout);
+  process.stderr.write(result.stderr);
+  return result.code;
+}
+
+function validContainer(value: Partial<Container>): value is Container {
+  return (
+    typeof value.Image === 'string' &&
+    typeof value.State?.Running === 'boolean' &&
+    Array.isArray(value.Mounts)
+  );
+}
+function ownedContainer(value: Container, state: DockerEnvironment, key: string): boolean {
+  return (
+    value.Config?.User === userIdentity() &&
+    value.Config.Labels?.[CONTROL_LABEL] === key &&
+    value.Config.Labels[PORT_LABEL] === '5038' &&
+    value.HostConfig?.NetworkMode === 'host' &&
+    value.Mounts.some(
+      (mount) => mount.Destination === '/adb-home' && mount.Source === state.adbHome && mount.RW === true,
+    )
+  );
+}
+
+function workerFlags(args: string[]): string[] {
   const filtered: string[] = [];
   for (let index = 0; index < args.length; index++) {
     const argument = args[index];
@@ -228,6 +248,11 @@ export async function runInDocker(
     if (/^--(?:execution|image|docker-mode|project-root|resource-root)=/u.test(argument)) continue;
     filtered.push(argument);
   }
+
+  return filtered;
+}
+
+function workerOptions(state: DockerEnvironment, project: string, mode: 'direct' | 'host-adb'): string[] {
   const options = [
     'run',
     '--rm',
@@ -266,11 +291,6 @@ export async function runInDocker(
       '--device-cgroup-rule',
       'c 189:* rmw',
     );
-  const result = await runner.run(
-    ['docker', ...options, resolved, ...filtered, '--project-root', '/project'],
-    { timeoutMs: 86_400_000, check: false },
-  );
-  process.stdout.write(result.stdout);
-  process.stderr.write(result.stderr);
-  return result.code;
+
+  return options;
 }

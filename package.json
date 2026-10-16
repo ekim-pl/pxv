@@ -12,24 +12,37 @@
   "scripts": {
     "build": "tsc -b",
     "build:native": "node tools/build-native.mjs",
-    "check": "pnpm build && eslint packages tests tools && node tools/check-boundaries.mjs && prettier --check 'packages/**/*.ts' 'tests/**/*.ts' 'tools/*.mjs' && pnpm docs:check",
+    "check": "pnpm typecheck && eslint packages tests tools guides/source/rebuild.mjs eslint.config.mjs vitest.config.ts && node tools/check-boundaries.mjs && pnpm deadcode && node tools/check-quality.mjs && prettier --check \"packages/**/*.ts\" \"tests/**/*.ts\" \"tools/**/*.mjs\" \"guides/source/rebuild.mjs\" \"*.mjs\" && pnpm docs:check",
     "test": "vitest run",
-    "test:coverage": "vitest run --coverage",
+    "test:coverage": "node tools/run-coverage.mjs",
     "test:native": "node tools/build-native.mjs --test",
     "build:preview": "pnpm build && node packages/release/dist/cli.js",
     "pxv": "node packages/cli/dist/main.js",
     "docs:build": "pnpm build && node packages/release/dist/docs.js",
-    "docs:check": "node tools/check-docs.mjs"
+    "docs:check": "node tools/check-docs.mjs",
+    "typecheck": "tsc -b && tsc -p tsconfig.eslint.json --noEmit --incremental false && tsc -p tsconfig.tools.json --noEmit --incremental false",
+    "deadcode": "node tools/check-deadcode.mjs",
+    "quality:setup": "node tools/bootstrap-quality.mjs",
+    "quality": "node tools/quality.mjs",
+    "check:helpers": "node tools/check-helpers.mjs"
   },
   "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@modelcontextprotocol/sdk": "1.32.1",
+    "@types/istanbul-lib-coverage": "2.0.6",
     "@types/node": "24.19.2",
+    "@typescript/native": "npm:typescript@7.0.2",
     "@vitest/coverage-v8": "5.0.5",
+    "esbuild": "0.28.2",
     "eslint": "10.12.0",
+    "globals": "17.5.0",
+    "istanbul-lib-coverage": "3.2.2",
+    "knip": "6.41.0",
+    "marked": "18.1.1",
     "prettier": "3.9.10",
     "typescript": "npm:@typescript/typescript6@6.0.2",
     "typescript-eslint": "8.71.2",
-    "vitest": "5.0.5",
-    "@typescript/native": "npm:typescript@7.0.2",
-    "@modelcontextprotocol/sdk": "1.32.1"
+    "v8-to-istanbul": "9.3.0",
+    "vitest": "5.0.5"
   }
 }

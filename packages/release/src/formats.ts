@@ -1,14 +1,16 @@
+import { dockerEntrypoint } from './launchers.js';
 import { createHash, randomUUID } from 'node:crypto';
 import { chmod, copyFile, lstat, mkdir, readFile, readdir, symlink, writeFile } from 'node:fs/promises';
 import { basename, dirname, join, resolve } from 'node:path';
-import { parseDocument } from '@pxv/contracts';
-import { CommandRunner, hashFile, readBounded } from '@pxv/runtime';
+import { canonicalJson, parseDocument } from '@pxv/contracts';
+import { CommandRunner, hashFile, readBounded, type Runtime } from '@pxv/runtime';
 import {
   copyCandidate,
   ANDROID_ARCHIVES,
   BUILDKIT_IMAGE,
   DEBIAN_SNAPSHOT,
   DOCKER_BASE,
+  NODE_VERSION,
   verifyCandidate,
   type Candidate,
   type CandidateManifest,
@@ -23,6 +25,7 @@ export interface DistributionArtifact {
   image?: string;
 }
 export interface BuildFormatsOptions {
+  runtime?: Runtime;
   formats: DistributionFormat[];
   outputDirectory?: string;
   signingKey?: string;
@@ -42,6 +45,7 @@ function npmLauncher(manifest: CandidateManifest): string {
   return `#!/usr/bin/env node\nimport{dirname,join}from'node:path';import{fileURLToPath}from'node:url';import{homedir}from'node:os';const root=dirname(fileURLToPath(import.meta.url));process.env.PXV_RESOURCE_ROOT=root;process.env.PXV_SUPERVISOR=join(root,'native','pxv-supervisor');${preview}\nawait import('./lib/main.js');\n`;
 }
 
+/** @internal Generated container contract, checked independently before Docker execution. */
 export function dockerfile(manifest: CandidateManifest): string {
   return [
     `FROM ${DOCKER_BASE}`,
@@ -62,13 +66,9 @@ export function dockerfile(manifest: CandidateManifest): string {
   ].join('\n');
 }
 
-export function dockerEntrypoint(): string {
-  return `#!/bin/sh\nset -eu\numask 077\npxv_uid=$(id -u)\nif ! getent passwd "$pxv_uid" >/dev/null; then\n  pxv_nss=$(mktemp -d /tmp/pxv-nss.XXXXXX)\n  pxv_gid=$(id -g)\n  printf 'pxv:x:%s:%s::%s:/bin/sh\\n' "$pxv_uid" "$pxv_gid" "$HOME" > "$pxv_nss/passwd"\n  printf 'pxv:x:%s:\\n' "$pxv_gid" > "$pxv_nss/group"\n  export NSS_WRAPPER_PASSWD="$pxv_nss/passwd" NSS_WRAPPER_GROUP="$pxv_nss/group" LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libnss_wrapper.so\nfi\nexec /opt/pxv/bin/node /opt/pxv/lib/main.js "$@"\n`;
-}
-
-async function portable(candidate: Candidate, output: string): Promise<string> {
+async function portable(candidate: Candidate, output: string, runner: Runtime): Promise<string> {
   const file = join(output, `${candidate.manifest.id}-linux-x64.tar.gz`);
-  await new CommandRunner().run(
+  await runner.run(
     [
       'tar',
       '--sort=name',
@@ -87,7 +87,7 @@ async function portable(candidate: Candidate, output: string): Promise<string> {
   return file;
 }
 
-async function npm(candidate: Candidate, output: string): Promise<string> {
+async function npm(candidate: Candidate, output: string, runner: Runtime): Promise<string> {
   const staging = join(output, 'npm-stage', 'package');
   await mkdir(staging, { recursive: true });
   await copyCandidate(candidate.directory, staging, true);
@@ -102,7 +102,7 @@ async function npm(candidate: Candidate, output: string): Promise<string> {
         license: 'MIT',
         os: ['linux'],
         cpu: ['x64'],
-        engines: { node: '24.22.0' },
+        engines: { node: NODE_VERSION },
         bin: { [candidate.manifest.command]: 'npm-bin.mjs' },
         dependencies: { '@pxv/runtime': '0.1.0', '@pxv/extensions': '0.1.0' },
         bundledDependencies: ['@pxv/runtime', '@pxv/extensions'],
@@ -113,7 +113,7 @@ async function npm(candidate: Candidate, output: string): Promise<string> {
   );
   await uniqueWrite(join(staging, 'npm-bin.mjs'), npmLauncher(candidate.manifest), 0o755);
   const file = join(output, `${candidate.manifest.id}.tgz`);
-  await new CommandRunner().run(
+  await runner.run(
     [
       'tar',
       '--sort=name',
@@ -132,7 +132,7 @@ async function npm(candidate: Candidate, output: string): Promise<string> {
   return file;
 }
 
-async function deb(candidate: Candidate, output: string): Promise<string> {
+async function deb(candidate: Candidate, output: string, runner: Runtime): Promise<string> {
   const manifest = candidate.manifest;
   const staging = join(output, 'deb-stage');
   await copyCandidate(candidate.directory, join(staging, 'opt', manifest.debName));
@@ -147,7 +147,7 @@ async function deb(candidate: Candidate, output: string): Promise<string> {
     `Package: ${manifest.debName}\nVersion: ${version}\nSection: utils\nPriority: optional\nArchitecture: amd64\nMaintainer: ${manifest.product.support.name} <${manifest.product.support.email}>\nDepends: libc6 (>= 2.28), libstdc++6, ca-certificates\nRecommends: adb, fastboot, apksigner, aapt, openjdk-17-jre-headless, openssh-client\nDescription: ${manifest.product.name.replace(/[\r\n]/gu, ' ')} local Pixel fleet provisioning\n Verified policy planning, supervised execution and durable recovery.\n`,
   );
   const file = join(output, `${manifest.debName}_${version}_amd64.deb`);
-  await new CommandRunner().run(['dpkg-deb', '--build', '--root-owner-group', staging, file], {
+  await runner.run(['dpkg-deb', '--build', '--root-owner-group', staging, file], {
     timeoutMs: 120_000,
   });
   return file;
@@ -158,6 +158,7 @@ async function oci(
   output: string,
   docker: string,
   loadDockerImage: boolean,
+  runner: Runtime,
 ): Promise<string> {
   const context = join(output, 'oci-context');
   await copyCandidate(candidate.directory, join(context, 'candidate'));
@@ -165,7 +166,6 @@ async function oci(
   const entrypoint = dockerEntrypoint();
   await uniqueWrite(join(context, 'entrypoint.sh'), entrypoint, 0o755);
   const file = join(output, `${candidate.manifest.id}.oci.tar`);
-  const runner = new CommandRunner();
   const builder = `pxv-build-${randomUUID().slice(0, 12)}`;
   await runner.run(
     [
@@ -224,7 +224,12 @@ async function oci(
   return file;
 }
 
-async function sea(candidate: Candidate, output: string, postject: string | undefined): Promise<string> {
+async function sea(
+  candidate: Candidate,
+  output: string,
+  postject: string | undefined,
+  runner: Runtime,
+): Promise<string> {
   if (!postject)
     throw new Error(
       'Experimental SEA requires an explicit postject executable; portable remains the supported baseline',
@@ -250,7 +255,6 @@ async function sea(candidate: Candidate, output: string, postject: string | unde
   );
   const node = join(candidate.directory, 'bin', 'node');
   const file = join(output, `${candidate.manifest.id}-experimental-sea`);
-  const runner = new CommandRunner();
   await runner.run([node, '--experimental-sea-config', config]);
   await copyFile(node, file);
   await chmod(file, 0o755);
@@ -265,51 +269,56 @@ async function sea(candidate: Candidate, output: string, postject: string | unde
   return file;
 }
 
-export async function buildFormats(
+async function buildFormat(
+  format: DistributionFormat,
+  candidate: Candidate,
+  output: string,
+  options: BuildFormatsOptions,
+  runner: Runtime,
+): Promise<string> {
+  switch (format) {
+    case 'portable':
+      return await portable(candidate, output, runner);
+    case 'npm':
+      return await npm(candidate, output, runner);
+    case 'deb':
+      return await deb(candidate, output, runner);
+    case 'oci':
+      return await oci(
+        candidate,
+        output,
+        options.docker ?? 'docker',
+        options.loadDockerImage ?? true,
+        runner,
+      );
+    case 'sea':
+      return await sea(candidate, output, options.postject, runner);
+    default:
+      throw new Error('Unsupported distribution format');
+  }
+}
+async function artifactEvidence(
+  format: DistributionFormat,
+  path: string,
   candidate: Candidate,
   options: BuildFormatsOptions,
-): Promise<DistributionArtifact[]> {
-  await verifyCandidate(candidate.directory);
-  if (!candidate.manifest.preview && !options.signingKey)
-    throw new Error('Stable release artifacts require an explicit signing key');
-  if (!options.formats.length || new Set(options.formats).size !== options.formats.length)
-    throw new Error('Select unique distribution formats');
-  const output = resolve(options.outputDirectory ?? join(dirname(candidate.directory), 'artifacts'));
-  await mkdir(output, { recursive: true });
-  if ((await readdir(output)).length)
-    throw new Error('Artifact output must be empty; existing results are retained');
-  const artifacts: DistributionArtifact[] = [];
-  for (const format of options.formats) {
-    let path: string;
-    switch (format) {
-      case 'portable':
-        path = await portable(candidate, output);
-        break;
-      case 'npm':
-        path = await npm(candidate, output);
-        break;
-      case 'deb':
-        path = await deb(candidate, output);
-        break;
-      case 'oci':
-        path = await oci(candidate, output, options.docker ?? 'docker', options.loadDockerImage ?? true);
-        break;
-      case 'sea':
-        path = await sea(candidate, output, options.postject);
-        break;
-      default:
-        throw new Error('Unsupported distribution format');
-    }
-    artifacts.push({
-      format,
-      path,
-      sha256: await hashFile(path),
-      size: (await lstat(path)).size,
-      ...(format === 'oci' && options.loadDockerImage !== false
-        ? { image: `${candidate.manifest.product.image}:${candidate.manifest.version}` }
-        : {}),
-    });
-  }
+): Promise<DistributionArtifact> {
+  return {
+    format,
+    path,
+    sha256: await hashFile(path),
+    size: (await lstat(path)).size,
+    ...(format === 'oci' && options.loadDockerImage !== false
+      ? { image: `${candidate.manifest.product.image}:${candidate.manifest.version}` }
+      : {}),
+  };
+}
+async function writeProvenance(
+  candidate: Candidate,
+  output: string,
+  artifacts: DistributionArtifact[],
+  signed: boolean,
+): Promise<string> {
   const provenancePath = join(output, 'provenance.json');
   await uniqueWrite(
     provenancePath,
@@ -326,11 +335,39 @@ export async function buildFormats(
           sha256,
           size,
         })),
-        signed: options.signingKey !== undefined,
+        signed,
       },
       null,
       2,
     ),
+  );
+
+  return provenancePath;
+}
+export async function buildFormats(
+  candidate: Candidate,
+  options: BuildFormatsOptions,
+): Promise<DistributionArtifact[]> {
+  const runner = options.runtime ?? new CommandRunner();
+  candidate = { ...candidate, manifest: await verifiedBuildManifest(candidate) };
+  if (!candidate.manifest.preview && !options.signingKey)
+    throw new Error('Stable release artifacts require an explicit signing key');
+  if (!options.formats.length || new Set(options.formats).size !== options.formats.length)
+    throw new Error('Select unique distribution formats');
+  const output = resolve(options.outputDirectory ?? join(dirname(candidate.directory), 'artifacts'));
+  await mkdir(output, { recursive: true });
+  if ((await readdir(output)).length)
+    throw new Error('Artifact output must be empty; existing results are retained');
+  const artifacts: DistributionArtifact[] = [];
+  for (const format of options.formats) {
+    const path = await buildFormat(format, candidate, output, options, runner);
+    artifacts.push(await artifactEvidence(format, path, candidate, options));
+  }
+  const provenancePath = await writeProvenance(
+    candidate,
+    output,
+    artifacts,
+    options.signingKey !== undefined,
   );
   // Provenance is part of the same signed byte set as every installable artifact.
   const checksums =
@@ -341,7 +378,7 @@ export async function buildFormats(
   const checksumPath = join(output, 'SHA256SUMS');
   await uniqueWrite(checksumPath, checksums);
   if (options.signingKey) {
-    await new CommandRunner().run([
+    await runner.run([
       'ssh-keygen',
       '-Y',
       'sign',
@@ -378,41 +415,7 @@ function provenanceRecord(value: unknown, keys: string[]): Record<string, unknow
 function matches(value: unknown, pattern: RegExp): boolean {
   return typeof value === 'string' && pattern.test(value);
 }
-function validateProvenance(value: unknown): ReleaseProvenance {
-  const record = provenanceRecord(value, [
-    'schemaVersion',
-    'candidateId',
-    'sourceDigest',
-    'toolchain',
-    'candidateManifestSha256',
-    'artifacts',
-    'signed',
-  ]);
-  if (
-    record.schemaVersion !== 1 ||
-    !matches(record.candidateId, RELEASE_FILE) ||
-    !matches(record.sourceDigest, RELEASE_HASH) ||
-    !matches(record.candidateManifestSha256, RELEASE_HASH) ||
-    typeof record.signed !== 'boolean'
-  )
-    throw new Error('Invalid release provenance identity');
-  const toolchain = provenanceRecord(record.toolchain, [
-    'node',
-    'nodeSha256',
-    'supervisorSha256',
-    'typescript',
-    'pnpm',
-    'rust',
-    'nativeTarget',
-    'nativeLinkage',
-    'rustStdArchiveSha256',
-    'muslVersion',
-    'muslLibcSha256',
-    'dockerBase',
-    'buildkitImage',
-    'debianSnapshot',
-    'androidArchives',
-  ]);
+function toolchainVersions(toolchain: Record<string, unknown>): void {
   if (
     !matches(toolchain.node, /^\d+\.\d+\.\d+$/u) ||
     !matches(toolchain.typescript, /^(?:npm:(?:@[a-z0-9._-]+\/)?[a-z0-9._-]+@)?\d+\.\d+\.\d+$/u)
@@ -427,11 +430,15 @@ function validateProvenance(value: unknown): ReleaseProvenance {
     toolchain.muslVersion !== '1.2.5'
   )
     throw new Error('Invalid release provenance native baseline');
+}
+function toolchainDigests(toolchain: Record<string, unknown>): void {
   for (const key of ['nodeSha256', 'supervisorSha256', 'rustStdArchiveSha256', 'muslLibcSha256'])
     if (!matches(toolchain[key], RELEASE_HASH)) throw new Error('Invalid release provenance toolchain');
   for (const key of ['dockerBase', 'buildkitImage'])
     if (!matches(toolchain[key], /^[a-zA-Z0-9/._:-]+@sha256:[a-f0-9]{64}$/u))
       throw new Error('Invalid release provenance toolchain');
+}
+function toolchainArchives(toolchain: Record<string, unknown>): void {
   if (
     !matches(toolchain.debianSnapshot, /^\d{8}T\d{6}Z$/u) ||
     !Array.isArray(toolchain.androidArchives) ||
@@ -450,32 +457,107 @@ function validateProvenance(value: unknown): ReleaseProvenance {
       throw new Error('Invalid release provenance Android archive');
     archives.add(String(archive.filename));
   }
+}
+function validateToolchain(value: unknown): void {
+  const toolchain = provenanceRecord(value, [
+    'node',
+    'nodeSha256',
+    'supervisorSha256',
+    'typescript',
+    'pnpm',
+    'rust',
+    'nativeTarget',
+    'nativeLinkage',
+    'rustStdArchiveSha256',
+    'muslVersion',
+    'muslLibcSha256',
+    'dockerBase',
+    'buildkitImage',
+    'debianSnapshot',
+    'androidArchives',
+  ]);
+
+  toolchainVersions(toolchain);
+  toolchainDigests(toolchain);
+  toolchainArchives(toolchain);
+}
+function artifactContents(artifact: Record<string, unknown>): void {
+  if (
+    !matches(artifact.sha256, RELEASE_HASH) ||
+    typeof artifact.size !== 'number' ||
+    !Number.isSafeInteger(artifact.size) ||
+    artifact.size <= 0
+  )
+    throw new Error('Invalid release provenance artifact');
+}
+function validateArtifactRecord(value: unknown): Record<string, unknown> {
+  const artifact = provenanceRecord(value, ['format', 'file', 'sha256', 'size']);
+  if (
+    typeof artifact.format !== 'string' ||
+    !['portable', 'deb', 'npm', 'oci', 'sea'].includes(artifact.format) ||
+    !matches(artifact.file, RELEASE_FILE) ||
+    artifact.file === 'provenance.json' ||
+    artifact.file === 'SHA256SUMS'
+  )
+    throw new Error('Invalid release provenance artifact');
+
+  artifactContents(artifact);
+  return artifact;
+}
+function validateArtifactSet(record: Record<string, unknown>): void {
   if (!Array.isArray(record.artifacts) || !record.artifacts.length || record.artifacts.length > 5)
     throw new Error('Invalid release provenance artifacts');
-  const files = new Set<string>();
-  const formats = new Set<string>();
-  for (const value of record.artifacts) {
-    const artifact = provenanceRecord(value, ['format', 'file', 'sha256', 'size']);
-    if (
-      typeof artifact.format !== 'string' ||
-      !['portable', 'deb', 'npm', 'oci', 'sea'].includes(artifact.format) ||
-      !matches(artifact.file, RELEASE_FILE) ||
-      artifact.file === 'provenance.json' ||
-      artifact.file === 'SHA256SUMS' ||
-      !matches(artifact.sha256, RELEASE_HASH) ||
-      typeof artifact.size !== 'number' ||
-      !Number.isSafeInteger(artifact.size) ||
-      artifact.size <= 0 ||
-      files.has(String(artifact.file)) ||
-      formats.has(artifact.format)
-    )
+
+  const files = new Set<string>(),
+    formats = new Set<string>();
+  for (const value of record.artifacts as unknown[]) {
+    const artifact = validateArtifactRecord(value);
+    if (files.has(String(artifact.file)) || formats.has(String(artifact.format)))
       throw new Error('Invalid release provenance artifact');
     files.add(String(artifact.file));
-    formats.add(artifact.format);
+    formats.add(String(artifact.format));
   }
+}
+function validateProvenance(value: unknown): ReleaseProvenance {
+  const record = provenanceRecord(value, [
+    'schemaVersion',
+    'candidateId',
+    'sourceDigest',
+    'toolchain',
+    'candidateManifestSha256',
+    'artifacts',
+    'signed',
+  ]);
+  if (
+    record.schemaVersion !== 1 ||
+    !matches(record.candidateId, RELEASE_FILE) ||
+    !matches(record.sourceDigest, RELEASE_HASH) ||
+    !matches(record.candidateManifestSha256, RELEASE_HASH) ||
+    typeof record.signed !== 'boolean'
+  )
+    throw new Error('Invalid release provenance identity');
+
+  validateToolchain(record.toolchain);
+  validateArtifactSet(record);
   return record as unknown as ReleaseProvenance;
 }
 
+function checksumRecord(line: string, checksums: Map<string, string>): [string, string, string] {
+  const match = /^([a-f0-9]{64})  ([^/\\]+)$/u.exec(line);
+  if (
+    !match?.[1] ||
+    !match[2] ||
+    !RELEASE_FILE.test(match[2]) ||
+    checksums.has(match[2]) ||
+    match[2] === 'SHA256SUMS' ||
+    match[2] === 'SHA256SUMS.sig'
+  )
+    throw new Error('Invalid release checksum record');
+
+  return [match[0], match[1], match[2]];
+}
+
+/** @internal Shared release verification used by promotion and independent artifact acceptance. */
 export async function verifyArtifacts(directory: string): Promise<void> {
   const lines = (await readBounded(join(directory, 'SHA256SUMS'), 1024 * 1024))
     .toString('utf8')
@@ -483,16 +565,7 @@ export async function verifyArtifacts(directory: string): Promise<void> {
     .split('\n');
   const checksums = new Map<string, string>();
   for (const line of lines) {
-    const match = /^([a-f0-9]{64})  ([^/\\]+)$/u.exec(line);
-    if (
-      !match?.[1] ||
-      !match[2] ||
-      !RELEASE_FILE.test(match[2]) ||
-      checksums.has(match[2]) ||
-      match[2] === 'SHA256SUMS' ||
-      match[2] === 'SHA256SUMS.sig'
-    )
-      throw new Error('Invalid release checksum record');
+    const match = checksumRecord(line, checksums);
     checksums.set(match[2], match[1]);
     if ((await hashFile(join(directory, match[2]))) !== match[1])
       throw new Error('Release artifact checksum mismatch');
@@ -514,6 +587,7 @@ export async function verifyArtifacts(directory: string): Promise<void> {
 }
 
 export interface PromotionOptions {
+  runtime?: Runtime;
   artifactDirectory: string;
   registry: string;
   packageFile: string;
@@ -524,15 +598,8 @@ export interface PromotionOptions {
 /** Publication is a separate explicit command and accepts only verified signed
  * artifacts. Authentication remains in npm's external credential configuration. */
 export async function promoteNpm(options: PromotionOptions): Promise<void> {
-  const registry = new URL(options.registry);
-  if (
-    registry.protocol !== 'https:' ||
-    registry.username ||
-    registry.password ||
-    registry.search ||
-    registry.hash
-  )
-    throw new Error('Promotion registry must be credential-free HTTPS');
+  const runner = options.runtime ?? new CommandRunner();
+  const registry = promotionRegistry(options.registry);
   const directory = resolve(options.artifactDirectory);
   await verifyArtifacts(directory);
   const packageFile = resolve(options.packageFile);
@@ -544,7 +611,6 @@ export async function promoteNpm(options: PromotionOptions): Promise<void> {
     .digest('hex');
   if (!checksums.toString('utf8').includes(`${expected}  ${basename(packageFile)}\n`))
     throw new Error('Package is absent from signed release checksums');
-  const runner = new CommandRunner();
   await runner.run(
     [
       'ssh-keygen',
@@ -565,4 +631,24 @@ export async function promoteNpm(options: PromotionOptions): Promise<void> {
     await runner.run(['npm', 'publish', packageFile, '--registry', registry.href, '--ignore-scripts'], {
       timeoutMs: 120_000,
     });
+}
+
+function promotionRegistry(value: string): URL {
+  const registry = new URL(value);
+  if (
+    registry.protocol !== 'https:' ||
+    registry.username ||
+    registry.password ||
+    registry.search ||
+    registry.hash
+  )
+    throw new Error('Promotion registry must be credential-free HTTPS');
+  return registry;
+}
+
+async function verifiedBuildManifest(candidate: Candidate): Promise<CandidateManifest> {
+  const verified = await verifyCandidate(candidate.directory);
+  if (canonicalJson(verified) !== canonicalJson(candidate.manifest))
+    throw new Error('Candidate metadata differs from the frozen manifest');
+  return verified;
 }

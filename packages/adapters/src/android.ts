@@ -1,3 +1,4 @@
+import { integer, parseUsers, parseNamedUsers, parseBackupObservation } from './android-observation.js';
 import type {
   AndroidUserIdentity,
   DeviceObservation,
@@ -12,7 +13,7 @@ import type {
   SharedApkEffect,
   ReviewedApkEffect,
 } from '@pxv/contracts';
-import { canonicalJson } from '@pxv/contracts';
+import { canonicalJson, sameAndroidUser } from '@pxv/contracts';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -55,14 +56,7 @@ export interface CleanupOptions extends OperationOptions {
 }
 const HELPERS = new Set(['org.pxv.probe', 'org.pxv.setup', 'org.pxv.e2e.fixture']);
 const signalOptions = (signal?: AbortSignal): CommandOptions => (signal ? { signal } : {});
-function integer(value: string, label: string): number {
-  const parsed = Number(value);
-  if (!/^\d+$/.test(value) || !Number.isSafeInteger(parsed)) throw new AdapterError(`Invalid ${label}`);
-  return parsed;
-}
-function sameUser(a: AndroidUserIdentity, b: AndroidUserIdentity): boolean {
-  return a.userId === b.userId && a.serialNo === b.serialNo && a.name === b.name;
-}
+
 function settingKey(value: string): string {
   if (!/^[A-Za-z][A-Za-z0-9_.:-]{0,127}$/.test(value)) throw new AdapterError('Invalid Android setting key');
   return value;
@@ -77,67 +71,7 @@ function assertUser(user: AndroidUserIdentity): void {
   )
     throw new AdapterError('Invalid stable Android user identity');
 }
-/** Parses verbose Android users only. A name/ID without serialNo is not an identity. */
-export function parseUsers(output: string): AndroidUserIdentity[] {
-  const users: AndroidUserIdentity[] = [];
-  for (const line of output.split('\n')) {
-    if (!line.includes('UserInfo{')) continue;
-    const match = /UserInfo\{(\d+):([^:}]+):[a-fA-F0-9]+\}\s+serialNo=(\d+)\b/.exec(line);
-    if (!match?.[1] || !match[2] || !match[3])
-      throw new AdapterError('Android user serial identity cannot be inspected');
-    users.push({
-      userId: integer(match[1], 'user ID'),
-      name: match[2],
-      serialNo: integer(match[3], 'user serial'),
-    });
-  }
-  if (
-    !users.some((user) => user.userId === 0) ||
-    new Set(users.map((user) => user.userId)).size !== users.length ||
-    new Set(users.map((user) => user.serialNo)).size !== users.length
-  )
-    throw new AdapterError('Android users are missing or ambiguous');
-  return users;
-}
-/** GrapheneOS exposes names through cmd user, while dumpsys redacts those names. */
-export function parseNamedUsers(output: string): { userId: number; name: string }[] {
-  const lines = output
-    .split('\n')
-    .map((line) => line.trim())
-    .filter(Boolean);
-  const header = /^(\d+) users?:$/.exec(lines[0] ?? '');
-  if (!header?.[1]) throw new AdapterError('Android named user listing is malformed');
-  const users = lines.slice(1).map((line) => {
-    const row = /^\d+:\s+id=(\d+),\s+name=(.+?),\s+type=[A-Za-z0-9_.]+(?:,.*)?$/.exec(line);
-    if (!row?.[1] || !row[2] || ['null', '(null)', 'undefined'].includes(row[2]))
-      throw new AdapterError('Android user names could not be inspected');
-    return { userId: integer(row[1], 'user ID'), name: row[2] };
-  });
-  if (
-    users.length !== integer(header[1], 'user count') ||
-    !users.some((user) => user.userId === 0) ||
-    new Set(users.map((user) => user.userId)).size !== users.length
-  )
-    throw new AdapterError('Android named user listing is missing or ambiguous');
-  return users;
-}
-export function parseBackupObservation(
-  enabledOutput: string,
-  transportsOutput: string,
-): { enabled: boolean; transportPackage: string | null } {
-  const state = /^Backup Manager currently (enabled|disabled)\s*$/.exec(enabledOutput.trim());
-  if (!state?.[1]) throw new AdapterError('Android backup enablement could not be inspected');
-  const active: string[] = [];
-  for (const raw of transportsOutput.trim().split('\n')) {
-    const line = raw.trim();
-    if (line === 'No transports available.') continue;
-    const row = /^(\*\s*)?([A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z][A-Za-z0-9_]*)+)\/[A-Za-z0-9_.$]+$/.exec(line);
-    if (!row?.[2]) throw new AdapterError('Android backup transports could not be inspected');
-    if (row[1]) active.push(row[2]);
-  }
-  if (active.length > 1) throw new AdapterError('Android backup selected transport is ambiguous');
-  return { enabled: state[1] === 'enabled', transportPackage: active[0] ?? null };
-}
+
 export class AndroidAdapter {
   readonly runner: CommandRunner;
   readonly adb: string;
@@ -172,19 +106,7 @@ export class AndroidAdapter {
     );
   }
   async guardTarget(target: SelectedTarget, signal?: AbortSignal): Promise<void> {
-    const { device, transport } = target;
-    if (
-      !device.transports.some((item) => item.kind === transport.kind && item.serial === transport.serial) ||
-      !/^[A-Za-z0-9._:[\]%-]+$/.test(transport.serial)
-    )
-      throw new AdapterError('Transport is not enrolled for the selected device', 'IDENTITY_CHANGED');
-    if (
-      device.kind === 'pixel' &&
-      (device.canonicalSerial.includes(':') || device.canonicalSerial.includes('_adb-tls-'))
-    )
-      throw new AdapterError('Physical identity must be a canonical USB serial');
-    if (transport.kind === 'usb' && transport.serial !== device.canonicalSerial)
-      throw new AdapterError('USB transport does not match the physical identity', 'IDENTITY_CHANGED');
+    assertEnrolledTransport(target);
     const devices = checked(
       await this.runAdb(['devices', '-l'], signalOptions(signal)),
       'ADB transport inspection',
@@ -192,30 +114,28 @@ export class AndroidAdapter {
     const rows = devices
       .split('\n')
       .map((line) => line.trim().split(/\s+/))
-      .filter((row) => row[0] === transport.serial);
+      .filter((row) => row[0] === target.transport.serial);
     if (rows.length !== 1 || rows[0]?.[1] !== 'device')
       throw new AdapterError(
         'Selected Android transport is offline, unauthorized or ambiguous',
         'DEVICE_UNAVAILABLE',
       );
-    if (device.kind === 'pixel') {
+    await this.guardDeviceIdentity(target, signal);
+  }
+  private async guardDeviceIdentity(target: SelectedTarget, signal?: AbortSignal): Promise<void> {
+    if (target.device.kind === 'pixel') {
       const serial = (await this.shell(target, ['getprop', 'ro.serialno'], signalOptions(signal))).trim();
-      if (serial !== device.canonicalSerial)
+      if (serial !== target.device.canonicalSerial)
         throw new AdapterError(
           'Physical device identity changed; reconnect the enrolled phone over USB',
           'IDENTITY_CHANGED',
         );
-    } else if (
-      transport.kind !== 'emulator' ||
-      transport.serial !== device.canonicalSerial ||
-      !/^emulator-\d+$/.test(device.canonicalSerial)
-    )
-      throw new AdapterError('Emulator transport identity changed', 'IDENTITY_CHANGED');
+    } else assertEmulatorTransport(target);
     const model = (await this.shell(target, ['getprop', 'ro.product.model'], signalOptions(signal))).trim();
     const codename = (
       await this.shell(target, ['getprop', 'ro.product.device'], signalOptions(signal))
     ).trim();
-    if (model !== device.model || codename !== device.codename)
+    if (model !== target.device.model || codename !== target.device.codename)
       throw new AdapterError('Device model or codename changed', 'IDENTITY_CHANGED');
   }
   async users(target: SelectedTarget, signal?: AbortSignal): Promise<AndroidUserIdentity[]> {
@@ -256,7 +176,7 @@ export class AndroidAdapter {
     assertUser(user);
     await this.guardTarget(target, signal);
     const observed = (await this.users(target, signal)).find((candidate) => candidate.userId === user.userId);
-    if (!observed || !sameUser(user, observed))
+    if (!observed || !sameAndroidUser(user, observed))
       throw new AdapterError(
         'Android user was removed or recreated; preserve the recovery obligation',
         'USER_IDENTITY_CHANGED',
@@ -385,69 +305,107 @@ export class AndroidAdapter {
   ): Promise<DeviceObservation> {
     await this.guardTarget(target, signal);
     const users = await this.users(target, signal);
+    const { listings, helpers } = await this.inspectUserPackages(target, users, signal);
     const profiles: ProfileObservation[] = [];
-    const helpers = new Set<string>();
+    for (const profile of policy.profiles) {
+      const user = policyUser(users, profile);
+      if (user) profiles.push(await this.inspectProfile(target, user, profile, listings, signal));
+    }
+    const os = await this.inspectOs(target, signal);
+    const debuggingEnabled = await this.inspectDebugging(target, users, signal);
+    await this.guardTarget(target, signal);
+    if (JSON.stringify(users) !== JSON.stringify(await this.users(target, signal)))
+      throw new AdapterError('Android users changed during observation');
+    return {
+      schemaVersion: 1,
+      device: target.device,
+      observedAt: this.now().toISOString(),
+      os,
+      profiles,
+      helpers: helpers.sort(),
+      debuggingEnabled,
+    };
+  }
+  private async inspectUserPackages(
+    target: SelectedTarget,
+    users: AndroidUserIdentity[],
+    signal?: AbortSignal,
+  ): Promise<{ listings: Map<number, Set<string>>; helpers: string[] }> {
     const listings = new Map<number, Set<string>>();
-    // Handoff concerns the entire device, including users absent from the selected policy.
+    const helpers: string[] = [];
     for (const user of users) {
       const installed = await this.listPackages(target, user, signal);
       listings.set(user.userId, installed);
       for (const helper of HELPERS)
-        if (installed.has(helper)) helpers.add(`${helper}@user:${user.userId}:serial:${user.serialNo}`);
+        if (installed.has(helper)) helpers.push(helper + '@user:' + user.userId + ':serial:' + user.serialNo);
     }
-    for (const profile of policy.profiles) {
-      const matches = users.filter((user) =>
-        profile.kind === 'owner' ? user.userId === 0 : user.userId !== 0 && user.name === profile.name,
+    return { listings, helpers };
+  }
+  private async inspectProfile(
+    target: SelectedTarget,
+    user: AndroidUserIdentity,
+    profile: ProfilePolicy,
+    listings: Map<number, Set<string>>,
+    signal?: AbortSignal,
+  ): Promise<ProfileObservation> {
+    const installed = listings.get(user.userId);
+    if (!installed) throw new AdapterError('Android user package observation is missing');
+    const packages: ProfileObservation['packages'] = [];
+    for (const wanted of profile.packages)
+      if (installed.has(wanted.packageId))
+        packages.push(await this.installedIdentity(target, user, wanted.packageId, signal));
+    const settings: SettingPolicy[] = [];
+    for (const setting of profile.settings)
+      settings.push({ ...setting, value: await this.readSetting(target, user, setting, signal) });
+    const permissions: PermissionPolicy[] = [];
+    for (const permission of profile.permissions)
+      permissions.push(
+        installed.has(permission.packageId)
+          ? await this.permission(target, user, permission, signal)
+          : { ...permission, granted: false },
       );
-      if (matches.length > 1) throw new AdapterError('Multiple Android users match a policy profile');
-      const user = matches[0];
-      if (!user) continue;
-      const installed = listings.get(user.userId);
-      if (!installed) throw new AdapterError('Android user package observation is missing');
-      const packages: ProfileObservation['packages'] = [];
-      for (const wanted of profile.packages)
-        if (installed.has(wanted.packageId))
-          packages.push(await this.installedIdentity(target, user, wanted.packageId, signal));
-      const settings: SettingPolicy[] = [];
-      for (const setting of profile.settings)
-        settings.push({ ...setting, value: await this.readSetting(target, user, setting, signal) });
-      const permissions: PermissionPolicy[] = [];
-      for (const permission of profile.permissions) {
-        if (!installed.has(permission.packageId)) permissions.push({ ...permission, granted: false });
-        else permissions.push(await this.permission(target, user, permission, signal));
-      }
-      const observed: ProfileObservation = {
-        profileId: profile.id,
-        user,
-        packages,
-        settings,
-        permissions,
-        vpn: await this.vpn(target, user, signal),
-      };
-      if (profile.backup) {
-        const enabled = await this.shell(
-          target,
-          ['bmgr', '--user', String(user.userId), 'enabled'],
-          signalOptions(signal),
-        );
-        const transports = await this.shell(
-          target,
-          ['bmgr', '--user', String(user.userId), 'list', 'transports'],
-          signalOptions(signal),
-        );
-        observed.backup = parseBackupObservation(enabled, transports);
-      }
-      if (profile.language) {
-        const language = await this.readSetting(
-          target,
-          user,
-          { namespace: 'system', key: 'system_locales' },
-          signal,
-        );
-        if (language === 'en-US' || language === 'pl-PL') observed.language = language;
-      }
-      profiles.push(observed);
+    const observed: ProfileObservation = {
+      profileId: profile.id,
+      user,
+      packages,
+      settings,
+      permissions,
+      vpn: await this.vpn(target, user, signal),
+    };
+    await this.inspectProfileCapabilities(target, user, profile, observed, signal);
+    return observed;
+  }
+  private async inspectProfileCapabilities(
+    target: SelectedTarget,
+    user: AndroidUserIdentity,
+    profile: ProfilePolicy,
+    observed: ProfileObservation,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    if (profile.backup) {
+      const enabled = await this.shell(
+        target,
+        ['bmgr', '--user', String(user.userId), 'enabled'],
+        signalOptions(signal),
+      );
+      const transports = await this.shell(
+        target,
+        ['bmgr', '--user', String(user.userId), 'list', 'transports'],
+        signalOptions(signal),
+      );
+      observed.backup = parseBackupObservation(enabled, transports);
     }
+    if (profile.language) {
+      const language = await this.readSetting(
+        target,
+        user,
+        { namespace: 'system', key: 'system_locales' },
+        signal,
+      );
+      if (language === 'en-US' || language === 'pl-PL') observed.language = language;
+    }
+  }
+  private async inspectOs(target: SelectedTarget, signal?: AbortSignal): Promise<DeviceObservation['os']> {
     const getprop = async (key: string): Promise<string> =>
       (await this.shell(target, ['getprop', key], signalOptions(signal))).trim();
     const release = await getprop('ro.build.version.incremental');
@@ -455,6 +413,17 @@ export class AndroidAdapter {
     const boot = await getprop('ro.boot.verifiedbootstate');
     const locked = await getprop('ro.boot.flash.locked');
     const vbmeta = await getprop('ro.boot.vbmeta.device_state');
+    return {
+      codename: target.device.codename,
+      release,
+      bootVerified: ['green', 'yellow'].includes(boot) && locked === '1' && vbmeta === 'locked',
+    };
+  }
+  private async inspectDebugging(
+    target: SelectedTarget,
+    users: AndroidUserIdentity[],
+    signal?: AbortSignal,
+  ): Promise<boolean> {
     const owner = users.find((user) => user.userId === 0);
     if (!owner) throw new AdapterError('Owner is missing');
     const adb = await this.readSetting(target, owner, { namespace: 'global', key: 'adb_enabled' }, signal);
@@ -466,23 +435,7 @@ export class AndroidAdapter {
     );
     if (!['0', '1'].includes(adb) || !['0', '1', 'null'].includes(wifi))
       throw new AdapterError('Debugging state could not be inspected');
-    await this.guardTarget(target, signal);
-    const after = await this.users(target, signal);
-    if (JSON.stringify(users) !== JSON.stringify(after))
-      throw new AdapterError('Android users changed during observation');
-    return {
-      schemaVersion: 1,
-      device: target.device,
-      observedAt: this.now().toISOString(),
-      os: {
-        codename: target.device.codename,
-        release,
-        bootVerified: ['green', 'yellow'].includes(boot) && locked === '1' && vbmeta === 'locked',
-      },
-      profiles,
-      helpers: [...helpers].sort(),
-      debuggingEnabled: adb === '1' || wifi === '1',
-    };
+    return adb === '1' || wifi === '1';
   }
   async createUser(
     target: SelectedTarget,
@@ -566,31 +519,7 @@ export class AndroidAdapter {
           .split(',')
           .filter(Boolean);
         await this.artifacts.checkCompatibility(staged.path, sdk, abis, options.signal);
-        const shared = (await this.inspectSharedEffects(target, [artifact.packageId], options.signal))[0];
-        if (!shared) throw new AdapterError('Shared APK effects could not be inspected');
-        if (shared.users.some((entry) => entry.signerSha256 !== artifact.signerSha256))
-          throw new AdapterError(
-            'Installed APK signer differs in an Android user; explicit migration is required',
-          );
-        if (shared.users.some((entry) => entry.versionCode > artifact.versionCode))
-          throw new AdapterError('APK version downgrade is unsupported');
-        const affected = shared.users.filter(
-          (entry) => entry.user.userId !== user.userId && entry.versionCode !== artifact.versionCode,
-        );
-        if (affected.length) {
-          const reviewed = options.reviewedDeviceWideEffect;
-          if (
-            !reviewed ||
-            reviewed.packageId !== artifact.packageId ||
-            reviewed.toVersionCode !== artifact.versionCode ||
-            canonicalJson(reviewed.users.slice().sort((a, b) => a.user.serialNo - b.user.serialNo)) !==
-              canonicalJson(shared.users)
-          )
-            throw new AdapterError(
-              'Device-wide APK changes affect other Android users; review the exact live shared effects before installing',
-              'SHARED_APK_REVIEW_REQUIRED',
-            );
-        }
+        await this.guardSharedInstall(target, user, artifact, options);
         await this.guardUser(target, user, options.signal);
         const installed = checked(
           await this.runAdb(
@@ -608,6 +537,38 @@ export class AndroidAdapter {
       },
       options.signal,
     );
+  }
+  private async guardSharedInstall(
+    target: SelectedTarget,
+    user: AndroidUserIdentity,
+    artifact: VerifiedArtifact,
+    options: InstallOptions,
+  ): Promise<void> {
+    const shared = (await this.inspectSharedEffects(target, [artifact.packageId], options.signal))[0];
+    if (!shared) throw new AdapterError('Shared APK effects could not be inspected');
+    if (shared.users.some((entry) => entry.signerSha256 !== artifact.signerSha256))
+      throw new AdapterError(
+        'Installed APK signer differs in an Android user; explicit migration is required',
+      );
+    if (shared.users.some((entry) => entry.versionCode > artifact.versionCode))
+      throw new AdapterError('APK version downgrade is unsupported');
+    const affected = shared.users.filter(
+      (entry) => entry.user.userId !== user.userId && entry.versionCode !== artifact.versionCode,
+    );
+    if (affected.length) {
+      const reviewed = options.reviewedDeviceWideEffect;
+      if (
+        !reviewed ||
+        reviewed.packageId !== artifact.packageId ||
+        reviewed.toVersionCode !== artifact.versionCode ||
+        canonicalJson(reviewed.users.slice().sort((a, b) => a.user.serialNo - b.user.serialNo)) !==
+          canonicalJson(shared.users)
+      )
+        throw new AdapterError(
+          'Device-wide APK changes affect other Android users; review the exact live shared effects before installing',
+          'SHARED_APK_REVIEW_REQUIRED',
+        );
+    }
   }
   async applySetting(
     target: SelectedTarget,
@@ -677,24 +638,13 @@ export class AndroidAdapter {
       options,
     );
   }
-  async applySettings(
-    target: SelectedTarget,
-    user: AndroidUserIdentity,
-    profile: ProfilePolicy,
-    options: OperationOptions,
-  ): Promise<void> {
-    for (const setting of profile.settings) await this.applySetting(target, user, setting, options);
-    for (const permission of profile.permissions)
-      await this.applyPermission(target, user, permission, options);
-    await this.applyVpn(target, user, profile.vpn, options);
-  }
   async cleanup(
     target: SelectedTarget,
     obligation: RecoveryObligation,
     options: CleanupOptions,
   ): Promise<void> {
     if (
-      obligation.status !== 'pending' ||
+      !['pending', 'blocked'].includes(obligation.status) ||
       obligation.ownerOperationId !== options.operationId ||
       obligation.deviceSerial !== target.device.canonicalSerial
     )
@@ -702,69 +652,94 @@ export class AndroidAdapter {
     const user = obligation.user;
     if (!user) throw new AdapterError('Cleanup requires a recorded stable Android user identity');
     await this.guardUser(target, user, options.signal);
-    const data = obligation.payload;
-    if (obligation.kind === 'restore-setting') {
-      const namespace = data['namespace'];
-      const key = data['key'];
-      const previous = data['previous'];
-      if (
-        (namespace !== 'system' && namespace !== 'secure' && namespace !== 'global') ||
-        typeof key !== 'string' ||
-        typeof previous !== 'string'
-      )
-        throw new AdapterError('Malformed setting recovery evidence');
-      if (previous === 'null') {
-        settingKey(key);
-        await this.guardUser(target, user, options.signal);
-        await this.shell(target, ['settings', '--user', String(user.userId), 'delete', namespace, key], {
-          ...options,
-          mutation: true,
-        });
-      } else await this.applySetting(target, user, { namespace, key, value: previous }, options);
-    } else if (obligation.kind === 'remove-helper') {
-      const id = data['packageId'];
-      const version = data['versionCode'];
-      const signer = data['signerSha256'];
-      if (
-        typeof id !== 'string' ||
-        !HELPERS.has(id) ||
-        typeof version !== 'number' ||
-        typeof signer !== 'string'
-      )
-        throw new AdapterError('Malformed helper recovery evidence');
-      const installed = await this.listPackages(target, user, options.signal);
-      if (!installed.has(id)) return;
-      const identity = await this.installedIdentity(target, user, id, options.signal);
-      if (identity.versionCode !== version || identity.signerSha256 !== signer)
-        throw new AdapterError('Temporary helper identity changed; preserve recovery evidence');
-      await this.guardUser(target, user, options.signal);
-      const output = await this.shell(target, ['pm', 'uninstall', '--user', String(user.userId), id], {
-        ...options,
-        mutation: true,
-      });
-      if (output.trim() !== 'Success' || (await this.listPackages(target, user, options.signal)).has(id))
-        throw new AdapterError('Temporary helper removal could not be verified');
-    } else if (obligation.kind === 'remove-file') {
-      const path = data['path'];
-      if (
-        typeof path !== 'string' ||
-        !new RegExp(
-          `^/storage/emulated/${user.userId}/Download/pxv-import-[a-f0-9-]{36}[.][A-Za-z0-9]{1,10}$`,
-        ).test(path)
-      )
-        throw new AdapterError('Temporary file cleanup path is outside the recorded user scope');
-      await this.guardUser(target, user, options.signal);
-      await this.shell(target, ['rm', '-f', path], { ...options, mutation: true });
-      await this.guardUser(target, user, options.signal);
-      const check = await this.runAdb(
-        ['-s', target.transport.serial, 'shell', ...['test', '!', '-e', path].map(shellQuote)],
-        { lease: options.lease, check: false, timeoutMs: 30_000 },
+    switch (obligation.kind) {
+      case 'restore-setting':
+        return this.restoreSetting(target, user, obligation.payload, options);
+      case 'remove-helper':
+        return this.removeHelper(target, user, obligation.payload, options);
+      case 'remove-file':
+        return this.removePrivateFile(target, user, obligation.payload, options);
+      default:
+        throw new AdapterError('Unknown cleanup capability; preserve the recovery obligation');
+    }
+  }
+  private async restoreSetting(
+    target: SelectedTarget,
+    user: AndroidUserIdentity,
+    data: Record<string, unknown>,
+    options: CleanupOptions,
+  ): Promise<void> {
+    const namespace = data['namespace'];
+    const key = data['key'];
+    const previous = data['previous'];
+    if (
+      (namespace !== 'system' && namespace !== 'secure' && namespace !== 'global') ||
+      typeof key !== 'string' ||
+      typeof previous !== 'string'
+    )
+      throw new AdapterError('Malformed setting recovery evidence');
+    if (previous !== 'null')
+      return this.applySetting(target, user, { namespace, key, value: previous }, options);
+    settingKey(key);
+    await this.guardUser(target, user, options.signal);
+    await this.shell(target, ['settings', '--user', String(user.userId), 'delete', namespace, key], {
+      ...options,
+      mutation: true,
+    });
+  }
+  private async removeHelper(
+    target: SelectedTarget,
+    user: AndroidUserIdentity,
+    data: Record<string, unknown>,
+    options: CleanupOptions,
+  ): Promise<void> {
+    const id = data['packageId'];
+    const version = data['versionCode'];
+    const signer = data['signerSha256'];
+    if (
+      typeof id !== 'string' ||
+      !HELPERS.has(id) ||
+      typeof version !== 'number' ||
+      typeof signer !== 'string'
+    )
+      throw new AdapterError('Malformed helper recovery evidence');
+    if (!(await this.listPackages(target, user, options.signal)).has(id)) return;
+    const identity = await this.installedIdentity(target, user, id, options.signal);
+    if (identity.versionCode !== version || identity.signerSha256 !== signer)
+      throw new AdapterError('Temporary helper identity changed; preserve recovery evidence');
+    await this.guardUser(target, user, options.signal);
+    const output = await this.shell(target, ['pm', 'uninstall', '--user', String(user.userId), id], {
+      ...options,
+      mutation: true,
+    });
+    if (output.trim() !== 'Success' || (await this.listPackages(target, user, options.signal)).has(id))
+      throw new AdapterError('Temporary helper removal could not be verified');
+  }
+  private async removePrivateFile(
+    target: SelectedTarget,
+    user: AndroidUserIdentity,
+    data: Record<string, unknown>,
+    options: CleanupOptions,
+  ): Promise<void> {
+    const path = data['path'];
+    if (
+      typeof path !== 'string' ||
+      !new RegExp(
+        '^/storage/emulated/' + user.userId + '/Download/pxv-import-[a-f0-9-]{36}[.][A-Za-z0-9]{1,10}$',
+      ).test(path)
+    )
+      throw new AdapterError('Temporary file cleanup path is outside the recorded user scope');
+    await this.guardUser(target, user, options.signal);
+    await this.shell(target, ['rm', '-f', path], { ...options, mutation: true });
+    await this.guardUser(target, user, options.signal);
+    const check = await this.runAdb(
+      ['-s', target.transport.serial, 'shell', ...['test', '!', '-e', path].map(shellQuote)],
+      { lease: options.lease, check: false, timeoutMs: 30_000 },
+    );
+    if (check.code !== 0)
+      throw new AdapterError(
+        'Temporary private input removal could not be verified; preserve the cleanup obligation',
       );
-      if (check.code !== 0)
-        throw new AdapterError(
-          'Temporary private input removal could not be verified; preserve the cleanup obligation',
-        );
-    } else throw new AdapterError('Unknown cleanup capability; preserve the recovery obligation');
   }
   async launch(
     target: SelectedTarget,
@@ -832,8 +807,6 @@ export class AndroidAdapter {
       options,
     );
     await this.guardUser(target, owner, options.signal);
-    // This exact command can close its own shell before ADB receives a status.
-    // Preserve the native result; never retry a mutation or infer that both toggles are off.
     const result = await this.runAdb(
       [
         '-s',
@@ -845,44 +818,82 @@ export class AndroidAdapter {
     );
     options.signal?.throwIfAborted();
     if (result.code === 0) return;
-    const uncertain = (): AdapterError =>
-      new AdapterError(
-        'Debugging shutdown request is uncertain; inspect the phone and retained evidence before recovery',
-        'MUTATION_UNCERTAIN',
-      );
-    if (
-      result.code !== 255 ||
-      result.stdout.trim() ||
-      (result.stderr.trim() &&
-        !/^(?:adb: )?(?:error: )?(?:closed|connection (?:closed|reset by peer)|EOF)$/iu.test(
-          result.stderr.trim(),
-        ))
-    )
-      throw uncertain();
-    // runAdb first validates the already-established server; loss must not be
-    // mistaken for the selected transport disappearing and must not start a server.
+    if (!expectedShutdownClosure(result)) throw shutdownUncertain();
     const listing = await this.runAdb(['devices', '-l'], {
       ...signalOptions(options.signal),
       timeoutMs: 5000,
       check: false,
     });
     options.signal?.throwIfAborted();
-    const lines = listing.stdout
-      .split(/\r?\n/u)
-      .map((line) => line.trim())
-      .filter(Boolean);
-    if (listing.code !== 0 || listing.stderr.trim() || lines.shift() !== 'List of devices attached')
-      throw uncertain();
-    const rows = lines.map((line) =>
-      /^([A-Za-z0-9._:[\]%-]+)\s+(device|offline|unauthorized|recovery|sideload|bootloader|host|rescue|no permissions)(?:\s+.*)?$/u.exec(
-        line,
-      ),
-    );
-    if (rows.some((row) => !row)) throw uncertain();
-    const selected = rows.filter((row) => row?.[1] === target.transport.serial);
-    if (selected.length > 1 || (selected.length === 1 && selected[0]?.[2] !== 'offline')) throw uncertain();
+    assertShutdownTransport(listing, target.transport.serial);
   }
   async flash(target: SelectedTarget, image: VerifiedImage, options: OperationOptions): Promise<void> {
     await flashImage(this.runner, this.fastboot, target, image, options);
   }
+}
+
+function assertEnrolledTransport(target: SelectedTarget): void {
+  const { device, transport } = target;
+  if (
+    !device.transports.some((item) => item.kind === transport.kind && item.serial === transport.serial) ||
+    !/^[A-Za-z0-9._:[\]%-]+$/.test(transport.serial)
+  )
+    throw new AdapterError('Transport is not enrolled for the selected device', 'IDENTITY_CHANGED');
+  assertPhysicalTransport(target);
+}
+function assertPhysicalTransport({ device, transport }: SelectedTarget): void {
+  if (
+    device.kind === 'pixel' &&
+    (device.canonicalSerial.includes(':') || device.canonicalSerial.includes('_adb-tls-'))
+  )
+    throw new AdapterError('Physical identity must be a canonical USB serial');
+  if (transport.kind === 'usb' && transport.serial !== device.canonicalSerial)
+    throw new AdapterError('USB transport does not match the physical identity', 'IDENTITY_CHANGED');
+}
+function assertEmulatorTransport({ device, transport }: SelectedTarget): void {
+  if (
+    transport.kind !== 'emulator' ||
+    transport.serial !== device.canonicalSerial ||
+    !/^emulator-\d+$/.test(device.canonicalSerial)
+  )
+    throw new AdapterError('Emulator transport identity changed', 'IDENTITY_CHANGED');
+}
+function policyUser(users: AndroidUserIdentity[], profile: ProfilePolicy): AndroidUserIdentity | undefined {
+  const matches = users.filter((user) =>
+    profile.kind === 'owner' ? user.userId === 0 : user.userId !== 0 && user.name === profile.name,
+  );
+  if (matches.length > 1) throw new AdapterError('Multiple Android users match a policy profile');
+  return matches[0];
+}
+
+function shutdownUncertain(): AdapterError {
+  return new AdapterError(
+    'Debugging shutdown request is uncertain; inspect the phone and retained evidence before recovery',
+    'MUTATION_UNCERTAIN',
+  );
+}
+function expectedShutdownClosure(result: CommandResult): boolean {
+  if (result.code !== 255 || result.stdout.trim()) return false;
+  const diagnostic = result.stderr.trim();
+  return (
+    !diagnostic ||
+    /^(?:adb: )?(?:error: )?(?:closed|connection (?:closed|reset by peer)|EOF)$/iu.test(diagnostic)
+  );
+}
+function assertShutdownTransport(listing: CommandResult, serial: string): void {
+  const lines = listing.stdout
+    .split(/\r?\n/u)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  if (listing.code !== 0 || listing.stderr.trim() || lines.shift() !== 'List of devices attached')
+    throw shutdownUncertain();
+  const rows = lines.map((line) =>
+    /^([A-Za-z0-9._:[\]%-]+)\s+(device|offline|unauthorized|recovery|sideload|bootloader|host|rescue|no permissions)(?:\s+.*)?$/u.exec(
+      line,
+    ),
+  );
+  if (rows.some((row) => !row)) throw shutdownUncertain();
+  const selected = rows.filter((row) => row?.[1] === serial);
+  if (selected.length > 1 || (selected.length === 1 && selected[0]?.[2] !== 'offline'))
+    throw shutdownUncertain();
 }

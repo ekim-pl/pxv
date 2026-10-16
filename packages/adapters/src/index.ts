@@ -11,3 +11,11 @@ export * from './adb-server.js';
 export * from './network.js';
 export * from './host.js';
 export * from './recipes.js';
+
+export * from './artifact-url.js';
+export * from './apk-compatibility.js';
+export * from './android-observation.js';
+export * from './repository-values.js';
+export * from './network-address.js';
+export * from './ui-snapshot.js';
+export * from './zip-directory.js';

@@ -1,0 +1,113 @@
+{
+  "$schema": "./node_modules/knip/schema.json",
+  "workspaces": {
+    ".": {
+      "entry": [
+        "tools/bootstrap-quality.mjs",
+        "tools/check-boundaries.mjs",
+        "tools/check-docs.mjs",
+        "tools/check-native-baseline.mjs",
+        "tools/build-native.mjs!",
+        "tools/build-android.mjs!",
+        "tools/check-quality.mjs",
+        "tools/run-coverage.mjs",
+        "tools/quality.mjs",
+        "guides/source/rebuild.mjs!",
+        "tests/**/*.test.ts",
+        "tools/check-helpers.mjs",
+        "tools/check-deadcode.mjs"
+      ],
+      "project": [
+        "tools/**/*.mjs",
+        "tests/**/*.ts",
+        "guides/source/rebuild.mjs",
+        "eslint.config.mjs",
+        "vitest.config.ts",
+        "tools/build-android.mjs!",
+        "tools/build-native.mjs!",
+        "tools/lib/build-command.mjs!",
+        "tools/lib/android-build.mjs!",
+        "guides/source/rebuild.mjs!"
+      ],
+      "ignoreBinaries": [
+        "rustc",
+        "cargo",
+        "javac",
+        "jar",
+        "tar",
+        "pdfinfo",
+        "pdftotext",
+        "pdffonts",
+        "pdftoppm",
+        "git",
+        "ssh-keygen"
+      ]
+    },
+    "packages/*": {
+      "entry": [
+        "src/index.ts!"
+      ],
+      "project": [
+        "src/**/*.ts!"
+      ],
+      "includeEntryExports": true
+    },
+    "packages/contracts": {
+      "entry": [
+        "src/index.ts!"
+      ],
+      "project": [
+        "src/**/*.ts!"
+      ],
+      "includeEntryExports": false
+    },
+    "packages/extension-sdk": {
+      "entry": [
+        "src/index.ts!"
+      ],
+      "project": [
+        "src/**/*.ts!"
+      ],
+      "includeEntryExports": false
+    },
+    "packages/cli": {
+      "entry": [
+        "src/main.ts!"
+      ],
+      "project": [
+        "src/**/*.ts!"
+      ],
+      "includeEntryExports": true
+    },
+    "packages/runtime": {
+      "entry": [
+        "src/index.ts!",
+        "src/worker.ts!"
+      ],
+      "project": [
+        "src/**/*.ts!"
+      ],
+      "includeEntryExports": true
+    },
+    "packages/extensions": {
+      "entry": [
+        "src/index.ts!",
+        "src/worker.ts!"
+      ],
+      "project": [
+        "src/**/*.ts!"
+      ],
+      "includeEntryExports": true
+    },
+    "packages/release": {
+      "entry": [
+        "src/cli.ts!",
+        "src/docs.ts!"
+      ],
+      "project": [
+        "src/**/*.ts!"
+      ],
+      "includeEntryExports": true
+    }
+  }
+}

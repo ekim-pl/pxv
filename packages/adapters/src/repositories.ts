@@ -1,3 +1,4 @@
+import { object, positiveInteger, text, repositoryFilename } from './repository-values.js';
 import { parseDocument, type ArtifactPolicy, type RepositoryPolicy } from '@pxv/contracts';
 import { createHash } from 'node:crypto';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
@@ -49,36 +50,12 @@ export interface IndexOptions {
   signal?: AbortSignal;
   readOnly?: boolean;
 }
-function object(value: unknown, label: string): Row {
-  if (!value || typeof value !== 'object' || Array.isArray(value))
-    throw new AdapterError(`Malformed authenticated ${label}`);
-  return value as Row;
-}
-function positiveInteger(value: unknown, label: string): number {
-  if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 1)
-    throw new AdapterError(`Invalid authenticated ${label}`);
-  return value;
-}
-function text(value: unknown, label: string): string {
-  if (typeof value !== 'string' || !value) throw new AdapterError(`Invalid authenticated ${label}`);
-  return value;
-}
+
 function strictJson(source: string): unknown {
   JSON.parse(source) as unknown;
   return parseDocument(source);
 }
-export function repositoryFilename(value: unknown, suffix: '.json' | '.apk'): string {
-  const raw = text(value, 'repository filename');
-  const name = raw.startsWith('/') ? raw.slice(1) : raw;
-  if (
-    name.length > 512 ||
-    !name.endsWith(suffix) ||
-    !/^[A-Za-z0-9][A-Za-z0-9_./-]*$/.test(name) ||
-    name.split('/').some((part) => !part || part === '.' || part === '..')
-  )
-    throw new AdapterError('Unsafe authenticated repository filename');
-  return name;
-}
+
 export class RepositoryService {
   readonly runner: CommandRunner;
   readonly verifierPath: string;
@@ -149,26 +126,10 @@ export class RepositoryService {
       let timestamp: number;
       let indexSha256: string;
       if (isV2) {
-        const entry = await this.verifyJar(jar, signer, 'entry.json', options.signal);
-        const version = positiveInteger(entry['version'], 'v2 entry version');
-        if (version < 20_000 || version >= 30_000)
-          throw new AdapterError('Unsupported authenticated repository entry version');
-        const descriptor = object(entry['index'], 'v2 index descriptor');
-        const size = positiveInteger(descriptor['size'], 'v2 index size');
-        if (size > MAX_INDEX_BYTES)
-          throw new AdapterError('Authenticated repository index exceeds size limit');
-        const checksum = sha256Pin(text(descriptor['sha256'], 'v2 index hash'));
-        const name = repositoryFilename(descriptor['name'], '.json');
-        const path = join(directory, 'index.json');
-        await download(path, `${url}/${name}`, { ...downloadOptions, limit: size });
-        const bytes = await readFile(path);
-        indexSha256 = createHash('sha256').update(bytes).digest('hex');
-        if (bytes.length !== size || indexSha256 !== checksum)
-          throw new AdapterError('Repository JSON does not match its signed size and SHA-256');
-        index = object(strictJson(bytes.toString('utf8')), 'v2 repository index');
-        timestamp = positiveInteger(object(index['repo'], 'repository')['timestamp'], 'repository timestamp');
-        if (entry['timestamp'] !== timestamp)
-          throw new AdapterError('V2 repository entry and index timestamps disagree');
+        const loaded = await this.v2Index(repository, jar, directory, options);
+        index = loaded.index;
+        timestamp = loaded.timestamp;
+        indexSha256 = loaded.indexSha256;
       } else {
         await download(jar, `${url}/index-v1.jar`, { ...downloadOptions, limit: 32 * 1024 * 1024 });
         index = await this.verifyJar(jar, signer, 'index-v1.json', options.signal);
@@ -193,69 +154,49 @@ export class RepositoryService {
       await rm(directory, { recursive: true, force: true });
     }
   }
+  private async v2Index(
+    repository: RepositoryPolicy,
+    jar: string,
+    directory: string,
+    options: IndexOptions,
+  ): Promise<{ index: Row; timestamp: number; indexSha256: string }> {
+    const url = repository.url.replace(/\/$/, '');
+    const signer = sha256Pin(repository.signerSha256);
+    const downloadOptions = {
+      hosts: repository.redirectHosts,
+      ...(options.signal ? { signal: options.signal } : {}),
+    };
+    const entry = await this.verifyJar(jar, signer, 'entry.json', options.signal);
+    const version = positiveInteger(entry['version'], 'v2 entry version');
+    if (version < 20_000 || version >= 30_000)
+      throw new AdapterError('Unsupported authenticated repository entry version');
+    const descriptor = object(entry['index'], 'v2 index descriptor');
+    const size = positiveInteger(descriptor['size'], 'v2 index size');
+    if (size > MAX_INDEX_BYTES) throw new AdapterError('Authenticated repository index exceeds size limit');
+    const checksum = sha256Pin(text(descriptor['sha256'], 'v2 index hash'));
+    const name = repositoryFilename(descriptor['name'], '.json');
+    const path = join(directory, 'index.json');
+    await download(path, `${url}/${name}`, { ...downloadOptions, limit: size });
+    const bytes = await readFile(path);
+    const indexSha256 = createHash('sha256').update(bytes).digest('hex');
+    if (bytes.length !== size || indexSha256 !== checksum)
+      throw new AdapterError('Repository JSON does not match its signed size and SHA-256');
+    const index = object(strictJson(bytes.toString('utf8')), 'v2 repository index');
+    const timestamp = positiveInteger(
+      object(index['repo'], 'repository')['timestamp'],
+      'repository timestamp',
+    );
+    if (entry['timestamp'] !== timestamp)
+      throw new AdapterError('V2 repository entry and index timestamps disagree');
+    return { index, timestamp, indexSha256 };
+  }
   normalize(repository: RepositoryPolicy, packages: Row, v2: boolean): Record<string, RepositoryApk[]> {
-    const output: Record<string, RepositoryApk[]> = Object.create(null) as Record<string, RepositoryApk[]>;
+    const output = Object.create(null) as Record<string, RepositoryApk[]>;
     for (const [id, raw] of Object.entries(packages)) {
       packageId(id);
-      const values: unknown[] = v2
-        ? Object.values(object(object(raw, 'package')['versions'], 'package versions'))
-        : Array.isArray(raw)
-          ? raw
-          : (() => {
-              throw new AdapterError('Malformed authenticated APK list');
-            })();
-      output[id] = values.map((value) => {
-        const row = object(value, 'APK record');
-        let name: string;
-        let hash: string;
-        let signer: string;
-        let version: number;
-        if (v2) {
-          const file = object(row['file'], 'APK file');
-          const manifest = object(row['manifest'], 'APK manifest');
-          const signers = object(manifest['signer'], 'APK signer')['sha256'];
-          if (!Array.isArray(signers) || signers.length !== 1 || typeof signers[0] !== 'string')
-            throw new AdapterError('Authenticated APK has no unambiguous signer SHA-256 pin');
-          signer = sha256Pin(signers[0]);
-          name = repositoryFilename(file['name'], '.apk');
-          hash = sha256Pin(text(file['sha256'], 'APK hash'));
-          version = positiveInteger(manifest['versionCode'], 'APK version');
-          if (positiveInteger(file['size'], 'APK size') > 512 * 1024 * 1024)
-            throw new AdapterError('APK exceeds approved size limit');
-        } else {
-          if ((row['hashType'] ?? 'sha256') !== 'sha256')
-            throw new AdapterError('Authenticated APK requires SHA-256');
-          signer = sha256Pin(text(row['signer'], 'APK signer'));
-          name = repositoryFilename(row['apkName'], '.apk');
-          hash = sha256Pin(text(row['hash'], 'APK hash'));
-          version = positiveInteger(row['versionCode'], 'APK version');
-        }
-        const sdkSource = v2
-          ? object(object(row['manifest'], 'APK manifest')['usesSdk'] ?? {}, 'APK SDK')
-          : row;
-        const minSdk = positiveInteger(sdkSource[v2 ? 'minSdkVersion' : 'minSdkVersion'] ?? 1, 'minimum SDK');
-        const maxRaw = sdkSource['maxSdkVersion'];
-        const maxSdk = maxRaw === undefined ? undefined : positiveInteger(maxRaw, 'maximum SDK');
-        if (maxSdk !== undefined && maxSdk < minSdk)
-          throw new AdapterError('Authenticated APK maximum SDK is below its minimum');
-        const abiRaw = (v2 ? object(row['manifest'], 'APK manifest') : row)['nativecode'] ?? [];
-        if (
-          !Array.isArray(abiRaw) ||
-          abiRaw.some((abi) => typeof abi !== 'string' || !/^[A-Za-z0-9_-]+$/.test(abi))
-        )
-          throw new AdapterError('Malformed authenticated APK ABIs');
-        const abis = abiRaw as string[];
-        return {
-          compatibility: { minSdk, ...(maxSdk === undefined ? {} : { maxSdk }), abis },
-          packageId: id,
-          versionCode: version,
-          sha256: hash,
-          signerSha256: signer,
-          url: `${repository.url.replace(/\/$/, '')}/${name}`,
-          repositoryId: repository.id,
-          ...(repository.redirectHosts.length ? { redirectHosts: repository.redirectHosts } : {}),
-        };
-      });
+      output[id] = packageVersions(raw, v2).map((value) =>
+        normalizeApk(repository, id, object(value, 'APK record'), v2),
+      );
     }
     return output;
   }
@@ -312,4 +253,71 @@ export class RepositoryService {
         timestamp: evidence.timestamp,
       });
   }
+}
+
+function packageVersions(raw: unknown, v2: boolean): unknown[] {
+  if (v2) return Object.values(object(object(raw, 'package')['versions'], 'package versions'));
+  if (!Array.isArray(raw)) throw new AdapterError('Malformed authenticated APK list');
+  return raw;
+}
+interface ApkMetadata {
+  name: string;
+  hash: string;
+  signer: string;
+  version: number;
+}
+function v2Apk(row: Row): ApkMetadata {
+  const file = object(row['file'], 'APK file'),
+    manifest = object(row['manifest'], 'APK manifest');
+  const signers = object(manifest['signer'], 'APK signer')['sha256'];
+  if (!Array.isArray(signers) || signers.length !== 1 || typeof signers[0] !== 'string')
+    throw new AdapterError('Authenticated APK has no unambiguous signer SHA-256 pin');
+  if (positiveInteger(file['size'], 'APK size') > 512 * 1024 * 1024)
+    throw new AdapterError('APK exceeds approved size limit');
+  return {
+    signer: sha256Pin(signers[0]),
+    name: repositoryFilename(file['name'], '.apk'),
+    hash: sha256Pin(text(file['sha256'], 'APK hash')),
+    version: positiveInteger(manifest['versionCode'], 'APK version'),
+  };
+}
+function v1Apk(row: Row): ApkMetadata {
+  if ((row['hashType'] ?? 'sha256') !== 'sha256')
+    throw new AdapterError('Authenticated APK requires SHA-256');
+  return {
+    signer: sha256Pin(text(row['signer'], 'APK signer')),
+    name: repositoryFilename(row['apkName'], '.apk'),
+    hash: sha256Pin(text(row['hash'], 'APK hash')),
+    version: positiveInteger(row['versionCode'], 'APK version'),
+  };
+}
+function apkCompatibility(row: Row, v2: boolean): RepositoryApk['compatibility'] {
+  const manifest = v2 ? object(row['manifest'], 'APK manifest') : row;
+  const sdkSource = v2 ? object(manifest['usesSdk'] ?? {}, 'APK SDK') : row;
+  const minSdk = positiveInteger(sdkSource['minSdkVersion'] ?? 1, 'minimum SDK');
+  const maxRaw = sdkSource['maxSdkVersion'];
+  const maxSdk = maxRaw === undefined ? undefined : positiveInteger(maxRaw, 'maximum SDK');
+  if (maxSdk !== undefined && maxSdk < minSdk)
+    throw new AdapterError('Authenticated APK maximum SDK is below its minimum');
+  return { minSdk, ...(maxSdk === undefined ? {} : { maxSdk }), abis: apkAbis(manifest) };
+}
+function normalizeApk(repository: RepositoryPolicy, id: string, row: Row, v2: boolean): RepositoryApk {
+  const { name, hash, signer, version } = v2 ? v2Apk(row) : v1Apk(row);
+  return {
+    compatibility: apkCompatibility(row, v2),
+    packageId: id,
+    versionCode: version,
+    sha256: hash,
+    signerSha256: signer,
+    url: repository.url.replace(/\/$/, '') + '/' + name,
+    repositoryId: repository.id,
+    ...(repository.redirectHosts.length ? { redirectHosts: repository.redirectHosts } : {}),
+  };
+}
+
+function apkAbis(manifest: Row): string[] {
+  const raw = manifest['nativecode'] ?? [];
+  if (!Array.isArray(raw) || raw.some((abi) => typeof abi !== 'string' || !/^[A-Za-z0-9_-]+$/.test(abi)))
+    throw new AdapterError('Malformed authenticated APK ABIs');
+  return raw as string[];
 }

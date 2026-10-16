@@ -1,3 +1,4 @@
+import { artifactUrl } from './artifact-url.js';
 import { constants } from 'node:fs';
 import { chmod, lstat, mkdir, open, unlink } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
@@ -72,24 +73,7 @@ export async function copySnapshot(
     await input.close();
   }
 }
-export function artifactUrl(value: string, hosts: ReadonlySet<string>): URL {
-  let url: URL;
-  try {
-    url = new URL(value);
-  } catch {
-    throw new AdapterError('Invalid artifact URL');
-  }
-  if (
-    url.protocol !== 'https:' ||
-    url.username ||
-    url.password ||
-    url.hash ||
-    !hosts.has(url.hostname.toLowerCase()) ||
-    (url.port && url.port !== '443')
-  )
-    throw new AdapterError('Artifact URL is outside the approved HTTPS hosts');
-  return url;
-}
+
 export interface DownloadOptions {
   hosts?: readonly string[];
   limit: number;
@@ -108,37 +92,61 @@ export async function download(
     base.hostname.toLowerCase(),
     ...(options.hosts ?? []).map((host) => host.toLowerCase()),
   ]);
-  let url = artifactUrl(urlValue, hosts);
-  const signal = options.signal
-    ? AbortSignal.any([options.signal, AbortSignal.timeout(options.timeoutMs ?? 120_000)])
-    : AbortSignal.timeout(options.timeoutMs ?? 120_000);
-  let response: Response | undefined;
-  for (let redirects = 0; redirects <= 5; redirects++) {
+  const deadline = AbortSignal.timeout(options.timeoutMs ?? 120_000);
+  const signal = options.signal ? AbortSignal.any([options.signal, deadline]) : deadline;
+  const response = await downloadResponse(artifactUrl(urlValue, hosts), hosts, options, signal);
+  if (!response) return false;
+  await saveResponse(destination, response, options.limit, signal);
+  return true;
+}
+async function downloadResponse(
+  initial: URL,
+  hosts: ReadonlySet<string>,
+  options: DownloadOptions,
+  signal: AbortSignal,
+): Promise<Response | undefined> {
+  let url = initial;
+  let redirects = 0;
+  while (true) {
     cancelled(signal);
-    response = await fetch(url, { redirect: 'manual', signal, headers: { 'Accept-Encoding': 'identity' } });
-    if ([301, 302, 303, 307, 308].includes(response.status)) {
-      await response.body?.cancel();
-      if (redirects === 5) throw new AdapterError('Artifact exceeded redirect limit');
-      const location = response.headers.get('location');
-      if (!location) throw new AdapterError('Artifact redirect has no location');
-      url = artifactUrl(new URL(location, url).href, hosts);
-      continue;
+    const response = await fetch(url, {
+      redirect: 'manual',
+      signal,
+      headers: { 'Accept-Encoding': 'identity' },
+    });
+    if (![301, 302, 303, 307, 308].includes(response.status)) {
+      if (response.status === 404 && options.allow404 && redirects === 0) {
+        await response.body?.cancel();
+        return undefined;
+      }
+      return response;
     }
-    if (response.status === 404 && options.allow404 && redirects === 0) {
-      await response.body?.cancel();
-      return false;
-    }
-    break;
+    await response.body?.cancel();
+    if (redirects++ === 5) throw new AdapterError('Artifact exceeded redirect limit');
+    const location = response.headers.get('location');
+    if (!location) throw new AdapterError('Artifact redirect has no location');
+    url = artifactUrl(new URL(location, url).href, hosts);
   }
-  if (!response?.ok || !response.body) {
-    await response?.body?.cancel();
+}
+async function validResponseBody(response: Response, limit: number): Promise<ReadableStream<Uint8Array>> {
+  if (!response.ok || !response.body) {
+    await response.body?.cancel();
     throw new AdapterError('Artifact download failed');
   }
   const declared = response.headers.get('content-length');
-  if (declared && (!/^\d+$/.test(declared) || Number(declared) < 1 || Number(declared) > options.limit)) {
+  if (declared && (!/^\d+$/.test(declared) || Number(declared) < 1 || Number(declared) > limit)) {
     await response.body.cancel();
     throw new AdapterError('Artifact Content-Length exceeds byte limit');
   }
+  return response.body;
+}
+async function saveResponse(
+  destination: string,
+  response: Response,
+  limit: number,
+  signal: AbortSignal,
+): Promise<void> {
+  const body = await validResponseBody(response, limit);
   await mkdir(dirname(destination), { recursive: true, mode: 0o700 });
   const file = await open(
     destination,
@@ -147,12 +155,13 @@ export async function download(
   );
   try {
     let bytes = 0;
-    for await (const data of response.body) {
+    for await (const data of body) {
       cancelled(signal);
       bytes += data.length;
-      if (bytes > options.limit) throw new AdapterError('Artifact exceeds byte limit');
+      if (bytes > limit) throw new AdapterError('Artifact exceeds byte limit');
       await file.writeFile(data);
     }
+    const declared = response.headers.get('content-length');
     if (bytes < 1 || (declared !== null && Number(declared) !== bytes))
       throw new AdapterError('Artifact download is empty or incomplete');
     await file.sync();
@@ -162,7 +171,6 @@ export async function download(
   } finally {
     await file.close();
   }
-  return true;
 }
 export async function seal(path: string): Promise<void> {
   await chmod(path, 0o400);

@@ -41,4 +41,6 @@ Review every generated plan, including global APK effects and manual checkpoints
 
 A pending result means work remains. Perform the exact pending check privately on the phone, record only its named attestation, then use `agent resume --run RUN_ID --yes`. Inspect recovery reservations before retrying a failed or interrupted operation. Finish with fresh signoff, recipient acceptance, debugging shutdown and the custody record described in [operator guide](OPERATOR_GUIDE.md).
 
+If policy, configuration, inventory or engine bytes change during a prompt, reload the command and prepare a fresh review. Failed owned cleanup remains blocked for an explicit inspected retry. An unsupported private-file import requires the full manual procedure; no temporary file remains waiting for selection.
+
 pxv 0.1.0 is undergoing release qualification. Automated tests, artifact verification and container checks do not certify a policy pack, UI recipe, recipient workflow or physical phone. Verified GrapheneOS emulator evidence, exact-build EN/PL walkthroughs and a physical Pixel 8a acceptance record must be retained before making a deployment claim. A stock Google APIs emulator is useful for compatibility tests and cannot supply GrapheneOS provenance.

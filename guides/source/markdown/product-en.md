@@ -22,7 +22,7 @@ The operator diagnoses the host, creates an isolated project and enrolls an exac
 
 OS installation verifies the reviewed image signature and content before running its authenticated installation script through a serial-bound fastboot wrapper. It requires separate erasure authorization, direct USB and physical unlock/relock checks. App installation follows one verified path in the CLI, MCP and provisioning workflows.
 
-Recipes are constrained by OS fingerprint and application version/signer. An unsupported screen remains manual. Final credentials, accounts, MFA and recovery material are entered privately by the recipient. The expected sequence is normal credentials, final language, then optional duress configuration. Destructive duress activation is never a test step.
+Recipes are constrained by OS fingerprint and application version/signer. An unsupported screen remains manual. Private-file recipes check accepted file-selection support before transferring temporary inputs; an unsupported import requires a complete private procedure. Final credentials, accounts, MFA and recovery material are entered privately by the recipient. The expected sequence is normal credentials, final language, then optional duress configuration. Destructive duress activation is never a test step.
 
 ## Evidence and completion
 
@@ -36,7 +36,7 @@ Ready-for-handoff and completed custody are separate outcomes. A branded EN/PL d
 
 The Linux supervisor owns native mutations through private IPC, kernel locks, process identities, child adoption and durable redacted receipts. Killing a Node process does not imply that a device command completed or cleanup succeeded. Device and transport reservations are shared across projects, forks, previews and Docker workers. Concurrent control from several workstations is unsupported.
 
-Interrupted work is never automatically replayed. Recovery checks the retained record, native ownership and stable Android user serial numbers. A replacement user with a reused ID/name is not the original cleanup target. Child operations own only their own resources. Unproven cleanup keeps the fence and can require a host reboot and physical inspection.
+Interrupted work is never automatically replayed. Recovery checks the retained record, native ownership and stable Android user serial numbers. A replacement user with a reused ID/name is not the original cleanup target. Child operations own only their own resources. Failed cleanup remains blocked until an explicit inspected retry verifies that ownership and stable user identity still match; resolved obligations are not replayed. Unproven cleanup keeps the fence and can require a host reboot and physical inspection.
 
 ## Extensions
 
@@ -46,7 +46,7 @@ Installation is explicit and exact-versioned. The lock records package integrity
 
 ## Installation formats and local previews
 
-The first supported application platform is Linux x86_64, qualified on Debian 12 and Ubuntu 24.04. Node 24.22.0 LTS, TypeScript compiler 7.0.2 and pnpm 12.11.2 are pinned. The portable archive and Debian package bundle Node and the Linux supervisor. The npm-compatible package requires the supported Node installation. Docker includes its runtime tools.
+The initial application platform is Linux x86_64, with Debian 12 and Ubuntu 24.04 as validation targets. Node 24.22.0 LTS, TypeScript compiler 7.0.2 and pnpm 12.11.2 are pinned. The portable archive and Debian package bundle Node and the Linux supervisor. The npm-compatible package requires the supported Node installation. Docker includes its runtime tools.
 
 An immutable candidate supplies portable, Debian, npm and OCI formats. Previews accept a dirty source tree, record its content digest and use unique versions, directories, package/command names and image tags. Ordinary build commands never publish, push, install globally or replace a stable launcher. Promotion is separate and explicit. A single executable remains experimental; the portable archive is the supported no-Node baseline.
 
@@ -56,7 +56,7 @@ Host operation validates Android, Java and OpenSSH tools and offers explicit ver
 
 Maintenance creates fresh evidence and renewed handoff. Policy changes invalidate previous signoff. Loss records support the operator's response but do not remotely wipe a phone. Retirement records separately confirmed erasure and custody without silently triggering a wipe. Community is a local toolkit, not a remote MDM server. Headwind integration and custom OS source builds remain later, separately qualified workflows.
 
-Offline unit, cryptographic, storage, process, extension and packaging tests support confidence in the engine. They do not certify a UI recipe, policy pack or physical phone. Release qualification requires recorded GrapheneOS emulator provenance and authorized Pixel 8a EN/PL acceptance including restore, reboot, routing/failure recovery and custody. A stock emulator cannot provide GrapheneOS provenance.
+Offline unit, cryptographic, storage, process, extension and packaging tests support confidence in the engine. They do not certify a UI recipe, policy pack or physical phone. Release qualification requires recorded GrapheneOS emulator provenance and authorized Pixel 8a EN/PL acceptance including restore, reboot, routing/failure recovery and custody. A stock emulator cannot provide GrapheneOS provenance. The current source refactor has offline verification only. Historical Pixel checks remain evidence for their recorded candidate and do not qualify a newer build.
 
 ## Start here
 

@@ -1,21 +1,19 @@
-import type { Action } from '@pxv/contracts';
+import {
+  EXTENSION_API_VERSION,
+  isExtensionCommandName,
+  type ExtensionDefinition,
+  type IntegrationAdapterDefinition,
+} from '@pxv/contracts/extensions';
+export { EXTENSION_API_VERSION } from '@pxv/contracts/extensions';
 export type {
   Action,
-  PolicyPack,
-  ProductDescriptor,
   AndroidUserIdentity,
   DeviceTarget,
+  ExtensionDefinition,
+  IntegrationAdapterDefinition,
+  PolicyPack,
+  ProductDescriptor,
 } from '@pxv/contracts';
-
-export const EXTENSION_API_VERSION = 1 as const;
-export interface ExtensionDefinition {
-  apiVersion: 1;
-  commands: Readonly<Record<string, (input: unknown) => readonly Action[] | Promise<readonly Action[]>>>;
-}
-export interface IntegrationAdapterDefinition {
-  apiVersion: 1;
-  plan(input: unknown): readonly Action[] | Promise<readonly Action[]>;
-}
 
 /** Integration adapters propose core actions; the host reviews and executes them. */
 export function defineIntegrationAdapter(
@@ -29,7 +27,7 @@ export function defineIntegrationAdapter(
 export function defineExtension(definition: ExtensionDefinition): ExtensionDefinition {
   if (definition.apiVersion !== EXTENSION_API_VERSION) throw new Error('Unsupported extension API');
   for (const [name, command] of Object.entries(definition.commands)) {
-    if (!/^[a-z][a-z0-9_-]{0,63}$/u.test(name) || typeof command !== 'function')
+    if (!isExtensionCommandName(name) || typeof command !== 'function')
       throw new Error('Invalid extension command');
   }
   return Object.freeze({

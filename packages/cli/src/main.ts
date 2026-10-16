@@ -1,11 +1,3 @@
 #!/usr/bin/env node
-import { runCli } from './cli.js';
-
-runCli(process.argv.slice(2))
-  .then((code) => {
-    process.exitCode = code;
-  })
-  .catch((error: unknown) => {
-    process.stderr.write(`${error instanceof Error ? error.message : 'pxv failed'}\n`);
-    process.exitCode = 2;
-  });
+import { startCli } from './entrypoint.js';
+await startCli();

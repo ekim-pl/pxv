@@ -1,6 +1,6 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { access, lstat, mkdir, readFile, realpath } from 'node:fs/promises';
-import { dirname, isAbsolute, relative, resolve, sep } from 'node:path';
+import { isAbsolute, relative, resolve, sep } from 'node:path';
 import {
   parseDocument,
   resolvePolicy,
@@ -14,17 +14,32 @@ import {
   type ProjectConfig,
   type ResolvedPolicy,
 } from '@pxv/contracts';
-import { atomicWritePrivate, readBounded } from '@pxv/runtime';
+import { atomicWritePrivate, commitProjectFile, hashFile, readBounded } from '@pxv/runtime';
 import { fileURLToPath } from 'node:url';
 import { engineIntegrity } from './integrity.js';
 
 export interface ProjectContext {
   readonly root: string;
+  readonly codeRoot?: string;
   readonly config: ProjectConfig;
   readonly product: ProductDescriptor;
   readonly policy: PolicyPack;
   readonly inventory: Inventory;
   readonly resolved: ResolvedPolicy;
+  readonly revisions: { config: string; policy: string; inventory: string };
+}
+
+async function readProjectValue<T>(
+  base: string,
+  path: string,
+  limit: number,
+  validate: (value: unknown) => T,
+): Promise<{ value: T; revision: string }> {
+  const bytes = await readBounded(await containedPath(base, path), limit);
+  return {
+    value: validate(parseDocument(bytes.toString('utf8'))),
+    revision: createHash('sha256').update(bytes).digest('hex'),
+  };
 }
 
 export async function containedPath(root: string, name: string, mustExist = true): Promise<string> {
@@ -72,30 +87,46 @@ export async function loadProject(
     }
     throw new Error('Project marker missing; use project init with a new directory');
   }
-  const config = validateProject(
-    parseDocument(
-      (await readBounded(await containedPath(base, 'pxv.project.json'), 1024 * 1024)).toString('utf8'),
-    ),
-  );
+  const configFile = await readProjectValue(base, 'pxv.project.json', 1024 * 1024, validateProject);
+  const config = configFile.value;
   if (config.productId !== product.id) throw new Error('Project belongs to a different product fork');
-  const policy = validatePolicy(
-    parseDocument(
-      (await readBounded(await containedPath(base, config.policyFile), 4 * 1024 * 1024)).toString('utf8'),
-    ),
+  const policyFile = await readProjectValue(base, config.policyFile, 4 * 1024 * 1024, validatePolicy);
+  const inventoryFile = await readProjectValue(
+    base,
+    config.inventoryFile,
+    4 * 1024 * 1024,
+    validateInventory,
   );
-  const inventory = validateInventory(
-    parseDocument(
-      (await readBounded(await containedPath(base, config.inventoryFile), 4 * 1024 * 1024)).toString('utf8'),
-    ),
-  );
+  const policy = policyFile.value;
+  const inventory = inventoryFile.value;
   return Object.freeze({
     root: base,
+    codeRoot,
     config,
     product,
     policy,
     inventory,
     resolved: resolvePolicy(policy, config, product, await engineIntegrity(codeRoot)),
+    revisions: {
+      config: configFile.revision,
+      policy: policyFile.revision,
+      inventory: inventoryFile.revision,
+    },
   });
+}
+
+export async function assertProjectFresh(project: ProjectContext): Promise<void> {
+  const sources = [
+    { path: 'pxv.project.json', expected: project.revisions.config },
+    { path: project.config.policyFile, expected: project.revisions.policy },
+    { path: project.config.inventoryFile, expected: project.revisions.inventory },
+  ];
+  for (const source of sources)
+    if ((await hashFile(await containedPath(project.root, source.path))) !== source.expected)
+      throw new Error('Project source changed; reload and prepare a new reviewed plan');
+  const codeRoot = project.codeRoot ?? fileURLToPath(new URL('../../../', import.meta.url));
+  if ((await engineIntegrity(codeRoot)) !== project.resolved.engineDigest)
+    throw new Error('Executable build changed; reload and prepare a new reviewed plan');
 }
 
 export async function createProject(
@@ -142,14 +173,38 @@ export async function loadProduct(path: string): Promise<ProductDescriptor> {
 }
 
 export async function saveInventory(project: ProjectContext, inventory: Inventory): Promise<void> {
-  await atomicWritePrivate(
-    await containedPath(project.root, project.config.inventoryFile),
-    JSON.stringify(validateInventory(inventory), null, 2),
-  );
+  await commitProjectFile({
+    projectId: project.config.id,
+    path: await containedPath(project.root, project.config.inventoryFile),
+    expectedSha256: project.revisions.inventory,
+    expectedSources: [
+      { path: await containedPath(project.root, 'pxv.project.json'), sha256: project.revisions.config },
+    ],
+    data: JSON.stringify(validateInventory(inventory), null, 2),
+  });
 }
 
 export async function writePolicyLock(project: ProjectContext): Promise<void> {
   const path = await containedPath(project.root, 'policy.lock.json', false);
-  await mkdir(dirname(path), { recursive: true, mode: 0o700 });
-  await atomicWritePrivate(path, JSON.stringify(project.resolved, null, 2));
+  const expectedSha256 = await hashFile(path).catch((error: unknown) => {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
+    throw error;
+  });
+  await commitProjectFile({
+    projectId: project.config.id,
+    path,
+    expectedSha256,
+    expectedSources: [
+      { path: await containedPath(project.root, 'pxv.project.json'), sha256: project.revisions.config },
+      {
+        path: await containedPath(project.root, project.config.policyFile),
+        sha256: project.revisions.policy,
+      },
+      {
+        path: await containedPath(project.root, project.config.inventoryFile),
+        sha256: project.revisions.inventory,
+      },
+    ],
+    data: JSON.stringify(project.resolved, null, 2),
+  });
 }

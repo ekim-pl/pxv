@@ -2,7 +2,7 @@ import { constants } from 'node:fs';
 import { access, chmod, lstat, mkdir, mkdtemp, realpath, rename, rm, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { delimiter, dirname, isAbsolute, join } from 'node:path';
-import { AdapterError, sha256Pin, type CommandRunner } from './command.js';
+import { AdapterError, sha256Pin, type CommandRunner, type CommandResult } from './command.js';
 import { download, fileDigest } from './files.js';
 import { extractZip } from './zip.js';
 
@@ -88,45 +88,7 @@ export class HostTools {
       };
     try {
       const result = await this.runner.run([path, ...DEFINITIONS[tool]], { timeoutMs: 5000, check: false });
-      const output = `${result.stdout}\n${result.stderr}`;
-      let version: string | undefined;
-      let compatible = false;
-      switch (tool) {
-        case 'adb':
-          version = /(?:^|\n)Version (\d+\.\d+\.\d+)/.exec(output)?.[1];
-          compatible = result.code === 0 && !!version && versionAtLeast(version, [35, 0, 2]);
-          break;
-        case 'fastboot':
-          version = /(?:fastboot version|Version) (\d+\.\d+\.\d+)/.exec(output)?.[1];
-          compatible = result.code === 0 && !!version && versionAtLeast(version, [35, 0, 2]);
-          break;
-        case 'java':
-          version = /(?:openjdk|java) version "(\d+(?:\.\d+)*)/.exec(output)?.[1];
-          compatible = result.code === 0 && !!version && versionAtLeast(version, [17]);
-          break;
-        case 'aapt':
-          version = /Android Asset Packaging Tool, (v[^\s]+|[^\s]+)/.exec(output)?.[1];
-          compatible = result.code === 0 && !!version;
-          break;
-        case 'apksigner':
-          version = /^\s*(\d+(?:\.\d+)+)/.exec(output)?.[1];
-          compatible = result.code === 0 && !!version;
-          break;
-        case 'ssh-keygen':
-          version = 'OpenSSH signature tool';
-          compatible = output.includes('ssh-keygen') && output.includes('-Y') && output.includes('verify');
-          break;
-      }
-      return {
-        tool,
-        path,
-        available: true,
-        compatible,
-        ...(version ? { version } : {}),
-        ...(!compatible
-          ? { reason: 'The installed executable did not report a supported version or required capability' }
-          : {}),
-      };
+      return inspectedStatus(tool, path, result);
     } catch {
       return { tool, path, available: false, compatible: false, reason: 'Executable inspection failed' };
     }
@@ -144,87 +106,141 @@ export class HostTools {
   }
   /** Explicit bootstrap only. Exact license acceptance is supplied by the operator-facing command. */
   async bootstrap(archive: HostToolArchive, destination: string, options: BootstrapOptions): Promise<string> {
-    if (
-      !/^[a-z0-9][a-z0-9-]*$/.test(archive.id) ||
-      archive.licenseId !== options.acceptedLicense ||
-      !archive.licenseId
-    )
-      throw new AdapterError('Tool bootstrap requires the exact reviewed license acceptance');
-    sha256Pin(archive.sha256);
-    const url = new URL(archive.url);
-    if (
-      url.protocol !== 'https:' ||
-      url.hostname !== 'dl.google.com' ||
-      url.username ||
-      url.password ||
-      url.hash ||
-      url.port
-    )
-      throw new AdapterError('Android host archives require the official Google HTTPS distribution host');
-    for (const entry of archive.executables)
-      if (
-        isAbsolute(entry) ||
-        !/^[A-Za-z0-9][A-Za-z0-9_./-]*$/.test(entry) ||
-        entry.split('/').some((part) => !part || part === '.' || part === '..')
-      )
-        throw new AdapterError('Unsafe host tool executable path');
-    if (!archive.executables.length)
-      throw new AdapterError('Approved host archive must identify its executables');
-    try {
-      await lstat(destination);
-      throw new AdapterError('Managed tool destination already exists; preserve it for explicit replacement');
-    } catch (error) {
-      if (!(error instanceof Error) || !('code' in error) || error.code !== 'ENOENT') throw error;
-    }
+    validateArchive(archive, options.acceptedLicense);
+    await requireNewDestination(destination);
     await mkdir(dirname(destination), { recursive: true, mode: 0o700 });
     const directory = await mkdtemp(join(dirname(destination), '.pxv-tool-bootstrap-'));
     try {
-      const path = join(directory, 'tool.zip');
-      await download(path, archive.url, {
-        limit: 512 * 1024 * 1024,
-        timeoutMs: 600_000,
-        ...(options.signal ? { signal: options.signal } : {}),
-      });
-      if ((await fileDigest(path, 512 * 1024 * 1024, options.signal)) !== archive.sha256.toLowerCase())
-        throw new AdapterError('Host archive checksum does not match the approved distribution');
-      const extracted = join(directory, 'extracted');
-      await extractZip(path, extracted, {
-        maxTotalBytes: 2 * 1024 ** 3,
-        ...(options.signal ? { signal: options.signal } : {}),
-      });
-      for (const entry of archive.executables) {
-        const executable = join(extracted, entry);
-        if (!(await lstat(executable)).isFile())
-          throw new AdapterError('Approved host archive lacks an expected regular executable');
-        await chmod(executable, 0o500);
-      }
-      await writeFile(
-        join(extracted, 'pxv-tool-provenance.json'),
-        JSON.stringify(
-          {
-            schemaVersion: 1,
-            id: archive.id,
-            url: archive.url,
-            sha256: archive.sha256.toLowerCase(),
-            licenseId: archive.licenseId,
-            acceptedAt: new Date().toISOString(),
-          },
-          null,
-          2,
-        ),
-        { flag: 'wx', mode: 0o400 },
-      );
-      // The destination must be new; a concurrent installation is never replaced.
-      await mkdir(destination, { mode: 0o700 });
-      try {
-        await rename(extracted, join(destination, 'distribution'));
-      } catch (error) {
-        await rm(destination, { recursive: true, force: true });
-        throw error;
-      }
-      return join(destination, 'distribution');
+      const extracted = await extractApprovedTool(archive, directory, options.signal);
+      await markExecutables(extracted, archive.executables);
+      await writeToolProvenance(extracted, archive);
+      return await installDistribution(extracted, destination);
     } finally {
       await rm(directory, { recursive: true, force: true });
     }
   }
+}
+
+const VERSION_PATTERNS: Record<Exclude<HostTool, 'ssh-keygen'>, { pattern: RegExp; minimum?: number[] }> = {
+  adb: { pattern: /(?:^|\n)Version (\d+\.\d+\.\d+)/, minimum: [35, 0, 2] },
+  fastboot: { pattern: /(?:fastboot version|Version) (\d+\.\d+\.\d+)/, minimum: [35, 0, 2] },
+  java: { pattern: /(?:openjdk|java) version "(\d+(?:\.\d+)*)/, minimum: [17] },
+  aapt: { pattern: /Android Asset Packaging Tool, (v[^\s]+|[^\s]+)/ },
+  apksigner: { pattern: /^\s*(\d+(?:\.\d+)+)/ },
+};
+function toolVersion(tool: HostTool, result: CommandResult): { version?: string; compatible: boolean } {
+  const output = result.stdout + '\n' + result.stderr;
+  if (tool === 'ssh-keygen')
+    return {
+      version: 'OpenSSH signature tool',
+      compatible: output.includes('ssh-keygen') && output.includes('-Y') && output.includes('verify'),
+    };
+  const spec = VERSION_PATTERNS[tool];
+  const version = spec.pattern.exec(output)?.[1];
+  const compatible =
+    result.code === 0 && !!version && (!spec.minimum || versionAtLeast(version, spec.minimum));
+  return { ...(version ? { version } : {}), compatible };
+}
+function inspectedStatus(tool: HostTool, path: string, result: CommandResult): HostToolStatus {
+  const version = toolVersion(tool, result);
+  return {
+    tool,
+    path,
+    available: true,
+    ...version,
+    ...(!version.compatible
+      ? { reason: 'The installed executable did not report a supported version or required capability' }
+      : {}),
+  };
+}
+function validateArchive(archive: HostToolArchive, acceptedLicense: string): void {
+  if (!/^[a-z0-9][a-z0-9-]*$/.test(archive.id) || archive.licenseId !== acceptedLicense || !archive.licenseId)
+    throw new AdapterError('Tool bootstrap requires the exact reviewed license acceptance');
+  sha256Pin(archive.sha256);
+  validateGoogleArchiveUrl(archive.url);
+  if (!archive.executables.length)
+    throw new AdapterError('Approved host archive must identify its executables');
+  archive.executables.forEach(validateExecutablePath);
+}
+function validateExecutablePath(entry: string): void {
+  if (
+    isAbsolute(entry) ||
+    !/^[A-Za-z0-9][A-Za-z0-9_./-]*$/.test(entry) ||
+    entry.split('/').some((part) => !part || part === '.' || part === '..')
+  )
+    throw new AdapterError('Unsafe host tool executable path');
+}
+async function requireNewDestination(destination: string): Promise<void> {
+  try {
+    await lstat(destination);
+    throw new AdapterError('Managed tool destination already exists; preserve it for explicit replacement');
+  } catch (error) {
+    if (!(error instanceof Error) || !('code' in error) || error.code !== 'ENOENT') throw error;
+  }
+}
+async function extractApprovedTool(
+  archive: HostToolArchive,
+  directory: string,
+  signal?: AbortSignal,
+): Promise<string> {
+  const path = join(directory, 'tool.zip');
+  await download(path, archive.url, {
+    limit: 512 * 1024 * 1024,
+    timeoutMs: 600_000,
+    ...(signal ? { signal } : {}),
+  });
+  if ((await fileDigest(path, 512 * 1024 * 1024, signal)) !== archive.sha256.toLowerCase())
+    throw new AdapterError('Host archive checksum does not match the approved distribution');
+  const extracted = join(directory, 'extracted');
+  await extractZip(path, extracted, { maxTotalBytes: 2 * 1024 ** 3, ...(signal ? { signal } : {}) });
+  return extracted;
+}
+async function markExecutables(directory: string, paths: string[]): Promise<void> {
+  for (const entry of paths) {
+    const executable = join(directory, entry);
+    if (!(await lstat(executable)).isFile())
+      throw new AdapterError('Approved host archive lacks an expected regular executable');
+    await chmod(executable, 0o500);
+  }
+}
+async function writeToolProvenance(directory: string, archive: HostToolArchive): Promise<void> {
+  await writeFile(
+    join(directory, 'pxv-tool-provenance.json'),
+    JSON.stringify(
+      {
+        schemaVersion: 1,
+        id: archive.id,
+        url: archive.url,
+        sha256: archive.sha256.toLowerCase(),
+        licenseId: archive.licenseId,
+        acceptedAt: new Date().toISOString(),
+      },
+      null,
+      2,
+    ),
+    { flag: 'wx', mode: 0o400 },
+  );
+}
+async function installDistribution(extracted: string, destination: string): Promise<string> {
+  await mkdir(destination, { mode: 0o700 });
+  try {
+    await rename(extracted, join(destination, 'distribution'));
+  } catch (error) {
+    await rm(destination, { recursive: true, force: true });
+    throw error;
+  }
+  return join(destination, 'distribution');
+}
+
+function validateGoogleArchiveUrl(value: string): void {
+  const url = new URL(value);
+  if (
+    url.protocol !== 'https:' ||
+    url.hostname !== 'dl.google.com' ||
+    url.username ||
+    url.password ||
+    url.hash ||
+    url.port
+  )
+    throw new AdapterError('Android host archives require the official Google HTTPS distribution host');
 }

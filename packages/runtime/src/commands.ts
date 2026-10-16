@@ -1,83 +1,25 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
 import { constants } from 'node:fs';
-import { access, lstat, mkdir, open, readdir } from 'node:fs/promises';
+import { access, lstat, mkdir, open } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { createInterface } from 'node:readline';
 import type { Duplex } from 'node:stream';
 import { fileURLToPath } from 'node:url';
-import { readBounded } from './files.js';
 
-export interface CommandResult {
-  code: number;
-  stdout: string;
-  stderr: string;
-}
-export interface CommandOptions {
-  signal?: AbortSignal;
-  timeoutMs?: number;
-  input?: string | Uint8Array;
-  inputFile?: string;
-  env?: Record<string, string>;
-  cwd?: string;
-  mutation?: boolean;
-  lease?: object;
-  check?: boolean;
-  /** Declared normal process exit codes. Signals and interrupted cleanup never qualify. */
-  expectedExitCodes?: readonly number[];
-}
-export interface Runtime {
-  run(args: string[], options?: CommandOptions): Promise<CommandResult>;
-}
-export class CommandError extends Error {
-  readonly result: CommandResult;
-  constructor(result: CommandResult) {
-    super(`Command failed with exit code ${result.code}`);
-    this.name = 'CommandError';
-    this.result = result;
-  }
-}
-export class RecoveryRequiredError extends Error {
-  constructor(message = 'Device has unresolved recovery obligations') {
-    super(message);
-    this.name = 'RecoveryRequiredError';
-  }
-}
-
+import {
+  CommandError,
+  RecoveryRequiredError,
+  validateCommand as validate,
+  commandEnvironment as environment,
+  nativeCommand,
+  type CommandResult,
+  type CommandOptions,
+  type Runtime,
+} from './command-contracts.js';
+export type { CommandResult, CommandOptions, Runtime } from './command-contracts.js';
 const OUTPUT_LIMIT = 8 * 1024 * 1024;
-
-function validate(args: string[], options: CommandOptions): void {
-  if (
-    !Array.isArray(args) ||
-    args.length === 0 ||
-    args.some((arg) => typeof arg !== 'string' || arg.includes('\0')) ||
-    !args[0]
-  )
-    throw new Error('Command requires a nonempty argument vector');
-  if (
-    options.timeoutMs !== undefined &&
-    (!Number.isSafeInteger(options.timeoutMs) || options.timeoutMs <= 0 || options.timeoutMs > 86_400_000)
-  )
-    throw new Error('Invalid command timeout');
-  if (options.signal?.aborted) throw options.signal.reason ?? new Error('Command aborted');
-  if (options.expectedExitCodes !== undefined && !validExpectedExitCodes(options.expectedExitCodes))
-    throw new Error('Invalid expected exit codes');
-  if (options.input !== undefined && options.inputFile !== undefined)
-    throw new Error('input and inputFile are mutually exclusive');
-  if (options.input !== undefined && Buffer.byteLength(options.input) > OUTPUT_LIMIT)
-    throw new Error('Command input exceeds IPC limit; use inputFile');
-}
-
-function validExpectedExitCodes(value: unknown): value is number[] {
-  return (
-    Array.isArray(value) &&
-    value.length > 0 &&
-    value.length <= 8 &&
-    new Set(value).size === value.length &&
-    value.every((code) => Number.isInteger(code) && code >= 0 && code <= 255)
-  );
-}
 
 /** Mutations can only cross the native gated gateway with a live device lease. */
 export class CommandRunner implements Runtime {
@@ -95,13 +37,6 @@ export class CommandRunner implements Runtime {
       throw new CommandError(result);
     return result;
   }
-}
-
-function environment(explicit?: Record<string, string>): Record<string, string> {
-  if (explicit) return { ...explicit };
-  return Object.fromEntries(
-    Object.entries(process.env).filter((entry): entry is [string, string] => entry[1] !== undefined),
-  );
 }
 
 async function runInspection(args: string[], options: CommandOptions): Promise<CommandResult> {
@@ -270,16 +205,12 @@ class NativeSession {
 
 /** A live native capability. A plain object cannot authorize a mutation. */
 export class DeviceLease {
-  readonly deviceKey: string;
-  readonly transportKey: string;
   readonly operationId: string;
   readonly #session: NativeSession;
   #active = true;
   #running = false;
-  constructor(session: NativeSession, deviceKey: string, transportKey: string, operationId: string) {
+  constructor(session: NativeSession, operationId: string) {
     this.#session = session;
-    this.deviceKey = deviceKey;
-    this.transportKey = transportKey;
     this.operationId = operationId;
   }
   async run(args: string[], options: CommandOptions): Promise<CommandResult> {
@@ -292,25 +223,8 @@ export class DeviceLease {
       this.#session.send({ type: 'cancel', id });
     };
     try {
-      this.#session.send({
-        type: 'run',
-        id,
-        args,
-        env: environment(options.env),
-        cwd: options.cwd ?? null,
-        input: options.input === undefined ? null : Buffer.from(options.input).toString('base64'),
-        input_file: options.inputFile ?? null,
-        timeout_ms: options.timeoutMs ?? 120_000,
-        ...(options.expectedExitCodes !== undefined
-          ? { expected_exit_codes: options.expectedExitCodes }
-          : {}),
-      });
-      await this.#session.wait('gated', id);
-      if (options.signal?.aborted) {
-        this.#session.disconnect();
-        throw options.signal.reason ?? new Error('Command aborted before authorization');
-      }
-      this.#session.send({ type: 'authorize', id });
+      this.#session.send(nativeCommand(id, args, options));
+      await this.authorize(id, options);
       options.signal?.addEventListener('abort', cancel, { once: true });
       const reply = await this.#session.wait('result', id);
       if (!reply.cleanup_proven)
@@ -326,6 +240,14 @@ export class DeviceLease {
       this.#running = false;
       options.signal?.removeEventListener('abort', cancel);
     }
+  }
+  private async authorize(id: string, options: CommandOptions): Promise<void> {
+    await this.#session.wait('gated', id);
+    if (options.signal?.aborted) {
+      this.#session.disconnect();
+      options.signal.throwIfAborted();
+    }
+    this.#session.send({ type: 'authorize', id });
   }
   async finish(success: boolean): Promise<void> {
     if (!this.#active) return;
@@ -457,7 +379,7 @@ async function acquireLease<T>(
     await session.closed;
     throw error;
   });
-  const lease = new DeviceLease(session, deviceKey, transportKey, operationId);
+  const lease = new DeviceLease(session, operationId);
   try {
     const value = await fn(lease);
     await lease.finish(true);
@@ -468,193 +390,4 @@ async function acquireLease<T>(
   }
 }
 
-export interface RecoveryReservation {
-  schema: number;
-  operation_id: string;
-  previous_operation_id?: string | null;
-  device_key: string;
-  transport_key: string;
-  supervisor: { pid: number; start_ticks: string; boot_id: string; uid: number };
-  status: string;
-  cleanup_proven?: boolean;
-  mutation_started?: boolean;
-}
-
-export interface ProcessIdentity {
-  pid: number;
-  start_ticks: string;
-  boot_id: string;
-  uid: number;
-}
-export interface NativeReceipt {
-  id: string;
-  operationId: string;
-  commandId: string;
-  status: 'gated' | 'authorized' | 'running' | 'completed';
-  supervisor: ProcessIdentity;
-  child?: ProcessIdentity;
-  code?: number;
-  cleanupProven?: boolean;
-  interrupted?: boolean;
-  expectedExitCodes?: number[];
-}
-
-/** Bounded redacted native evidence. Only completed receipts are immutable and
- * should be passed to SqliteStore.ingestReceipt for idempotent reconciliation. */
-export async function nativeReceipts(controlRoot: string, operationId: string): Promise<NativeReceipt[]> {
-  if (!/^[A-Za-z0-9_-]{1,160}$/u.test(operationId)) throw new Error('Invalid native operation identity');
-  const directory = join(controlRoot, 'receipts');
-  const files = await readdir(directory).catch((error: unknown) => {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return [];
-    throw error;
-  });
-  const output: NativeReceipt[] = [];
-  const validIdentity = (value: unknown): value is ProcessIdentity => {
-    if (!value || typeof value !== 'object') return false;
-    const identity = value as ProcessIdentity;
-    return (
-      Number.isInteger(identity.pid) &&
-      identity.pid > 0 &&
-      Number.isInteger(identity.uid) &&
-      identity.uid >= 0 &&
-      typeof identity.start_ticks === 'string' &&
-      /^[0-9]+$/u.test(identity.start_ticks) &&
-      typeof identity.boot_id === 'string' &&
-      identity.boot_id.length > 0
-    );
-  };
-  for (const file of files.sort()) {
-    if (!file.startsWith(`${operationId}-`) || !file.endsWith('.json')) continue;
-    const commandId = file.slice(operationId.length + 1, -5);
-    if (!/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/u.test(commandId)) continue;
-    let value: Record<string, unknown>;
-    try {
-      value = JSON.parse((await readBounded(join(directory, file), 64 * 1024)).toString('utf8')) as Record<
-        string,
-        unknown
-      >;
-    } catch {
-      throw new RecoveryRequiredError(`Malformed native receipt retained: ${file}`);
-    }
-    const allowed = new Set([
-      'schema',
-      'operation_id',
-      'command_id',
-      'supervisor',
-      'status',
-      'child',
-      'code',
-      'cleanup_proven',
-      'interrupted',
-      'expected_exit_codes',
-    ]);
-    if (
-      !value ||
-      value['schema'] !== 1 ||
-      value['operation_id'] !== operationId ||
-      value['command_id'] !== commandId ||
-      Object.keys(value).some((key) => !allowed.has(key)) ||
-      !validIdentity(value['supervisor']) ||
-      !['gated', 'authorized', 'running', 'completed'].includes(String(value['status'])) ||
-      (value['child'] !== undefined && !validIdentity(value['child'])) ||
-      (value['expected_exit_codes'] !== undefined && !validExpectedExitCodes(value['expected_exit_codes']))
-    )
-      throw new RecoveryRequiredError(`Malformed native receipt retained: ${file}`);
-    if (
-      value['status'] === 'completed' &&
-      (!Number.isInteger(value['code']) ||
-        typeof value['cleanup_proven'] !== 'boolean' ||
-        typeof value['interrupted'] !== 'boolean')
-    )
-      throw new RecoveryRequiredError(`Malformed native completion retained: ${file}`);
-    output.push({
-      id: `${operationId}:${commandId}`,
-      operationId,
-      commandId,
-      status: value['status'] as NativeReceipt['status'],
-      supervisor: value['supervisor'],
-      ...(value['child'] !== undefined ? { child: value['child'] } : {}),
-      ...(value['code'] !== undefined ? { code: value['code'] as number } : {}),
-      ...(value['cleanup_proven'] !== undefined ? { cleanupProven: value['cleanup_proven'] as boolean } : {}),
-      ...(value['interrupted'] !== undefined ? { interrupted: value['interrupted'] as boolean } : {}),
-      ...(value['expected_exit_codes'] !== undefined
-        ? { expectedExitCodes: value['expected_exit_codes'] }
-        : {}),
-    });
-  }
-  return output;
-}
-
-/** Inspection never creates the shared control directory. Malformed evidence blocks. */
-export async function recoveryReservations(controlRoot: string): Promise<RecoveryReservation[]> {
-  const directory = join(controlRoot, 'reservations');
-  const names = await readdir(directory).catch((error: unknown) => {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return [];
-    throw error;
-  });
-  const seen = new Set<string>();
-  const records: RecoveryReservation[] = [];
-  for (const name of names.sort()) {
-    if (!name.endsWith('.json')) continue;
-    let record: RecoveryReservation;
-    try {
-      record = JSON.parse(
-        (await readBounded(join(directory, name), 64 * 1024)).toString('utf8'),
-      ) as RecoveryReservation;
-    } catch {
-      throw new RecoveryRequiredError(`Malformed recovery evidence retained: ${name}`);
-    }
-    if (
-      record.schema !== 1 ||
-      typeof record.operation_id !== 'string' ||
-      typeof record.device_key !== 'string' ||
-      typeof record.transport_key !== 'string' ||
-      !record.supervisor ||
-      typeof record.supervisor.boot_id !== 'string'
-    )
-      throw new RecoveryRequiredError(`Malformed recovery evidence retained: ${name}`);
-    if (!seen.has(record.operation_id)) {
-      seen.add(record.operation_id);
-      records.push(record);
-    }
-  }
-  return records;
-}
-
-/** Resolve only after verified process cleanup or a host reboot, plus an explicit
- * application-level acknowledgment that device recovery has been completed. */
-export async function resolveRecoveryReservation(
-  controlRoot: string,
-  deviceKey: string,
-  transportKey: string,
-  operationId: string,
-  options: { deviceRecoveryAcknowledged: true },
-): Promise<void> {
-  if (options.deviceRecoveryAcknowledged !== true)
-    throw new RecoveryRequiredError('Explicit device recovery acknowledgment is required');
-  const keys = deviceLeaseKeys(deviceKey, transportKey);
-  const child = spawn(await supervisorPath(), ['--control-root', resolve(controlRoot)], {
-    stdio: ['ignore', 'ignore', 'pipe', 'pipe'],
-    detached: true,
-    env: { PATH: '/usr/bin:/bin' },
-  });
-  const ipc = child.stdio[3] as Duplex | null;
-  if (!ipc) {
-    child.kill();
-    throw new Error('Private native IPC unavailable');
-  }
-  const session = new NativeSession(child, ipc);
-  try {
-    session.send({
-      type: 'recover',
-      device_key: keys.device,
-      transport_key: keys.transport,
-      operation_id: operationId,
-      device_recovery_acknowledged: true,
-    });
-    await session.wait('recovered');
-  } finally {
-    session.disconnect();
-    await session.closed;
-  }
-}
+export { nativeReceipts, recoveryReservations } from './native-evidence.js';

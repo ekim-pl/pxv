@@ -1,8 +1,0 @@
-{
-  "schemaVersion": 1,
-  "cli": "../assets/cli/manifest.json",
-  "deviceCaptures": [],
-  "screenshotsAreRequiredForUiQualification": true,
-  "syntheticUiEvidence": false,
-  "decorativeCoverIsEvidence": false
-}

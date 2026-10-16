@@ -1,10 +1,23 @@
-pxv0.1.0 Node documentation pipeline
+pxv 0.1.0 Node documentation pipeline
 
 Sources: six UTF-8 Markdown editions under source/markdown.
 Renderer: @pxv/release buildDocumentation, pinned marked/Playwright, explicit system Chromium.
 Formats: six A4 PDFs and six HTML files. No office/print split or PDF/X claim.
-Commands: pnpm build; PXV_CHROMIUM=/usr/bin/google-chrome ./guides/rebuild.sh
+Generated PDFs are ignored build outputs, not Git sources. Rebuild them locally;
+retain reviewed copies with release artifacts instead of committing them.
+Workspace: Node 24.22.0, pnpm 12.11.2, pinned TypeScript compiler 7.0.2.
+Native build: Rust 1.99.1, x86_64-unknown-linux-musl, rustfmt and Clippy.
+Quality prerequisites: Java, Android SDK and host tools from docs/HOST_DEPENDENCIES.md.
+Explicit setup: pnpm install --frozen-lockfile; pnpm quality:setup.
+Before guide edits/rendering: pnpm build:native; pnpm build; pnpm quality.
+Quality evidence: .quality/report.json and .quality/report.md bind the checked source identity.
+Render: PXV_CHROMIUM=/usr/bin/google-chrome ./guides/rebuild.sh
 Options: --output-dir DIRECTORY, --html-only, --no-render, --chromium EXECUTABLE.
 QA: Poppler pdfinfo, pdftotext and pdftoppm; hashes and every-page PNGs under qa/.
-No package installation, browser download, device command or publication occurs.
+The complete default guides/qa/ directory is ignored by Git. Keep reviewed QA
+artifacts and review records alongside the matching release, not in source control.
+Review every rendered page after each source revision; generation alone is not visual approval.
+The rebuild wrapper performs no package installation, browser download, device command or publication.
 A successful render does not establish policy, emulator or physical-device acceptance.
+The current source refactor has offline verification only. Historical Pixel evidence remains
+limited to its recorded candidate; preserve the osInstallationSubset record unchanged.

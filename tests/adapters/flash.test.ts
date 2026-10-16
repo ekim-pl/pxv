@@ -150,3 +150,76 @@ describe('serial-bound authenticated OS flashing', () => {
     ).rejects.toThrow(/matching image/);
   });
 });
+
+describe('OS preflight and uncertain lock failures', () => {
+  it('rejects unsupported fastboot versions and malformed target observations before mutation', async () => {
+    const image = await fixture('preflight-errors');
+    for (const version of ['unrecognized', 'fastboot version 34.0.9', 'fastboot version 35.0.1']) {
+      const guarded: CommandRunner = {
+        run: (args, options) =>
+          args[1] === '--version'
+            ? Promise.resolve({ code: 0, stdout: version, stderr: '' })
+            : runner.run(args, options),
+      };
+      await expect(flashImage(guarded, fakeFastboot, target, image, { lease: {} })).rejects.toThrow(/35.0.2/);
+    }
+    for (const outcome of [
+      { code: 1, stdout: '', stderr: '' },
+      { code: 0, stdout: 'product: akita\nproduct: akita\n', stderr: '' },
+      { code: 0, stdout: 'product: wrong', stderr: '' },
+    ]) {
+      const mutations: string[][] = [];
+      const guarded: CommandRunner = {
+        run: (args, options) => {
+          if (options?.mutation) mutations.push(args);
+          if (args.at(-1) === 'product') return Promise.resolve(outcome);
+          return runner.run(args, options);
+        },
+      };
+      await expect(flashImage(guarded, fakeFastboot, target, image, { lease: {} })).rejects.toThrow(
+        /Fastboot/,
+      );
+      expect(mutations).toHaveLength(0);
+    }
+    await expect(
+      flashImage(runner, join(directory, 'missing-fastboot'), target, image, { lease: {} }),
+    ).rejects.toThrow(/unavailable/);
+    await expect(
+      flashImage(runner, fakeFastboot, target, { ...image, sha256: '0'.repeat(64) }, { lease: {} }),
+    ).rejects.toThrow(/reviewed image/);
+  });
+  it('does not relock when lock state, unlock confirmation or final lock verification is uncertain', async () => {
+    await rm(join(directory, 'fail'), { force: true });
+    const image = await fixture('lock-errors');
+    for (const states of [['unknown'], ['no', 'no'], ['yes', 'yes']]) {
+      const pending = [...states];
+      const mutations: string[][] = [];
+      const guarded: CommandRunner = {
+        run: (args, options) => {
+          if (options?.mutation) mutations.push(args);
+          if (args.at(-1) === 'unlocked')
+            return Promise.resolve({ code: 0, stdout: '', stderr: 'unlocked: ' + pending.shift() });
+          return runner.run(args, options);
+        },
+      };
+      await expect(flashImage(guarded, fakeFastboot, target, image, { lease: {} })).rejects.toThrow(
+        /lock|Locked/,
+      );
+      const locks = mutations.filter((args) => args.at(-1) === 'lock');
+      expect(locks).toHaveLength(states[0] === 'yes' ? 1 : 0);
+    }
+  });
+  it('rejects policy URL, public key and release identity ambiguity before signature execution', async () => {
+    const service = new ImageService({ runner });
+    for (const change of [
+      { url: policy.url + '?different=true' },
+      { namespace: 'wrong' },
+      { publicKey: 'bad' },
+      { publicKey: 'ssh-ed25519 AAAAAA==' },
+      { release: 'bad' },
+      { signatureUrl: 'https://releases.grapheneos.org/wrong.zip.sig' },
+    ]) {
+      await expect(service.verify('absent', 'absent.sig', { ...policy, ...change })).rejects.toThrow(/OS/);
+    }
+  });
+});

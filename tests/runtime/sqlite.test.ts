@@ -77,12 +77,15 @@ describe('dedicated SQLite worker', () => {
     const b = await SqliteStore.open(path);
     try {
       const results = await Promise.all([
-        a.submit('same', { plan: 'approved' }),
-        b.submit('same', { plan: 'approved' }),
+        a.submitAndSet('same', { plan: 'approved' }, 'runs', 'same'),
+        b.submitAndSet('same', { plan: 'approved' }, 'runs', 'same'),
       ]);
       expect(results.filter((result) => result.created)).toHaveLength(1);
-      await expect(b.submit('same', { plan: 'changed' })).rejects.toThrow('different submission');
-      expect((await a.submit('same', { plan: 'approved' })).created).toBe(false);
+      await expect(b.submitAndSet('same', { plan: 'changed' }, 'runs', 'same')).rejects.toThrow(
+        'different submission',
+      );
+      expect((await a.submitAndSet('same', { plan: 'approved' }, 'runs', 'same')).created).toBe(false);
+      expect(await b.entries('runs')).toEqual([{ key: 'same', value: { plan: 'approved' } }]);
     } finally {
       await a.close();
       await b.close();
@@ -152,6 +155,8 @@ describe('dedicated SQLite worker', () => {
     const store = await SqliteStore.open(path);
     try {
       const first = await store.ingestReceipt('native-token', 'run', { cleanup_proven: true });
+      expect(await store.ingestedReceipt('native-token')).toEqual({ cleanup_proven: true });
+      expect(await store.ingestedReceipt('missing')).toBeUndefined();
       expect(await store.ingestReceipt('native-token', 'run', { cleanup_proven: true })).toEqual({
         created: false,
         sequence: first.sequence,

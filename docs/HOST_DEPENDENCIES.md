@@ -16,12 +16,13 @@ A source build follows:
 
 ~~~sh
 pnpm install --frozen-lockfile
+pnpm quality:setup
 pnpm build:native
-pnpm build
-pnpm check
-pnpm test
+PXV_REQUIRE_CRYPTO=1 pnpm quality
 pnpm pxv host doctor
 ~~~
+
+Source qualification also needs the pinned rustfmt/Clippy components, SDK platform 35/Build Tools 35.0.0 and Java/OpenSSH. `quality:setup` explicitly installs checksum-pinned Rust Code Analysis and ShellCheck in the operator cache (or `PXV_QUALITY_TOOLS`). Ordinary runtime operators do not need these developer analyzers. See [testing](TESTING.md) for per-component gates and retained evidence.
 
 ## Explicit bootstrap and Android helper builds
 

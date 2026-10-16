@@ -1,5 +1,4 @@
-import { validateExtension } from '@pxv/contracts';
-import type { Action } from '@pxv/contracts';
+import { isExtensionCommandName, validateExtension } from '@pxv/contracts';
 
 export interface ExtensionMetadata {
   schemaVersion: 1;
@@ -8,16 +7,6 @@ export interface ExtensionMetadata {
   apiVersion: 1;
   entry: string;
   contributions: { commands: string[]; policyPacks: string[]; guides: string[]; adapters: string[] };
-}
-
-/** Extensions are trusted code. A worker isolates failures, not malicious behavior. */
-export interface ExtensionDefinition {
-  apiVersion: 1;
-  commands: Record<string, (input: unknown) => Action[] | Promise<Action[]>>;
-}
-
-export function defineExtension(definition: ExtensionDefinition): ExtensionDefinition {
-  return definition;
 }
 
 export function safeRelativePath(path: string): boolean {
@@ -71,7 +60,7 @@ export function validateMetadata(value: unknown): ExtensionMetadata {
     if (
       strings.some((item) =>
         key === 'commands'
-          ? !/^[a-z0-9][a-z0-9._-]{0,127}$/u.test(item)
+          ? !isExtensionCommandName(item)
           : !safeRelativePath(item) || (key === 'adapters' && !/\.(?:m?js)$/u.test(item)),
       )
     )

@@ -1,7 +1,9 @@
+import { recordObligation } from './obligations.js';
+import { DatabaseSync } from 'node:sqlite';
 import { lstat, mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   containedPath,
   engineIntegrity,
@@ -48,6 +50,23 @@ describe('isolated project data', () => {
     });
     await expect(createProject(context.root, product, basePolicy())).rejects.toThrow('existing');
     await expect(loadProject(context.root, { ...product, id: 'fork' })).rejects.toThrow('different product');
+  });
+
+  it('rejects stale inventory and policy-lock source revisions without overwriting external edits', async () => {
+    const project = await createProject(root, product, basePolicy());
+    const edited = { schemaVersion: 1, devices: [device] };
+    await writeFile(join(root, project.config.inventoryFile), JSON.stringify(edited));
+    await expect(saveInventory(project, { schemaVersion: 1, devices: [] })).rejects.toThrow('file changed');
+    expect(JSON.parse(await readFile(join(root, project.config.inventoryFile), 'utf8'))).toEqual(edited);
+    await expect(writePolicyLock(project)).rejects.toThrow('source changed');
+    await expect(lstat(join(root, 'policy.lock.json'))).rejects.toMatchObject({ code: 'ENOENT' });
+    const latest = await loadProject(root, product);
+    await writeFile(
+      join(root, 'pxv.project.json'),
+      JSON.stringify({ ...latest.config, id: 'externally-changed' }),
+    );
+    await expect(saveInventory(latest, { schemaVersion: 1, devices: [] })).rejects.toThrow('source changed');
+    await expect(writePolicyLock(latest)).rejects.toThrow('source changed');
   });
 
   it('does not initialize, migrate or modify missing and legacy projects during reads', async () => {
@@ -137,8 +156,8 @@ describe('durable resource ownership and local lifecycle', () => {
   it('does not release a parent keep-awake resource when its child probe finishes (regression 3)', async () => {
     const parent = new ResourceScope(store, 'PIXEL1', 'parent');
     const child = parent.child('network-probe');
-    await parent.register('setting', 'keep-awake', { original: '0' });
-    await child.register('helper', 'network-probe', {});
+    await recordObligation(parent, 'setting', 'keep-awake', { original: '0' });
+    await recordObligation(child, 'helper', 'network-probe', {});
     const released: string[] = [];
     await child.cleanup(
       (user) => Promise.resolve(user),
@@ -161,7 +180,7 @@ describe('durable resource ownership and local lifecycle', () => {
 
   it('retains blocked cleanup when an Android user ID/name was reused (regression 1)', async () => {
     const scope = new ResourceScope(store, 'PIXEL1', 'run');
-    await scope.register('helper', 'probe', {}, { userId: 10, serialNo: 17, name: 'Work' });
+    await recordObligation(scope, 'helper', 'probe', {}, { userId: 10, serialNo: 17, name: 'Work' });
     const released: string[] = [];
     await expect(
       scope.cleanup(
@@ -184,7 +203,7 @@ describe('durable resource ownership and local lifecycle', () => {
   it('does not lose obligations under concurrent registration or cleanup writes', async () => {
     const scope = new ResourceScope(store, 'PIXEL1', 'run');
     await Promise.all(
-      Array.from({ length: 8 }, (_, index) => scope.register('helper', `helper-${index}`, {})),
+      Array.from({ length: 8 }, (_, index) => recordObligation(scope, 'helper', `helper-${index}`, {})),
     );
     expect(await scope.list()).toHaveLength(8);
     await scope.cleanup(
@@ -210,7 +229,7 @@ describe('durable resource ownership and local lifecycle', () => {
     const empty = new ResourceScope(store, 'PIXEL1', 'run');
     expect(await empty.list()).toEqual([]);
     await expect(empty.resolve('missing')).rejects.toThrow('outside this operation');
-    const valid = await empty.register('helper', 'helper', {});
+    const valid = await recordObligation(empty, 'helper', 'helper', {});
     await expect(empty.record(valid)).rejects.toThrow('Duplicate');
     await expect(empty.record({ ...valid, id: 'other', operationId: 'other-run' })).rejects.toThrow(
       'outside this operation',
@@ -261,5 +280,116 @@ describe('durable resource ownership and local lifecycle', () => {
     expect(
       (await recordLifecycle(context, store, { ...input, type: 'retirement', confirmedErasure: true })).type,
     ).toBe('retirement');
+  });
+  it('restricts record and resolve to the exact child capability and rejects forged ownership', async () => {
+    const parent = new ResourceScope(store, 'PIXEL1', 'root');
+    const parentRecord = await recordObligation(parent, 'setting', 'keep-awake', {});
+    const child = parent.writer().child('probe');
+    const sibling = parent.writer().child('recipe');
+    const childRecord = {
+      ...parentRecord,
+      id: 'child-record',
+      operationId: child.operationId,
+      ownerOperationId: child.ownerOperationId,
+    };
+    await child.record(childRecord);
+    for (const writer of [child, sibling])
+      await expect(writer.resolve(parentRecord.id)).rejects.toThrow('outside this operation');
+    await expect(sibling.resolve(childRecord.id)).rejects.toThrow('outside this operation');
+    await expect(parent.writer().resolve(childRecord.id)).rejects.toThrow('outside this operation');
+    await expect(parent.writer().record({ ...childRecord, id: 'forged' })).rejects.toThrow(
+      'outside this operation',
+    );
+    await expect(
+      child.record({ ...childRecord, id: 'forged', ownerOperationId: sibling.ownerOperationId }),
+    ).rejects.toThrow('outside this operation');
+    expect(() => parent.child('../escape')).toThrow('Invalid recovery child');
+    await child.resolve(childRecord.id);
+    expect((await parent.list()).find((value) => value.id === parentRecord.id)?.status).toBe('pending');
+    expect(Object.isFrozen(child)).toBe(true);
+    expect(parent.child().ownerOperationId).toBe('root');
+  });
+
+  it('retains resources on write contention and refuses a disappearing cleanup owner', async () => {
+    const scope = new ResourceScope(store, 'PIXEL1', 'run');
+    const compare = vi.spyOn(store, 'compareAndSet').mockResolvedValue(false);
+    await expect(recordObligation(scope, 'helper', 'blocked', {})).rejects.toThrow('contention');
+    compare.mockRestore();
+    await recordObligation(scope, 'helper', 'helper', {});
+    await expect(
+      scope.cleanup(
+        (user) => Promise.resolve(user),
+        async () => {
+          await store.delete('obligations', 'PIXEL1');
+        },
+      ),
+    ).rejects.toThrow('disappeared');
+  });
+
+  it('rolls back a lifecycle archive, invalidation and record when its audit event cannot persist', async () => {
+    const created = await createProject(join(root, 'project'), product, basePolicy());
+    await saveInventory(created, { schemaVersion: 1, devices: [device] });
+    const project = await loadProject(created.root, product);
+    const previous = { proof: 'accepted-generation' };
+    await store.set('workflow', 'all', previous);
+    const db = new DatabaseSync(join(root, 'state.sqlite'));
+    db.exec(
+      "CREATE TRIGGER lifecycle_fault BEFORE INSERT ON events BEGIN SELECT RAISE(ABORT,'lifecycle-event-fault'); END",
+    );
+    try {
+      await expect(
+        recordLifecycle(
+          project,
+          store,
+          { assetId: 'all', type: 'loss', operator: 'Alice', note: 'Custody lost', confirmedErasure: false },
+          undefined,
+          join(root, 'control'),
+        ),
+      ).rejects.toThrow('lifecycle-event-fault');
+      expect(await store.get('workflow', 'all')).toEqual(previous);
+      expect(await store.entries('lifecycle')).toEqual([]);
+      expect(await store.entries('lifecycle-evidence')).toEqual([]);
+      expect(await store.events('asset:all')).toEqual([]);
+      db.exec('DROP TRIGGER lifecycle_fault');
+      const original = store.transition.bind(store);
+      vi.spyOn(store, 'transition').mockImplementationOnce(async (input) => {
+        await store.set('workflow', 'all', { proof: 'new-generation' });
+        return original(input);
+      });
+      await expect(
+        recordLifecycle(
+          project,
+          store,
+          { assetId: 'all', type: 'loss', operator: 'Alice', note: 'Custody lost', confirmedErasure: false },
+          undefined,
+          join(root, 'control'),
+        ),
+      ).rejects.toThrow('evidence changed');
+      expect(await store.get('workflow', 'all')).toEqual({ proof: 'new-generation' });
+    } finally {
+      db.close();
+    }
+  });
+  it('refuses stale lifecycle context before archiving or deleting current asset evidence', async () => {
+    const created = await createProject(join(root, 'project'), product, basePolicy());
+    await saveInventory(created, { schemaVersion: 1, devices: [device] });
+    const project = await loadProject(created.root, product);
+    await store.set('workflow', 'all', { generation: 'newer-accepted-state' });
+    await writeFile(
+      join(project.root, project.config.inventoryFile),
+      JSON.stringify({ schemaVersion: 1, devices: [] }),
+    );
+    await expect(
+      recordLifecycle(
+        project,
+        store,
+        { assetId: 'all', type: 'loss', operator: 'Alice', note: 'Custody lost', confirmedErasure: false },
+        undefined,
+        join(root, 'control'),
+      ),
+    ).rejects.toThrow('Project source changed');
+    expect(await store.get('workflow', 'all')).toEqual({ generation: 'newer-accepted-state' });
+    expect(await store.entries('lifecycle-evidence')).toEqual([]);
+    expect(await store.entries('lifecycle')).toEqual([]);
   });
 });

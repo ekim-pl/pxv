@@ -8,7 +8,7 @@ The native supervisor uses pinned Rust crates recorded in `native/supervisor/Car
 
 Docker includes checksum-pinned Google Android platform/build tools and a Debian snapshot containing OpenJDK, OpenSSH and system libraries. Their bundled notices and package copyright files remain in the image. Host bootstrap requires explicit acceptance of the reviewed tool archive's license; package installation never downloads toolchains or accepts licenses implicitly.
 
-Guide font licenses are retained beside their files under `guides/assets/fonts/`. Existing artwork provenance remains alongside the assets. Forks are responsible for documenting the origin and terms of replacement logos, artwork, fonts, manifests and private extensions.
+The DejaVu guide font license is retained beside the three font files under `guides/assets/fonts/`. Forks are responsible for documenting the origin and terms of replacement logos, artwork, fonts, manifests and private extensions.
 
 Use the candidate's generated SBOM and notices to identify the exact content of an artifact. This source summary does not substitute for those artifact-specific records.
 

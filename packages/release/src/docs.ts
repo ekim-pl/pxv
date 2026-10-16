@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { releaseFailure } from './errors.js';
 import { marked } from 'marked';
 import { chromium } from 'playwright';
 import { copyFile, mkdir, readFile, writeFile } from 'node:fs/promises';
@@ -7,10 +8,63 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { parseDocument, validateProduct } from '@pxv/contracts';
 import { walkPublic } from './candidate.js';
 
+interface DocumentationOptions {
+  pdf?: boolean;
+  chromiumExecutable?: string;
+  browser?: Pick<typeof chromium, 'launch'>;
+}
+async function renderGuidePdfs(
+  outputs: string[],
+  destination: string,
+  options: DocumentationOptions,
+): Promise<void> {
+  const browser = await (options.browser ?? chromium).launch({
+    ...(options.chromiumExecutable ? { executablePath: options.chromiumExecutable } : {}),
+    headless: true,
+  });
+  try {
+    const context = await browser.newContext({ javaScriptEnabled: false, serviceWorkers: 'block' });
+    await context.route('**/*', async (route) => {
+      const url = new URL(route.request().url());
+      if (url.protocol === 'file:') {
+        const path = resolve(fileURLToPath(url));
+        if (path.startsWith(`${destination}${sep}`)) {
+          await route.continue();
+          return;
+        }
+      }
+      await route.abort();
+    });
+    const page = await context.newPage();
+    for (const output of outputs) {
+      await page.goto(pathToFileURL(output).href, { waitUntil: 'load' });
+      await page.evaluate(() => {
+        for (const anchor of document.querySelectorAll('a')) {
+          if (!/^(https?:|mailto:|#)/u.test(anchor.getAttribute('href') ?? ''))
+            anchor.removeAttribute('href');
+        }
+      });
+      await page.pdf({
+        path: output.slice(0, -extname(output).length) + '.pdf',
+        format: 'A4',
+        printBackground: true,
+        preferCSSPageSize: true,
+        displayHeaderFooter: true,
+        headerTemplate: '<span></span>',
+        footerTemplate:
+          '<div style="font-family:Arial,sans-serif;font-size:8px;color:#526374;width:100%;padding:0 18mm;display:flex;justify-content:space-between"><span>pxv 0.1.0 | Qualification draft</span><span><span class="pageNumber"></span> / <span class="totalPages"></span></span></div>',
+      });
+    }
+    await context.close();
+  } finally {
+    await browser.close();
+  }
+}
+
 export async function buildDocumentation(
   sourceRoot: string,
   outputRoot: string,
-  options: { pdf?: boolean; chromiumExecutable?: string } = {},
+  options: DocumentationOptions = {},
 ): Promise<string[]> {
   const root = resolve(sourceRoot);
   const destination = resolve(outputRoot);
@@ -40,49 +94,7 @@ export async function buildDocumentation(
     await writeFile(output, html);
     outputs.push(output);
   }
-  if (options.pdf) {
-    const browser = await chromium.launch({
-      ...(options.chromiumExecutable ? { executablePath: options.chromiumExecutable } : {}),
-      headless: true,
-    });
-    try {
-      const context = await browser.newContext({ javaScriptEnabled: false, serviceWorkers: 'block' });
-      await context.route('**/*', async (route) => {
-        const url = new URL(route.request().url());
-        if (url.protocol === 'file:') {
-          const path = resolve(fileURLToPath(url));
-          if (path.startsWith(`${destination}${sep}`)) {
-            await route.continue();
-            return;
-          }
-        }
-        await route.abort();
-      });
-      const page = await context.newPage();
-      for (const output of outputs) {
-        await page.goto(pathToFileURL(output).href, { waitUntil: 'load' });
-        await page.evaluate(() => {
-          for (const anchor of document.querySelectorAll('a')) {
-            if (!/^(https?:|mailto:|#)/u.test(anchor.getAttribute('href') ?? ''))
-              anchor.removeAttribute('href');
-          }
-        });
-        await page.pdf({
-          path: output.slice(0, -extname(output).length) + '.pdf',
-          format: 'A4',
-          printBackground: true,
-          preferCSSPageSize: true,
-          displayHeaderFooter: true,
-          headerTemplate: '<span></span>',
-          footerTemplate:
-            '<div style="font-family:Arial,sans-serif;font-size:8px;color:#526374;width:100%;padding:0 18mm;display:flex;justify-content:space-between"><span>pxv 0.1.0 | Qualification draft</span><span><span class="pageNumber"></span> / <span class="totalPages"></span></span></div>',
-        });
-      }
-      await context.close();
-    } finally {
-      await browser.close();
-    }
-  }
+  if (options.pdf) await renderGuidePdfs(outputs, destination, options);
   return outputs;
 }
 
@@ -96,7 +108,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
       process.stdout.write(`${outputs.join('\n')}\n`);
     })
     .catch((error: unknown) => {
-      process.stderr.write(`${error instanceof Error ? error.message : 'Documentation build failed'}\n`);
+      process.stderr.write(`${releaseFailure(error, 'Documentation build failed')}\n`);
       process.exitCode = 1;
     });
 }

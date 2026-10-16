@@ -3,13 +3,9 @@ config/inventory.json
 /config/inventory.json.lock
 config/allowed_signers
 cache/*
-!cache/.gitkeep
 state/*
-!state/.gitkeep
 secrets/*
-!secrets/.gitkeep
 backups/*
-!backups/.gitkeep
 
 # Retained local environments and tooling (never distributed)
 __pycache__/
@@ -41,3 +37,7 @@ node_modules/
 coverage/
 native/supervisor/target/
 .pxv-preview/
+.quality/
+
+# Generated guide PDFs, including customizable output directories
+*.pdf

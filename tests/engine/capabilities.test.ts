@@ -1,4 +1,6 @@
-import { mkdtemp, rm } from 'node:fs/promises';
+import { recordObligation } from './obligations.js';
+import { DatabaseSync } from 'node:sqlite';
+import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -38,6 +40,7 @@ describe('scoped recipe, network and recovery evidence', () => {
   let root = '';
   let store: SqliteStore;
   let port: MemoryPort;
+  let now = new Date('2026-10-16T09:00:00Z');
   const configure = async (policy: PolicyPack): Promise<WorkflowEngine> => {
     const created = await createProject(
       join(root, `project-${Math.random().toString(16).slice(2)}`),
@@ -51,7 +54,7 @@ describe('scoped recipe, network and recovery evidence', () => {
       port,
       artifacts: { snapshot: (artifact, path) => Promise.resolve({ ...artifact, path }) },
       controlRoot: join(root, 'control'),
-      clock: () => new Date('2026-10-16T09:00:00Z'),
+      clock: () => now,
     });
   };
   const approve = async (engine: WorkflowEngine) => {
@@ -62,6 +65,7 @@ describe('scoped recipe, network and recovery evidence', () => {
     root = await mkdtemp(join(tmpdir(), 'pxv-capability-'));
     store = await SqliteStore.open(join(root, 'state.sqlite'));
     port = new MemoryPort();
+    now = new Date('2026-10-16T09:00:00Z');
   });
   afterEach(async () => {
     await store.close();
@@ -99,11 +103,12 @@ describe('scoped recipe, network and recovery evidence', () => {
       if (!execution.operationId || !execution.obligations || !execution.reviewedDeviceWideEffect)
         throw new Error('Missing durable probe context');
       expect(configured.artifact.path).toContain('/state/plans/');
-      await execution.obligations.record({
+      const child = execution.obligations.child('probe-child');
+      await child.record({
         schemaVersion: 1,
         id: 'probe-only',
-        operationId: execution.operationId,
-        ownerOperationId: `${execution.operationId}/probe/child`,
+        operationId: child.operationId,
+        ownerOperationId: child.ownerOperationId,
         deviceSerial: device.canonicalSerial,
         user,
         kind: 'remove-helper',
@@ -111,7 +116,7 @@ describe('scoped recipe, network and recovery evidence', () => {
         payload: {},
         status: 'pending',
       });
-      await execution.obligations.resolve('probe-only');
+      await child.resolve('probe-only');
       return {
         scope: 'probe-app-uid-https-only',
         normal: {
@@ -227,7 +232,13 @@ describe('scoped recipe, network and recovery evidence', () => {
   it('blocks new mutations until typed recovery finishes and preserves recreated-user obligations', async () => {
     const engine = await configure(basePolicy());
     const scope = new ResourceScope(store, device.canonicalSerial, 'old-run');
-    await scope.register('remove-helper', 'helper', {}, { userId: 0, serialNo: 0, name: 'Administrator' });
+    await recordObligation(
+      scope,
+      'remove-helper',
+      'helper',
+      {},
+      { userId: 0, serialNo: 0, name: 'Administrator' },
+    );
     const run = await approve(engine);
     expect((await engine.execute(run.id)).error).toContain('unresolved recovery');
     await expect(engine.recover(target, 'old-run')).rejects.toThrow('Typed device cleanup');
@@ -245,7 +256,8 @@ describe('scoped recipe, network and recovery evidence', () => {
   it('retains a real native fence throughout typed recovery and clears it only after successful cleanup', async () => {
     const engine = await configure(basePolicy());
     const scope = new ResourceScope(store, device.canonicalSerial, 'failed-run');
-    await scope.register(
+    await recordObligation(
+      scope,
       'remove-helper',
       'temporary-helper',
       {},
@@ -269,18 +281,57 @@ describe('scoped recipe, network and recovery evidence', () => {
     };
     await expect(engine.recover(target, 'failed-run')).rejects.toThrow('cleanup failure');
     expect((await recoveryReservations(join(root, 'control'))).length).toBeGreaterThan(0);
+    const priorAttempt = await store.get<{ operationId: string }>('recovery-attempts', 'failed-run');
+    if (!priorAttempt) throw new Error('Recovery attempt was not retained');
+    const database = new DatabaseSync(join(root, 'state.sqlite'));
+    database.exec(
+      "CREATE TRIGGER recovery_attempt_fault BEFORE UPDATE ON records WHEN NEW.collection='recovery-attempts' BEGIN SELECT RAISE(ABORT,'recovery-attempt-write-failed'); END",
+    );
+    try {
+      await expect(engine.recover(target, 'failed-run')).rejects.toThrow('recovery-attempt-write-failed');
+      const inherited = (await recoveryReservations(join(root, 'control')))[0];
+      expect(inherited?.previous_operation_id).toBe(priorAttempt.operationId);
+      expect(inherited?.operation_id).not.toBe(priorAttempt.operationId);
+      expect(await store.get('recovery-attempts', 'failed-run')).toMatchObject(priorAttempt);
+    } finally {
+      database.exec('DROP TRIGGER recovery_attempt_fault');
+      database.close();
+    }
     port.cleanup = () => Promise.resolve();
+    now = new Date(now.getTime() + 60_000);
     const result = await engine.recover(target, 'failed-run');
     expect(result.resolved).toBe(1);
     expect(await recoveryReservations(join(root, 'control'))).toEqual([]);
     const events = await store.events<{ type: string }>('failed-run');
     expect(events.filter((value) => value.event.type === 'native-completed')).toHaveLength(1);
+    const nativeEvent = events.find((value) => value.event.type === 'native-completed');
+    if (!nativeEvent) throw new Error('Native event missing');
+    // Simulate retained events written before first-observation time markers existed.
+    for (const marker of await store.entries('native-event-times'))
+      await store.delete('native-event-times', marker.key);
+    now = new Date(now.getTime() + 60_000);
     await engine.recover(target, 'failed-run');
+    expect(
+      (await store.events('failed-run')).find((value) => value.sequence === nativeEvent.sequence),
+    ).toEqual(nativeEvent);
     expect(
       (await store.events<{ type: string }>('failed-run')).filter(
         (value) => value.event.type === 'native-completed',
       ),
     ).toHaveLength(1);
+    const directory = join(root, 'control/receipts');
+    const name = (await readdir(directory)).find((file) => file.startsWith('failed-run-'));
+    if (!name) throw new Error('Retained native receipt missing');
+    const path = join(directory, name);
+    const receipt = JSON.parse(await readFile(path, 'utf8')) as Record<string, unknown>;
+    const timeKey = 'failed-run:' + name.slice('failed-run-'.length, -5);
+    const recordedTime = await store.get('native-event-times', timeKey);
+    await store.set('native-event-times', timeKey, ['malformed-time']);
+    await expect(engine.recover(target, 'failed-run')).rejects.toThrow('Malformed native event time');
+    await store.set('native-event-times', timeKey, recordedTime);
+    await writeFile(path, JSON.stringify({ ...receipt, code: 7 }));
+    now = new Date(now.getTime() + 60_000);
+    await expect(engine.recover(target, 'failed-run')).rejects.toThrow('different evidence');
   });
 
   it('pauses unsupported language automation and accepts only the planned measured recipient change', async () => {
@@ -328,5 +379,54 @@ describe('scoped recipe, network and recovery evidence', () => {
     actual.language = 'pl-PL';
     permission.granted = false;
     expect((await engine.execute(run.id)).error).toContain('Other live requirements changed');
+  });
+  it('retains cleanup when the original Android user disappears before explicit recovery', async () => {
+    const engine = await configure(basePolicy());
+    const scope = new ResourceScope(store, device.canonicalSerial, 'missing-user-run');
+    await recordObligation(
+      scope,
+      'remove-helper',
+      'temporary-helper',
+      {},
+      { userId: 0, serialNo: 0, name: 'Administrator' },
+    );
+    port.observation.profiles = [];
+    let released = false;
+    port.cleanup = () => {
+      released = true;
+      return Promise.resolve();
+    };
+    await expect(engine.recover(target, 'missing-user-run')).rejects.toThrow('Recovery user is absent');
+    expect(released).toBe(false);
+    expect((await scope.list())[0]?.status).toBe('blocked');
+    expect(
+      (await store.events<{ type: string }>('missing-user-run')).some(
+        (value) => value.event.type === 'recovered',
+      ),
+    ).toBe(false);
+  });
+
+  it('does not claim recovery when cleanup introduces another unresolved resource', async () => {
+    const engine = await configure(basePolicy());
+    const scope = new ResourceScope(store, device.canonicalSerial, 'late-resource-run');
+    const user = { userId: 0, serialNo: 0, name: 'Administrator' };
+    await recordObligation(scope, 'remove-helper', 'original-helper', {}, user);
+    const signal = new AbortController().signal;
+    port.cleanup = async (_target, _obligation, context) => {
+      expect(context.signal).toBe(signal);
+      await recordObligation(scope, 'remove-helper', 'late-helper', {}, user);
+    };
+    await expect(engine.recover(target, 'late-resource-run', signal)).rejects.toThrow(
+      'Recovery obligations remain unresolved',
+    );
+    expect((await scope.list()).map((value) => [value.resource, value.status])).toEqual([
+      ['original-helper', 'resolved'],
+      ['late-helper', 'pending'],
+    ]);
+    expect(
+      (await store.events<{ type: string }>('late-resource-run')).some(
+        (value) => value.event.type === 'recovered',
+      ),
+    ).toBe(false);
   });
 });

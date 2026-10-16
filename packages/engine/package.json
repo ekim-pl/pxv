@@ -10,7 +10,6 @@
   ],
   "dependencies": {
     "@pxv/contracts": "workspace:*",
-    "@pxv/runtime": "workspace:*",
-    "@pxv/adapters": "workspace:*"
+    "@pxv/runtime": "workspace:*"
   }
 }

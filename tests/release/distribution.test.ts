@@ -1,9 +1,8 @@
+import { fixture as createFixture, removeReleaseTree } from './fixtures.js';
 import {
   chmod,
-  copyFile,
-  cp,
   mkdir,
-  mkdtemp,
+  mkdtemp as createTemporaryDirectory,
   readFile,
   readdir,
   stat,
@@ -12,7 +11,7 @@ import {
 } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { createHash } from 'node:crypto';
-import { describe, expect, test } from 'vitest';
+import { afterEach, describe, expect, test } from 'vitest';
 import { CommandRunner, supervisorPath } from '../../packages/runtime/src/index.js';
 import {
   buildFormats,
@@ -20,71 +19,27 @@ import {
   createCandidate,
   dockerfile,
   promoteNpm,
-  shellLauncher,
   verifyArtifacts,
   verifyCandidate,
   walkPublic,
 } from '../../packages/release/src/index.js';
+import { shellLauncher } from '../../packages/release/src/launchers.js';
 
-const source = process.cwd();
-const runner = new CommandRunner();
-async function fixture(brand = 'alpha'): Promise<string> {
-  const root = await mkdtemp('/tmp/pxv-release-source-');
-  const product = JSON.parse(await readFile(join(source, 'product.json'), 'utf8')) as Record<string, unknown>;
-  Object.assign(product, {
-    id: brand,
-    name: `${brand} Fleet`,
-    command: brand,
-    packageName: `@example/${brand}`,
-    debName: brand,
-    image: `example/${brand}`,
-    assets: { logo: 'assets/logo.svg' },
-    defaultPolicy: 'policy-packs/simple/policy.json',
-  });
-  await writeFile(join(root, 'product.json'), JSON.stringify(product));
-  await copyFile(join(source, 'package.json'), join(root, 'package.json'));
-  await copyFile(join(source, 'LICENSE'), join(root, 'LICENSE'));
-  await copyFile(join(source, 'rust-toolchain.toml'), join(root, 'rust-toolchain.toml'));
-  await cp(join(source, 'native', 'supervisor'), join(root, 'native', 'supervisor'), {
-    recursive: true,
-    filter: (path) => !path.includes('/target'),
-  });
-  await cp(join(source, 'resources', 'third-party'), join(root, 'resources', 'third-party'), {
-    recursive: true,
-  });
-  await mkdir(join(root, 'guides', 'assets', 'fonts'), { recursive: true });
-  await writeFile(
-    join(root, 'guides', 'assets', 'fonts', 'LICENSE-Liberation'),
-    'Fixture font license notice',
-  );
-  await mkdir(join(root, 'docs'));
-  await writeFile(join(root, 'docs', 'README.md'), 'Packaged operator documentation.');
-  await mkdir(join(root, 'assets'));
-  await writeFile(
-    join(root, 'assets', 'logo.svg'),
-    `<svg xmlns="http://www.w3.org/2000/svg"><title>${brand}</title></svg>`,
-  );
-  await mkdir(join(root, 'policy-packs', 'simple'), { recursive: true });
-  await copyFile(
-    join(source, 'policy-packs', 'simple', 'policy.json'),
-    join(root, 'policy-packs', 'simple', 'policy.json'),
-  );
-  await cp(join(source, 'packages', 'runtime', 'src'), join(root, 'packages', 'runtime', 'src'), {
-    recursive: true,
-  });
-  await mkdir(join(root, 'packages', 'extensions', 'src'), { recursive: true });
-  await writeFile(join(root, 'packages', 'extensions', 'src', 'index.ts'), 'export const apiVersion=1;');
-  await writeFile(
-    join(root, 'packages', 'extensions', 'src', 'worker.ts'),
-    'import{parentPort}from"node:worker_threads";parentPort?.postMessage([]);',
-  );
-  await mkdir(join(root, 'packages', 'cli', 'src'), { recursive: true });
-  await writeFile(
-    join(root, 'packages', 'cli', 'src', 'main.ts'),
-    `import{SqliteStore}from'@pxv/runtime';if(process.argv[2]==='--sqlite'){const store=await SqliteStore.open(process.argv[3]!);await store.set('test','value',42);console.log(await store.get('test','value'));await store.close();}else console.log(${JSON.stringify(brand)},process.env.PXV_RESOURCE_ROOT,process.env.PXV_ROOT);`,
-  );
-  return root;
+const temporary: string[] = [];
+async function mkdtemp(prefix: string): Promise<string> {
+  const path = await createTemporaryDirectory(prefix);
+  temporary.push(path);
+  return path;
 }
+async function fixture(brand?: string): Promise<string> {
+  const path = await createFixture(brand);
+  temporary.push(path);
+  return path;
+}
+afterEach(async () => {
+  for (const path of temporary.splice(0).reverse()) await removeReleaseTree(path);
+});
+const runner = new CommandRunner();
 
 test('candidate rejects a dynamically linked supervisor even when runnable on the build host', async () => {
   const root = await fixture();
@@ -163,9 +118,9 @@ describe('frozen distribution candidate', () => {
     expect(candidate.manifest.source.files.some((file) => file.path === 'rust-toolchain.toml')).toBe(true);
     expect(candidate.manifest.command).toMatch(/^alpha-preview-/u);
     expect((await stat(candidate.directory)).mode & 0o777).toBe(0o555);
-    expect(
-      await readFile(join(candidate.directory, 'guides/assets/fonts/LICENSE-Liberation'), 'utf8'),
-    ).toContain('font license');
+    expect(await readFile(join(candidate.directory, 'guides/assets/fonts/LICENSE'), 'utf8')).toEqual(
+      await readFile(join(root, 'guides/assets/fonts/LICENSE'), 'utf8'),
+    );
     expect(await readFile(join(candidate.directory, 'docs/README.md'), 'utf8')).toContain(
       'operator documentation',
     );

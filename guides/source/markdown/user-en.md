@@ -20,9 +20,6 @@ A ready-for-handoff record is not the same as a completed custody transfer. Ask 
 
 Keep the phone updated through the agreed maintenance process and contact support before changing system/profile/network policy. If the phone is lost, use your provider's loss procedure and revoke accounts/tokens through their respective services. See [full user guide](../../../docs/USER_GUIDE.md) and [FAQ](../../../docs/USER_FAQ.md).
 
-
-## Using and maintaining your phone
-
 ## What the phone provides
 
 Your provider chooses a policy for your intended use. It can divide activities into Android users/profiles, install pinned applications and require specific network or backup settings. Application code updates can affect several users even when their data is separated. Ask which tasks belong in each profile and which changes require a maintenance visit.
@@ -32,6 +29,8 @@ A hardened configuration reduces particular risks; it cannot guarantee anonymity
 ## Private setup and credentials
 
 Set the normal screen lock yourself while the operator gives you privacy. Enter accounts, MFA and recovery information on the phone or through the service's approved recovery process. Do not put these values in an operator's notes, a chat, a guide annotation, a repository or an unapproved photo.
+
+When setup hands you a manual import task, it does not leave a temporary file for later selection. Ask for the complete approved private transfer and import procedure. Keep private configuration out of support chats and project attachments.
 
 Finish normal credentials before final language selection and any optional duress configuration. Duress is an optional policy capability with potentially destructive consequences. Never enter a duress credential to see whether it works. Ask your provider how to avoid confusing ordinary and duress credentials and how to handle replacement or retirement safely. The [official GrapheneOS usage guide](https://grapheneos.org/usage) is a primary reference for device features; follow the exact instructions for your installed build.
 
@@ -52,8 +51,6 @@ Know what is backed up, where it is kept, how it is encrypted and what a success
 Before custody transfer, verify the asset label, chosen language, required profiles, expected apps, contact/support information and agreed live checks. Confirm temporary setup/probe helpers are gone and debugging toggles are off. Retain the EN or PL handoff document; it deliberately excludes device credentials and recovery values.
 
 Arrange maintenance before policy changes, replacing network services or moving recovery destinations. Maintenance produces new evidence and a renewed handoff. If the device is lost, tell support promptly and revoke affected services; a local loss record does not remotely wipe it. At retirement, follow a separately authorized erasure and custody process and retain confirmation.
-
-pxv 0.1.0 is undergoing release qualification. Automated tests, artifact verification and container checks do not certify a policy pack, UI recipe, recipient workflow or physical phone. Verified GrapheneOS emulator evidence, exact-build EN/PL walkthroughs and a physical Pixel 8a acceptance record must be retained before making a deployment claim. A stock Google APIs emulator is useful for compatibility tests and cannot supply GrapheneOS provenance.
 
 
 ## Questions to resolve before accepting the device
@@ -101,3 +98,7 @@ If a required application or account is not ready, ask the operator to record th
 At a maintenance visit, the operator gathers fresh observations and renews the handoff. If a new phone replaces this one, confirm that data restoration and the new device's acceptance are complete before disposing of the old phone. Follow an explicitly authorized erasure procedure and keep the erasure/custody confirmation. A retirement record alone does not wipe hardware.
 
 Never send a lock code, password, MFA seed or recovery phrase to support through a project attachment or chat. Ask for a recovery process that preserves your privacy.
+
+## Scope of this edition
+
+pxv 0.1.0 is undergoing release qualification. Automated tests, artifact verification and container checks do not certify a policy pack, UI recipe, recipient workflow or physical phone. Verified GrapheneOS emulator evidence, exact-build EN/PL walkthroughs and a physical Pixel 8a acceptance record must be retained before making a deployment claim. A stock Google APIs emulator is useful for compatibility tests and cannot supply GrapheneOS provenance.

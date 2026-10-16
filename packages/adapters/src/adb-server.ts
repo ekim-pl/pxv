@@ -10,17 +10,19 @@ export function configuredAdbServer(env: NodeJS.ProcessEnv = process.env): AdbSe
   const host = env['PXV_HOST_ADB_HOST'] ?? env['ANDROID_ADB_SERVER_ADDRESS'] ?? '127.0.0.1';
   const port = Number(env['PXV_HOST_ADB_PORT'] ?? env['ANDROID_ADB_SERVER_PORT'] ?? '5037');
   const socket = env['ADB_SERVER_SOCKET'];
-  if (socket?.startsWith('localfilesystem:')) return { host, port, socketPath: socket.slice(16) };
-  if (socket?.startsWith('localabstract:')) return { host, port, socketPath: `\0${socket.slice(14)}` };
-  if (socket?.startsWith('tcp:')) {
+  return socket ? socketEndpoint(socket, host, port) : validateAdbServer({ host, port });
+}
+function socketEndpoint(socket: string, host: string, port: number): AdbServerEndpoint {
+  if (socket.startsWith('localfilesystem:')) return { host, port, socketPath: socket.slice(16) };
+  if (socket.startsWith('localabstract:')) return { host, port, socketPath: `\0${socket.slice(14)}` };
+  if (socket.startsWith('tcp:')) {
     const address = socket.slice(4);
     const match = /^(?:\[([^\]]+)\]|([^:]+)):(\d+)$/.exec(address);
     if (match) return validateAdbServer({ host: match[1] ?? match[2] ?? '', port: Number(match[3]) });
     if (/^\d+$/.test(address)) return validateAdbServer({ host, port: Number(address) });
     throw new AdapterError('Invalid configured ADB server socket');
   }
-  if (socket) throw new AdapterError('Unsupported configured ADB server socket');
-  return validateAdbServer({ host, port });
+  throw new AdapterError('Unsupported configured ADB server socket');
 }
 export function validateAdbServer(endpoint: AdbServerEndpoint): AdbServerEndpoint {
   if (

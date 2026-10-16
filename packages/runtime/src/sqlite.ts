@@ -1,6 +1,7 @@
 import { mkdir, lstat } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { Worker } from 'node:worker_threads';
+import { encodeRecord as encode, encodeTransition, type Store, type StoreTransition } from './store.js';
 
 interface Reply {
   id?: number;
@@ -12,9 +13,30 @@ interface Pending {
   resolve(value: unknown): void;
   reject(error: Error): void;
 }
+function ready(worker: Worker): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    const finish = (error?: Error): void => {
+      clearTimeout(timer);
+      worker.removeListener('message', message);
+      worker.removeListener('error', failed);
+      worker.removeListener('exit', exited);
+      if (error) reject(error);
+      else resolve();
+    };
+    const message = (reply: Reply): void => {
+      finish(reply.ready ? undefined : new Error(reply.error ?? 'Storage worker failed to initialize'));
+    };
+    const failed = (error: Error): void => finish(error);
+    const exited = (code: number): void => finish(new Error(`Storage worker exited before ready (${code})`));
+    const timer = setTimeout(() => finish(new Error('Storage worker readiness timed out')), 10_000);
+    worker.once('message', message);
+    worker.once('error', failed);
+    worker.once('exit', exited);
+  });
+}
 
 /** All synchronous SQLite operations are confined to one dedicated worker. */
-export class SqliteStore {
+export class SqliteStore implements Store {
   readonly #worker: Worker;
   readonly #pending = new Map<number, Pending>();
   #sequence = 0;
@@ -37,16 +59,7 @@ export class SqliteStore {
       workerData: { path, readOnly: options.readOnly ?? false },
     });
     const store = new SqliteStore(worker);
-    await new Promise<void>((resolve, reject) => {
-      worker.once('message', (reply: Reply) => {
-        if (reply.ready) resolve();
-        else reject(new Error(reply.error ?? 'Storage worker failed to initialize'));
-      });
-      worker.once('error', reject);
-      worker.once('exit', (code) => {
-        if (code !== 0) reject(new Error(`Storage worker exited ${code}`));
-      });
-    }).catch(async (error: unknown) => {
+    await ready(worker).catch(async (error: unknown) => {
       await worker.terminate();
       throw error;
     });
@@ -105,9 +118,6 @@ export class SqliteStore {
       return Promise.reject(new Error('Invalid event cursor or limit'));
     return this.#request('events', [runId, after, limit]);
   }
-  submit<T>(idempotencyKey: string, value: T): Promise<{ created: boolean; value: T }> {
-    return this.#request('submit', [idempotencyKey, encode(value)]);
-  }
   submitAndSet<T>(
     idempotencyKey: string,
     value: T,
@@ -131,15 +141,15 @@ export class SqliteStore {
   ): Promise<{ created: boolean; sequence: number }> {
     return this.#request('ingestReceipt', [receiptId, runId, encode(event)]);
   }
+  ingestedReceipt<T = unknown>(receiptId: string): Promise<T | undefined> {
+    return this.#request('ingestedReceipt', [receiptId]);
+  }
+  transition(input: StoreTransition): Promise<boolean> {
+    return this.#request('transition', [encodeTransition(input)]);
+  }
   async close(): Promise<void> {
     if (this.#closed) return;
     await this.#request('close', []);
     this.#closed = true;
   }
-}
-
-function encode(value: unknown): string {
-  const encoded = JSON.stringify(value);
-  if (encoded === undefined) throw new Error('Stored records must be JSON values');
-  return encoded;
 }

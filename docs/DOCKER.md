@@ -10,7 +10,7 @@ pnpm build:preview --formats oci
 
 The builder uses a digest-pinned BuildKit container, a digest-pinned Debian base, immutable Debian snapshot packages and checksum-approved Google SDK archives. It exports an attested OCI archive and a unique local Docker image tag. Classic Docker cannot directly load every OCI archive, so the build also uses a cached Docker exporter. `--no-oci-load` requests only the portable OCI archive. It never pushes an image.
 
-A generated `oci-context` contains only a frozen candidate, Dockerfile and entrypoint. The repository Dockerfile consumes that generated context; it is not a source-tree installer. Source configs, secrets, credentials, private helper keys and live state are outside the allowlist. Do not replace this context with a checkout-wide COPY.
+A generated `oci-context` contains only a frozen candidate, Dockerfile and entrypoint. The builder generates the Dockerfile from the release code and builds only that context. Source configs, secrets, credentials, private helper keys and live state are outside the allowlist. Do not replace this context with a checkout-wide COPY.
 
 ## Prepare outside device workflows
 

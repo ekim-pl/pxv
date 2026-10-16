@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type {
+  ObligationWriter,
   ArtifactPolicy,
   PolicyPack,
   SelectedTarget,
@@ -15,13 +16,7 @@ import { createProject, saveInventory } from '@pxv/engine';
 import type { ExecutionContext, OsSnapshot } from '@pxv/engine';
 import { SqliteStore } from '@pxv/runtime';
 import type { DeviceLease } from '@pxv/runtime';
-import {
-  application,
-  productAt,
-  publicArtifacts,
-  redact,
-  resourceRoot,
-} from '../../packages/cli/src/context.js';
+import { application, productAt, redact, resourceRoot } from '../../packages/cli/src/context.js';
 import { basePolicy } from '../engine/fixtures.js';
 import { device, hashA, hashB, observation, product } from '../contracts/fixtures.js';
 import { obligation } from '../contracts/fixtures.js';
@@ -123,10 +118,17 @@ describe('production dependency wiring and evidence boundaries', () => {
     transport: { kind: 'usb', serial: 'PIXEL1' },
   };
   const user = { userId: 0, serialNo: 0, name: 'Administrator' };
+  const writer: ObligationWriter = {
+    operationId: 'run-1',
+    ownerOperationId: 'run-1',
+    child: () => writer,
+    record: () => Promise.resolve(),
+    resolve: () => Promise.resolve(),
+  };
   const execution: ExecutionContext = {
     lease: {} as DeviceLease,
     operationId: 'run-1',
-    obligations: { record: () => Promise.resolve(), resolve: () => Promise.resolve() },
+    obligations: writer,
   };
   const openApp = async (readOnly = false) => {
     const app = await application(projectRoot, resources, readOnly);
@@ -461,7 +463,6 @@ describe('production dependency wiring and evidence boundaries', () => {
     await app.engine.port.cleanup?.(target, service, context);
     expect(mocks.recoverService).toHaveBeenCalledWith(target, service, helper, {
       ...context,
-      operationId: service.operationId,
     });
     await expect(
       app.engine.port.cleanup?.(target, service, { lease: execution.lease, operationId: 'root-run' }),
@@ -487,7 +488,39 @@ describe('production dependency wiring and evidence boundaries', () => {
     ).rejects.toThrow('retained reviewed plan');
   });
 
-  it('redacts raw serials and private paths recursively while exporting only artifact identity pins', () => {
+  it('retains construction and disposal failures together', async () => {
+    const close = vi.fn(() => Promise.reject(new Error('storage disposal failed')));
+    const open = vi.spyOn(SqliteStore, 'open').mockResolvedValueOnce({ close } as unknown as SqliteStore);
+    mocks.discover.mockRejectedValueOnce(new Error('dependency discovery failed'));
+    try {
+      await expect(application(projectRoot, resources)).rejects.toMatchObject({
+        message: 'Application construction failed and storage disposal failed',
+        errors: [
+          expect.objectContaining({ message: 'dependency discovery failed' }),
+          expect.objectContaining({ message: 'storage disposal failed' }),
+        ],
+      });
+      expect(close).toHaveBeenCalledOnce();
+    } finally {
+      open.mockRestore();
+    }
+  });
+
+  it('closes the dedicated store when application dependency discovery fails', async () => {
+    const opened = await SqliteStore.open(join(projectRoot, 'state/pxv.sqlite3'));
+    const close = vi.spyOn(opened, 'close');
+    const open = vi.spyOn(SqliteStore, 'open').mockResolvedValueOnce(opened);
+    mocks.discover.mockRejectedValueOnce(new Error('dependency discovery failed'));
+    try {
+      await expect(application(projectRoot, resources)).rejects.toThrow('dependency discovery failed');
+      expect(close).toHaveBeenCalledTimes(1);
+    } finally {
+      open.mockRestore();
+      close.mockRestore();
+    }
+  });
+
+  it('redacts raw serials and private paths recursively without leaking private path fields', () => {
     expect(
       redact(
         {
@@ -499,10 +532,5 @@ describe('production dependency wiring and evidence boundaries', () => {
         ['PIXEL1'],
       ),
     ).toEqual({ data: ['<device-serial>', null, 3, { serial: 'prefix <device-serial> suffix' }] });
-    const artifact = policy.profiles[0]?.packages[0];
-    if (!artifact) throw new Error('Fixture artifact missing');
-    expect(publicArtifacts([artifact])).toEqual([
-      { packageId: artifact.packageId, versionCode: 12, sha256: hashA, signerSha256: hashB },
-    ]);
   });
 });

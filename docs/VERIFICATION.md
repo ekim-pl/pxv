@@ -1,6 +1,18 @@
 # Verification and qualification
 
-## Current post-freeze result: 16 October 2026
+## Current reachability audit
+
+The later unused-material audit changes source and packaged documentation after the recorded cleanup checkpoint below. Use a fresh `pnpm quality` report for its exact source identity, test counts, component coverage, complexity and reachability results. Earlier report totals and distribution records remain evidence for their own candidate; source or packaging edits do not inherit them. Public SDK contracts and the compatible engine façade remain intentional supported entrypoints even where Community has no internal caller.
+
+## Recorded cleanup checkpoint: offline verification, 16 October 2026
+
+The earlier TypeScript cleanup/service-refactor candidate passed 571 tests and nine native supervisor tests. Merged source coverage was 97.35% lines and 91.93% branches; every one of the 101 TypeScript modules and all ten application packages met 90%/85%, including release and worker entrypoints. All 1,742 measured functions across 136 first-party modules stayed at cyclomatic complexity 10 or below. Production/test/tool typechecks, lint, boundaries/cycles, both Knip graphs, Rustfmt/Clippy, source/generated shell checks and all three helper builds/APK signatures passed. These counts describe that code verification checkpoint; a current source-bound report is required for later changes.
+
+Run `pnpm quality` to retain the exact Git/content identity, actual tool versions and component evidence in `.quality/report.json` and `.quality/report.md`. Final local preview identities, source/engine digests, format hashes, signatures and runtime checks belong in the separate `.quality/distribution.json` record. Keeping that generated record outside candidate inputs avoids a self-referential source digest. A format is accepted only when that record says its actual verification passed.
+
+That checkpoint qualified offline code and local distribution behavior. It did not repeat physical-device or GrapheneOS emulator acceptance. Previous Pixel records below remain historical evidence for their named immutable candidates; they do not qualify the changed engine, policy or UI adapter. Fresh retained live evidence is required for any new deployment claim.
+
+## Historical post-freeze fixture result: 16 October 2026
 
 The [final sanitized verification record](verification-0.1.0-final.json) binds candidate 0.1.0-preview.20261016105101.ce4658db, its full source digest and the exact portable, Debian, npm and OCI hashes. All four formats passed signature/checksum and execution checks, including actual native lease/child/cleanup-receipt execution inside the Debian 12 OCI image as UID 1000 with a read-only root. The raw image also refused fastboot in its default host-ADB mode.
 

@@ -1,3 +1,4 @@
+import { shellLauncher } from './launchers.js';
 import { build, type Metafile } from 'esbuild';
 import { createHash, randomUUID } from 'node:crypto';
 import {
@@ -11,7 +12,7 @@ import {
   realpath,
   writeFile,
 } from 'node:fs/promises';
-import { basename, dirname, extname, join, relative, resolve, sep } from 'node:path';
+import { basename, dirname, extname, join, resolve, sep } from 'node:path';
 import {
   canonicalJson,
   parseDocument,
@@ -19,7 +20,7 @@ import {
   validateProduct,
   type ProductDescriptor,
 } from '@pxv/contracts';
-import { CommandRunner, hashFile, readBounded, supervisorPath } from '@pxv/runtime';
+import { CommandRunner, hashFile, readBounded, supervisorPath, type Runtime } from '@pxv/runtime';
 import { assertStaticLinuxX64Elf } from './native.js';
 
 export const NODE_VERSION = '24.22.0';
@@ -68,17 +69,25 @@ const PUBLIC_EXTENSIONS = new Set([
   '.mjs',
 ]);
 const OMIT_DIRECTORIES = new Set(['build', 'dist', 'node_modules', '.git', '.venv', '__pycache__']);
+const GUIDE_DOCUMENTS = [
+  'guides/README.md',
+  'guides/index.html',
+  'guides/source/BUILD.txt',
+  'guides/source/build-manifest.json',
+  'guides/source/release-gates.json',
+];
 const PRIVATE_PART =
   /(?:^|\/)(?:\.env(?:\.[^/]*)?|\.npmrc|\.aws|\.codex|\.agents|secrets|state|cache|backups|credentials(?:\.[^/]*)?|signing-password(?:\.[^/]*)?)(?:\/|$)|\.(?:keystore|jks|p12|key|pem)$/u;
 
 export interface CandidateOptions {
+  runtime?: Runtime;
   sourceRoot?: string;
   outputRoot?: string;
   preview?: boolean;
   nodePath?: string;
   nativeBinary?: string;
 }
-export interface FileEvidence {
+interface FileEvidence {
   path: string;
   sha256: string;
   size: number;
@@ -164,6 +173,27 @@ export async function walkPublic(
   return files;
 }
 
+async function isSourceFile(root: string, name: string): Promise<boolean> {
+  const file = await lstat(join(root, name)).catch((error: unknown) => {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
+    throw error;
+  });
+  if (file?.isSymbolicLink()) throw new Error(`Release inputs cannot contain symlinks: ${name}`);
+  return file?.isFile() ?? false;
+}
+
+async function packageSources(root: string): Promise<string[]> {
+  const paths = new Set<string>();
+  for (const name of await readdir(join(root, 'packages'))) {
+    if (!/^[a-z-]+$/u.test(name)) throw new Error('Invalid source package name');
+    for (const file of await walkPublic(root, `packages/${name}/src`, new Set(['.ts']))) paths.add(file);
+    for (const file of await walkPublic(root, `packages/${name}/package.json`)) paths.add(file);
+    for (const file of await walkPublic(root, `packages/${name}/tsconfig.json`)) paths.add(file);
+  }
+
+  return [...paths];
+}
+
 async function sourceFiles(root: string): Promise<string[]> {
   const paths = new Set<string>();
   const roots = [
@@ -176,8 +206,11 @@ async function sourceFiles(root: string): Promise<string[]> {
     'android',
     'guides/source/markdown',
     'guides/assets',
+    ...GUIDE_DOCUMENTS,
     'docs',
     'tools/build-android.mjs',
+    'tools/lib/build-command.mjs',
+    'tools/lib/android-build.mjs',
     'tools/build-native.mjs',
     'tools/check-native-baseline.mjs',
   ];
@@ -192,19 +225,9 @@ async function sourceFiles(root: string): Promise<string[]> {
     'native/supervisor/Cargo.lock',
     'rust-toolchain.toml',
   ]) {
-    const file = await lstat(join(root, name)).catch((error: unknown) => {
-      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
-      throw error;
-    });
-    if (file?.isSymbolicLink()) throw new Error(`Release inputs cannot contain symlinks: ${name}`);
-    if (file?.isFile()) paths.add(name);
+    if (await isSourceFile(root, name)) paths.add(name);
   }
-  for (const name of await readdir(join(root, 'packages'))) {
-    if (!/^[a-z-]+$/u.test(name)) throw new Error('Invalid source package name');
-    for (const file of await walkPublic(root, `packages/${name}/src`, new Set(['.ts']))) paths.add(file);
-    for (const file of await walkPublic(root, `packages/${name}/package.json`)) paths.add(file);
-    for (const file of await walkPublic(root, `packages/${name}/tsconfig.json`)) paths.add(file);
-  }
+  for (const file of await packageSources(root)) paths.add(file);
   for (const file of await walkPublic(root, 'native/supervisor/src', new Set(['.rs']))) paths.add(file);
   return [...paths].sort();
 }
@@ -240,13 +263,6 @@ async function copy(root: string, path: string, destination: string): Promise<vo
   await mkdir(dirname(target), { recursive: true, mode: 0o755 });
   await copyFile(origin, target);
   await chmod(target, 0o644);
-}
-
-export function shellLauncher(previewId: string | undefined): string {
-  const project = previewId
-    ? `\n: "\${PXV_ROOT:=\${XDG_STATE_HOME:-\${HOME:?}/.local/state}/pxv/previews/${previewId}}"\nexport PXV_ROOT`
-    : '';
-  return `#!/bin/sh\nset -eu\npxv_launcher=$(readlink -f -- "$0")\npxv_dir=$(CDPATH= cd -- "$(dirname -- "$pxv_launcher")/.." && pwd)\nexport PXV_RESOURCE_ROOT="$pxv_dir" PXV_SUPERVISOR="$pxv_dir/native/pxv-supervisor"${project}\nexec "$pxv_dir/bin/node" "$pxv_dir/lib/main.js" "$@"\n`;
 }
 
 async function bundled(root: string, directory: string): Promise<Metafile[]> {
@@ -305,9 +321,8 @@ interface ThirdParty {
 }
 /** Reviewed crate notices are vendored from archives whose SHA-256 values match
  * Cargo.lock. Release builds remain offline and fail on dependency/license drift. */
-async function rustDependencies(root: string): Promise<ThirdParty[]> {
-  const lock = (await readBounded(join(root, 'native/supervisor/Cargo.lock'), 1024 * 1024)).toString('utf8');
-  const locked = lock
+function parseRustLock(lock: string) {
+  return lock
     .split(/^\[\[package\]\]$/mu)
     .slice(1)
     .map((block) => {
@@ -319,6 +334,56 @@ async function rustDependencies(root: string): Promise<ThirdParty[]> {
       return { name, version, checksum };
     })
     .filter((item) => item.name !== 'pxv-supervisor');
+}
+
+interface RustNotice {
+  path: string;
+  sha256: string;
+}
+interface RustDependency {
+  name: string;
+  version: string;
+  checksum: string;
+  license: string;
+  licenses: RustNotice[];
+}
+async function validateRustNotice(
+  root: string,
+  entry: RustDependency,
+  notice: RustNotice,
+  paths: Set<string>,
+): Promise<void> {
+  if (
+    typeof notice.path !== 'string' ||
+    dirname(notice.path) !== `rust/${entry.name}-${entry.version}` ||
+    !/^(?:LICENSE|LICENCE|NOTICE|COPYING)(?:[._-][A-Za-z0-9._-]+)?$/iu.test(basename(notice.path)) ||
+    !/^[a-f0-9]{64}$/u.test(notice.sha256) ||
+    paths.has(notice.path) ||
+    (await hashFile(join(root, 'resources/third-party', notice.path))) !== notice.sha256
+  )
+    throw new Error('Reviewed Rust license notice integrity mismatch');
+}
+async function rustLicenseDirectory(root: string, entry: RustDependency): Promise<string> {
+  if (
+    typeof entry.license !== 'string' ||
+    !/^[A-Za-z0-9.() +-]+$/u.test(entry.license) ||
+    !Array.isArray(entry.licenses) ||
+    !entry.licenses.length
+  )
+    throw new Error('Missing reviewed Rust license notices');
+  const directory = join(root, 'resources/third-party/rust', `${entry.name}-${entry.version}`);
+  const paths = new Set<string>();
+  for (const notice of entry.licenses) {
+    await validateRustNotice(root, entry, notice, paths);
+    paths.add(notice.path);
+  }
+
+  return directory;
+}
+
+async function rustDependencies(root: string): Promise<ThirdParty[]> {
+  const lock = (await readBounded(join(root, 'native/supervisor/Cargo.lock'), 1024 * 1024)).toString('utf8');
+  const locked = parseRustLock(lock);
   const catalog = parseDocument(
     (await readBounded(join(root, 'resources/third-party/rust-crates.json'), 1024 * 1024)).toString('utf8'),
   ) as {
@@ -341,27 +406,7 @@ async function rustDependencies(root: string): Promise<ThirdParty[]> {
     throw new Error('Reviewed Rust license catalog differs from Cargo.lock');
   const dependencies: ThirdParty[] = [];
   for (const entry of catalog.packages) {
-    if (
-      typeof entry.license !== 'string' ||
-      !/^[A-Za-z0-9.() +-]+$/u.test(entry.license) ||
-      !Array.isArray(entry.licenses) ||
-      !entry.licenses.length
-    )
-      throw new Error('Missing reviewed Rust license notices');
-    const directory = join(root, 'resources/third-party/rust', `${entry.name}-${entry.version}`);
-    const paths = new Set<string>();
-    for (const notice of entry.licenses) {
-      if (
-        typeof notice.path !== 'string' ||
-        dirname(notice.path) !== `rust/${entry.name}-${entry.version}` ||
-        !/^(?:LICENSE|LICENCE|NOTICE|COPYING)(?:[._-][A-Za-z0-9._-]+)?$/iu.test(basename(notice.path)) ||
-        !/^[a-f0-9]{64}$/u.test(notice.sha256) ||
-        paths.has(notice.path) ||
-        (await hashFile(join(root, 'resources/third-party', notice.path))) !== notice.sha256
-      )
-        throw new Error('Reviewed Rust license notice integrity mismatch');
-      paths.add(notice.path);
-    }
+    const directory = await rustLicenseDirectory(root, entry);
     dependencies.push({
       name: entry.name,
       version: entry.version,
@@ -373,6 +418,31 @@ async function rustDependencies(root: string): Promise<ThirdParty[]> {
   }
   return dependencies;
 }
+async function npmDependency(root: string, file: string): Promise<ThirdParty | undefined> {
+  let cursor = dirname(resolve(root, file));
+  while (cursor !== dirname(cursor)) {
+    const metadata = await readFile(join(cursor, 'package.json'), 'utf8').catch((error: unknown) => {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
+      throw error;
+    });
+    if (metadata) {
+      const data = JSON.parse(metadata) as { name?: string; version?: string; license?: string };
+      if (data.name && data.version) {
+        return {
+          name: data.name,
+          version: data.version,
+          license: typeof data.license === 'string' ? data.license : 'NOASSERTION',
+          directory: cursor,
+          ecosystem: 'npm',
+        };
+      }
+    }
+    cursor = dirname(cursor);
+  }
+
+  return undefined;
+}
+
 async function notices(root: string, directory: string, metafiles: Metafile[]): Promise<ThirdParty[]> {
   const found = new Map<string, ThirdParty>(
     (await rustDependencies(root)).map((entry) => [`cargo:${entry.name}@${entry.version}`, entry]),
@@ -380,27 +450,8 @@ async function notices(root: string, directory: string, metafiles: Metafile[]): 
   for (const metafile of metafiles)
     for (const file of Object.keys(metafile.inputs)) {
       if (!file.includes('node_modules/')) continue;
-      let cursor = dirname(resolve(root, file));
-      while (cursor !== dirname(cursor)) {
-        const metadata = await readFile(join(cursor, 'package.json'), 'utf8').catch((error: unknown) => {
-          if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
-          throw error;
-        });
-        if (metadata) {
-          const data = JSON.parse(metadata) as { name?: string; version?: string; license?: string };
-          if (data.name && data.version) {
-            found.set(`npm:${data.name}@${data.version}`, {
-              name: data.name,
-              version: data.version,
-              license: typeof data.license === 'string' ? data.license : 'NOASSERTION',
-              directory: cursor,
-              ecosystem: 'npm',
-            });
-            break;
-          }
-        }
-        cursor = dirname(cursor);
-      }
+      const dependency = await npmDependency(root, file);
+      if (dependency) found.set(`npm:${dependency.name}@${dependency.version}`, dependency);
     }
   const packages = [...found.values()].sort((a, b) => a.name.localeCompare(b.name));
   let text = 'Third-party components bundled in this engine candidate.\n\n';
@@ -455,14 +506,7 @@ interface NativeRuntimeCatalog {
   };
 }
 
-async function nativeRuntimeNotices(
-  root: string,
-  directory: string,
-  rustVersion: string,
-): Promise<NativeRuntimeCatalog> {
-  const catalog = JSON.parse(
-    (await readBounded(join(root, 'resources/third-party/native-runtime.json'), 64 * 1024)).toString('utf8'),
-  ) as NativeRuntimeCatalog;
+function validateNativeCatalog(catalog: NativeRuntimeCatalog, rustVersion: string): void {
   if (
     catalog.schemaVersion !== 1 ||
     catalog.target !== 'x86_64-unknown-linux-musl' ||
@@ -472,6 +516,17 @@ async function nativeRuntimeNotices(
     catalog.musl.notice !== 'MUSL-COPYRIGHT.txt'
   )
     throw new Error('Native runtime license/provenance pin mismatch');
+}
+
+async function nativeRuntimeNotices(
+  root: string,
+  directory: string,
+  rustVersion: string,
+): Promise<NativeRuntimeCatalog> {
+  const catalog = JSON.parse(
+    (await readBounded(join(root, 'resources/third-party/native-runtime.json'), 64 * 1024)).toString('utf8'),
+  ) as NativeRuntimeCatalog;
+  validateNativeCatalog(catalog, rustVersion);
   for (const entry of [catalog.rustStd, catalog.musl]) {
     if (
       !/^[a-f0-9]{64}$/u.test(entry.sha256) ||
@@ -512,11 +567,19 @@ async function walkCandidate(directory: string, prefix = ''): Promise<string[]> 
 
 /** Freeze one candidate before deriving any installable format. Never reads
  * operator projects, local configuration, environment files or signing keys. */
-export async function createCandidate(options: CandidateOptions = {}): Promise<Candidate> {
-  const root = await realpath(options.sourceRoot ?? process.cwd());
-  const product = validateProduct(
-    parseDocument((await readBounded(join(root, 'product.json'), 64 * 1024)).toString('utf8')),
-  );
+interface BuildContext {
+  root: string;
+  product: ProductDescriptor;
+  source: FileEvidence[];
+  digest: string;
+  now: Date;
+  nonce: string;
+  preview: boolean;
+  version: string;
+  id: string;
+  directory: string;
+}
+function validateReleaseProduct(product: ProductDescriptor): void {
   if (!/^[a-z][a-z0-9-]{0,50}$/u.test(product.command) || !/^[a-z][a-z0-9-]{0,50}$/u.test(product.debName))
     throw new Error('Product executable and package names must be safe Linux names');
   if (
@@ -525,6 +588,13 @@ export async function createCandidate(options: CandidateOptions = {}): Promise<C
     !/^[a-z0-9][a-z0-9./:_-]*$/u.test(product.image)
   )
     throw new Error('Invalid release product metadata');
+}
+async function prepareCandidate(options: CandidateOptions): Promise<BuildContext> {
+  const root = await realpath(options.sourceRoot ?? process.cwd());
+  const product = validateProduct(
+    parseDocument((await readBounded(join(root, 'product.json'), 64 * 1024)).toString('utf8')),
+  );
+  validateReleaseProduct(product);
   const source = await evidence(root, await sourceFiles(root));
   const digest = createHash('sha256').update(canonicalJson(source)).digest('hex');
   const now = new Date();
@@ -540,12 +610,11 @@ export async function createCandidate(options: CandidateOptions = {}): Promise<C
   const directory = join(outputRoot, id, 'candidate');
   await mkdir(directory, { recursive: true, mode: 0o755 });
   if ((await readdir(directory)).length) throw new Error('Candidate output already exists');
-  const runner = new CommandRunner();
-  const nodePath = options.nodePath ?? process.execPath;
-  const nativeBinary = options.nativeBinary ?? (await supervisorPath());
+
+  return { root, product, source, digest, now, nonce, preview, version, id, directory };
+}
+async function validateNativeBinary(nativeBinary: string, runner: Runtime): Promise<void> {
   assertStaticLinuxX64Elf(await readBounded(nativeBinary, 16 * 1024 * 1024));
-  if ((await runner.run([nodePath, '--version'])).stdout.trim() !== `v${NODE_VERSION}`)
-    throw new Error(`Release requires Node ${NODE_VERSION}`);
   if ((await runner.run([nativeBinary, '--version'])).stdout.trim() !== 'pxv-supervisor 0.1.0')
     throw new Error('Native supervisor version is incompatible');
   const nativeBuild = JSON.parse((await runner.run([nativeBinary, '--build-info'])).stdout) as {
@@ -559,19 +628,37 @@ export async function createCandidate(options: CandidateOptions = {}): Promise<C
     nativeBuild.protocol !== 1
   )
     throw new Error('Native supervisor must use the reviewed static musl target');
+}
+async function releaseBinaries(
+  options: CandidateOptions,
+): Promise<{ nodePath: string; nativeBinary: string }> {
+  const runner = options.runtime ?? new CommandRunner();
+  const nodePath = options.nodePath ?? process.execPath;
+  const nativeBinary = options.nativeBinary ?? (await supervisorPath());
+  if ((await runner.run([nodePath, '--version'])).stdout.trim() !== `v${NODE_VERSION}`)
+    throw new Error(`Release requires Node ${NODE_VERSION}`);
+  await validateNativeBinary(nativeBinary, runner);
   for (const binary of [nodePath, nativeBinary])
     if (!(await lstat(binary)).isFile() || (await lstat(binary)).isSymbolicLink())
       throw new Error('Bundled binaries must be regular files');
+
+  return { nodePath, nativeBinary };
+}
+async function copyPublicResources(context: BuildContext): Promise<void> {
+  const { root, directory, product, source } = context;
   const publicFiles = source
     .map((file) => file.path)
     .filter(
       (path) =>
         path === 'product.json' ||
         path === 'LICENSE' ||
+        GUIDE_DOCUMENTS.includes(path) ||
         /^(?:assets|policy-packs|manifests|config\/templates|resources|android|guides\/assets|guides\/source\/markdown|docs)\//u.test(
           path,
         ) ||
-        path === 'tools/build-android.mjs',
+        path === 'tools/build-android.mjs' ||
+        path === 'tools/lib/build-command.mjs' ||
+        path === 'tools/lib/android-build.mjs',
     );
   for (const path of publicFiles) await copy(root, path, directory);
   for (const path of [product.defaultPolicy, ...Object.values(product.assets)])
@@ -582,6 +669,13 @@ export async function createCandidate(options: CandidateOptions = {}): Promise<C
       (await readBounded(join(directory, product.defaultPolicy), 2 * 1024 * 1024)).toString('utf8'),
     ),
   );
+}
+async function installRuntimes(
+  root: string,
+  directory: string,
+  nodePath: string,
+  nativeBinary: string,
+): Promise<Metafile[]> {
   const metafiles = await bundled(root, directory);
   await mkdir(join(directory, 'bin'), { recursive: true });
   await mkdir(join(directory, 'native'), { recursive: true });
@@ -594,14 +688,15 @@ export async function createCandidate(options: CandidateOptions = {}): Promise<C
     join(directory, 'NODE-LICENSE.txt'),
     (await readBounded(nodeLicense, 2 * 1024 * 1024)).toString('utf8'),
   );
-  const command = preview ? `${product.command}-preview-${nonce}` : product.command;
-  const debName = preview ? `${product.debName}-preview-${nonce}` : product.debName;
-  await destinationWrite(join(directory, 'bin', command), shellLauncher(preview ? id : undefined), true);
-  const dependencies = await notices(root, directory, metafiles);
-  await destinationWrite(
-    join(directory, 'package.json'),
-    JSON.stringify({ name: product.packageName, version, type: 'module', private: true }, null, 2),
-  );
+
+  return metafiles;
+}
+async function candidateToolchain(
+  root: string,
+  directory: string,
+  nodePath: string,
+  nativeBinary: string,
+): Promise<{ toolchain: CandidateManifest['toolchain']; nativeRuntime: NativeRuntimeCatalog }> {
   const workspace = JSON.parse(
     (await readBounded(join(root, 'package.json'), 1024 * 1024)).toString('utf8'),
   ) as { packageManager: string; devDependencies: Record<string, string> };
@@ -610,47 +705,109 @@ export async function createCandidate(options: CandidateOptions = {}): Promise<C
   )?.[1];
   if (!rustVersion) throw new Error('Release requires an exact Rust toolchain pin');
   const nativeRuntime = await nativeRuntimeNotices(root, directory, rustVersion);
+
+  const toolchain: CandidateManifest['toolchain'] = {
+    node: NODE_VERSION,
+    nodeSha256: await hashFile(nodePath),
+    supervisorSha256: await hashFile(nativeBinary),
+    typescript:
+      workspace.devDependencies['@typescript/native'] ?? workspace.devDependencies['typescript'] ?? 'unknown',
+    pnpm: workspace.packageManager,
+    rust: rustVersion,
+    nativeTarget: 'x86_64-unknown-linux-musl',
+    nativeLinkage: 'static',
+    rustStdArchiveSha256: nativeRuntime.rustStd.sha256,
+    muslVersion: nativeRuntime.musl.version,
+    muslLibcSha256: nativeRuntime.musl.sysrootLibcSha256,
+    dockerBase: DOCKER_BASE,
+    buildkitImage: BUILDKIT_IMAGE,
+    debianSnapshot: DEBIAN_SNAPSHOT,
+    androidArchives: ANDROID_ARCHIVES.map(({ filename, sha256 }) => ({ filename, sha256 })),
+  };
+  return { toolchain, nativeRuntime };
+}
+async function sourceRevision(
+  root: string,
+  runner: Runtime,
+): Promise<Pick<CandidateManifest['source'], 'revision' | 'dirty'>> {
   const revision = await runner.run(['git', '-C', root, 'rev-parse', 'HEAD'], { check: false });
   const dirty = await runner.run(['git', '-C', root, 'status', '--porcelain', '--untracked-files=normal'], {
     check: false,
   });
-  const manifest: CandidateManifest = {
-    schemaVersion: 1,
-    id,
-    version,
-    preview,
-    product,
-    command,
-    debName,
-    sourceDigest: digest,
-    source: {
-      revision: revision.code === 0 ? revision.stdout.trim() : null,
-      dirty: dirty.code !== 0 || dirty.stdout.length > 0,
-      files: source,
-    },
-    toolchain: {
-      node: NODE_VERSION,
-      nodeSha256: await hashFile(nodePath),
-      supervisorSha256: await hashFile(nativeBinary),
-      typescript:
-        workspace.devDependencies['@typescript/native'] ??
-        workspace.devDependencies['typescript'] ??
-        'unknown',
-      pnpm: workspace.packageManager,
-      rust: rustVersion,
-      nativeTarget: 'x86_64-unknown-linux-musl',
-      nativeLinkage: 'static',
-      rustStdArchiveSha256: nativeRuntime.rustStd.sha256,
-      muslVersion: nativeRuntime.musl.version,
-      muslLibcSha256: nativeRuntime.musl.sysrootLibcSha256,
-      dockerBase: DOCKER_BASE,
-      buildkitImage: BUILDKIT_IMAGE,
-      debianSnapshot: DEBIAN_SNAPSHOT,
-      androidArchives: ANDROID_ARCHIVES.map(({ filename, sha256 }) => ({ filename, sha256 })),
-    },
-    createdAt: now.toISOString(),
-    files: [],
+  return {
+    revision: revision.code === 0 ? revision.stdout.trim() : null,
+    dirty: dirty.code !== 0 || dirty.stdout.length > 0,
   };
+}
+function spdxPackage(name: string, id: string, version: string, license: string, location = 'NOASSERTION') {
+  return {
+    name,
+    SPDXID: `SPDXRef-${id}`,
+    versionInfo: version,
+    downloadLocation: location,
+    filesAnalyzed: false,
+    licenseConcluded: license,
+    licenseDeclared: license,
+  };
+}
+function dependencyPackage(dependency: ThirdParty, index: number) {
+  const location =
+    dependency.ecosystem === 'cargo'
+      ? `https://crates.io/api/v1/crates/${dependency.name}/${dependency.version}/download`
+      : 'NOASSERTION';
+  return {
+    ...spdxPackage(dependency.name, `dependency-${index}`, dependency.version, dependency.license, location),
+    ...(dependency.checksum
+      ? { checksums: [{ algorithm: 'SHA256', checksumValue: dependency.checksum }] }
+      : {}),
+    externalRefs: [
+      {
+        referenceCategory: 'PACKAGE-MANAGER',
+        referenceType: 'purl',
+        referenceLocator: `pkg:${dependency.ecosystem}/${dependency.name}@${dependency.version}`,
+      },
+    ],
+  };
+}
+function runtimePackages(nativeRuntime: NativeRuntimeCatalog) {
+  return (
+    [
+      ['rust-std', nativeRuntime.rustStd],
+      ['musl', nativeRuntime.musl],
+    ] as const
+  ).map(([name, runtime]) => ({
+    ...spdxPackage(name, name, runtime.version, runtime.license, runtime.url),
+    checksums: [{ algorithm: 'SHA256', checksumValue: runtime.sha256 }],
+    attributionTexts: [`Statically linked runtime; see ${runtime.notice}.`],
+  }));
+}
+async function writeSbom(
+  context: BuildContext,
+  manifest: CandidateManifest,
+  nativeRuntime: NativeRuntimeCatalog,
+  dependencies: ThirdParty[],
+): Promise<void> {
+  const { directory, product, id, now } = context;
+  const packages = [
+    spdxPackage(product.name, 'pxv', '0.1.0', 'MIT'),
+    {
+      ...spdxPackage(
+        'Node.js',
+        'Node',
+        NODE_VERSION,
+        'MIT',
+        `https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.xz`,
+      ),
+      checksums: [{ algorithm: 'SHA256', checksumValue: manifest.toolchain.nodeSha256 }],
+      attributionTexts: ['See NODE-LICENSE.txt for Node.js and bundled third-party notices.'],
+    },
+    {
+      ...spdxPackage('pxv-supervisor', 'supervisor', '0.1.0', 'MIT'),
+      checksums: [{ algorithm: 'SHA256', checksumValue: manifest.toolchain.supervisorSha256 }],
+    },
+    ...runtimePackages(nativeRuntime),
+    ...dependencies.map(dependencyPackage),
+  ];
   await destinationWrite(
     join(directory, 'sbom.spdx.json'),
     JSON.stringify(
@@ -661,81 +818,44 @@ export async function createCandidate(options: CandidateOptions = {}): Promise<C
         name: id,
         documentNamespace: `https://pxv.invalid/spdx/${randomUUID()}`,
         creationInfo: { created: now.toISOString(), creators: ['Tool: pxv-release-0.1.0'] },
-        packages: [
-          {
-            name: product.name,
-            SPDXID: 'SPDXRef-pxv',
-            versionInfo: '0.1.0',
-            downloadLocation: 'NOASSERTION',
-            filesAnalyzed: false,
-            licenseConcluded: 'MIT',
-            licenseDeclared: 'MIT',
-          },
-          {
-            name: 'Node.js',
-            SPDXID: 'SPDXRef-Node',
-            versionInfo: NODE_VERSION,
-            downloadLocation: `https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.xz`,
-            filesAnalyzed: false,
-            licenseConcluded: 'MIT',
-            licenseDeclared: 'MIT',
-            checksums: [{ algorithm: 'SHA256', checksumValue: manifest.toolchain.nodeSha256 }],
-            attributionTexts: ['See NODE-LICENSE.txt for Node.js and bundled third-party notices.'],
-          },
-          {
-            name: 'pxv-supervisor',
-            SPDXID: 'SPDXRef-supervisor',
-            versionInfo: '0.1.0',
-            downloadLocation: 'NOASSERTION',
-            filesAnalyzed: false,
-            licenseConcluded: 'MIT',
-            licenseDeclared: 'MIT',
-            checksums: [{ algorithm: 'SHA256', checksumValue: manifest.toolchain.supervisorSha256 }],
-          },
-          ...(
-            [
-              ['rust-std', nativeRuntime.rustStd],
-              ['musl', nativeRuntime.musl],
-            ] as const
-          ).map(([name, runtime]) => ({
-            name,
-            SPDXID: `SPDXRef-${name}`,
-            versionInfo: runtime.version,
-            downloadLocation: runtime.url,
-            filesAnalyzed: false,
-            licenseDeclared: runtime.license,
-            licenseConcluded: runtime.license,
-            checksums: [{ algorithm: 'SHA256', checksumValue: runtime.sha256 }],
-            attributionTexts: [`Statically linked runtime; see ${runtime.notice}.`],
-          })),
-          ...dependencies.map((dependency, index) => ({
-            name: dependency.name,
-            SPDXID: `SPDXRef-dependency-${index}`,
-            versionInfo: dependency.version,
-            downloadLocation:
-              dependency.ecosystem === 'cargo'
-                ? `https://crates.io/api/v1/crates/${dependency.name}/${dependency.version}/download`
-                : 'NOASSERTION',
-            filesAnalyzed: false,
-            licenseConcluded: dependency.license,
-            licenseDeclared: dependency.license,
-            ...(dependency.checksum
-              ? { checksums: [{ algorithm: 'SHA256', checksumValue: dependency.checksum }] }
-              : {}),
-            externalRefs: [
-              {
-                referenceCategory: 'PACKAGE-MANAGER',
-                referenceType: 'purl',
-                referenceLocator: `pkg:${dependency.ecosystem}/${dependency.name}@${dependency.version}`,
-              },
-            ],
-          })),
-        ],
+        packages,
       },
       null,
       2,
     ),
   );
+}
+
+export async function createCandidate(options: CandidateOptions = {}): Promise<Candidate> {
+  const context = await prepareCandidate(options);
+  const { root, directory, product, source, digest, now, nonce, preview, version, id } = context;
+  const { nodePath, nativeBinary } = await releaseBinaries(options);
+  await copyPublicResources(context);
+  const metafiles = await installRuntimes(root, directory, nodePath, nativeBinary);
+  const command = preview ? `${product.command}-preview-${nonce}` : product.command;
+  const debName = preview ? `${product.debName}-preview-${nonce}` : product.debName;
+  await destinationWrite(join(directory, 'bin', command), shellLauncher(preview ? id : undefined), true);
+  const dependencies = await notices(root, directory, metafiles);
+  await destinationWrite(
+    join(directory, 'package.json'),
+    JSON.stringify({ name: product.packageName, version, type: 'module', private: true }, null, 2),
+  );
+  const { toolchain, nativeRuntime } = await candidateToolchain(root, directory, nodePath, nativeBinary);
+  const manifest: CandidateManifest = {
+    schemaVersion: 1,
+    id,
+    version,
+    preview,
+    product,
+    command,
+    debName,
+    sourceDigest: digest,
+    source: { ...(await sourceRevision(root, options.runtime ?? new CommandRunner())), files: source },
+    toolchain,
+    createdAt: now.toISOString(),
+    files: [],
+  };
+  await writeSbom(context, manifest, nativeRuntime, dependencies);
   const finalSource = await evidence(root, await sourceFiles(root));
   if (canonicalJson(finalSource) !== canonicalJson(source))
     throw new Error('Source inputs changed during build; retry with a stable working tree');
@@ -774,8 +894,4 @@ export async function copyCandidate(source: string, destination: string, omitNod
     const stat = await lstat(join(source, path));
     await chmod(target, stat.mode & 0o111 ? 0o755 : 0o644);
   }
-}
-
-export function candidateRelative(candidate: Candidate, path: string): string {
-  return relative(dirname(candidate.directory), path);
 }

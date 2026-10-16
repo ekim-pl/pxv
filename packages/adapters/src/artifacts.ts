@@ -1,3 +1,4 @@
+import { parseApkCompatibility } from './apk-compatibility.js';
 import type { ArtifactPolicy } from '@pxv/contracts';
 import { mkdtemp, rm, unlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -5,45 +6,13 @@ import { join } from 'node:path';
 import { AdapterError, checked, packageId, sha256Pin, type CommandRunner } from './command.js';
 import { copySnapshot, download, fileDigest, regularFile, seal } from './files.js';
 
-export const MAX_APK_BYTES = 512 * 1024 * 1024;
+const MAX_APK_BYTES = 512 * 1024 * 1024;
 export interface ApkIdentity {
   packageId: string;
   versionCode: number;
   signerSha256: string;
 }
-export interface ApkCompatibility {
-  minSdk: number;
-  maxSdk?: number;
-  abis: string[];
-}
-export function parseApkCompatibility(badging: string): ApkCompatibility {
-  const minimum = [...badging.matchAll(/^sdkVersion:'(\d+)'$/gm)];
-  const maximum = [...badging.matchAll(/^maxSdkVersion:'(\d+)'$/gm)];
-  const native = [...badging.matchAll(/^native-code:\s*(.*)$/gm)];
-  if (
-    (/^sdkVersion:/m.test(badging) && minimum.length !== 1) ||
-    (/^maxSdkVersion:/m.test(badging) && maximum.length !== 1)
-  )
-    throw new AdapterError('APK requires numeric, unambiguous SDK compatibility metadata');
-  if (minimum.length > 1 || maximum.length > 1 || native.length > 1)
-    throw new AdapterError('APK compatibility metadata is ambiguous');
-  const minSdk = minimum[0]?.[1] ? Number(minimum[0][1]) : 1;
-  const maxSdk = maximum[0]?.[1] ? Number(maximum[0][1]) : undefined;
-  if (
-    !Number.isSafeInteger(minSdk) ||
-    minSdk < 1 ||
-    (maxSdk !== undefined && (!Number.isSafeInteger(maxSdk) || maxSdk < minSdk))
-  )
-    throw new AdapterError('APK SDK compatibility metadata is invalid');
-  const raw = native[0]?.[1] ?? '';
-  if (raw && !/^(?:'[A-Za-z0-9_-]+'\s*)+$/.test(raw))
-    throw new AdapterError('APK ABI compatibility metadata is invalid');
-  return {
-    minSdk,
-    ...(maxSdk === undefined ? {} : { maxSdk }),
-    abis: [...raw.matchAll(/'([^']+)'/g)].map((match) => match[1] ?? ''),
-  };
-}
+
 export interface VerifiedArtifact extends ApkIdentity {
   path: string;
   sha256: string;

@@ -24,6 +24,8 @@ Understand which VPN/routing arrangement applies to each profile. A VPN icon doe
 
 Know what is backed up, where it is kept, how it is encrypted and what a successful restore looked like. Keep recovery material outside the phone. A backup-enabled switch is not proof of a usable backup. Test representative restoration before relying on a new device or a new destination.
 
+Arrange a restore rehearsal with your provider before erasing or replacing your primary phone. The [backup and recovery runbook](CANARY_BACKUP_RECOVERY.md) explains the operator procedure; enter your recovery material privately and check the recovered data yourself.
+
 ## Acceptance and everyday use
 
 Before custody transfer, verify the asset label, chosen language, required profiles, expected apps, contact/support information and agreed live checks. Confirm temporary setup/probe helpers are gone and debugging toggles are off. Retain the EN or PL handoff document; it deliberately excludes device credentials and recovery values.

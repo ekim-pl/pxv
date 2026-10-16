@@ -12,15 +12,18 @@ Korzystaj z wydzielonego autoryzowanego telefonu. Gotowe pakiety z jednym, pięc
 
 ## Host i nowy projekt
 
-Pierwszą platformą jest Linux x86_64. Weryfikacja obejmuje Debian 12 i Ubuntu 24.04. Wersje narzędzi są przypięte: Node 24.22.0 LTS, kompilator TypeScript 7.0.2 i pnpm 12.11.2. Archiwum przenośne oraz pakiet Debian zawierają Node i nadzorcę Linux; pakiet npm wymaga obsługiwanej instalacji Node. Kod źródłowy wymaga również Rust do zbudowania nadzorcy.
+Pierwszą platformą jest Linux x86_64. Weryfikacja obejmuje Debian 12 i Ubuntu 24.04. Wersje narzędzi są przypięte: Node 24.22.0 LTS, kompilator TypeScript 7.0.2 i pnpm 12.11.2. Archiwum przenośne oraz pakiet Debian zawierają Node i nadzorcę Linux; pakiet npm wymaga obsługiwanej instalacji Node. Kod źródłowy wymaga również Rust 1.99.1 z targetem x86_64-unknown-linux-musl oraz komponentami rustfmt i Clippy. Przygotuj Java, Android SDK i narzędzia hosta zgodnie z instrukcją zależności w repozytorium.
 
 ~~~sh
 pnpm install --frozen-lockfile
+pnpm quality:setup
 pnpm build:native
 pnpm build
-pnpm check
-pnpm test
+pnpm quality
+pnpm pxv --help
 ~~~
+
+`pnpm quality:setup` jawnie instaluje przypięte narzędzia analizy. Po przygotowaniu zależności i narzędzi `pnpm quality` wykonuje bramkę offline: ścisłe sprawdzanie typów, granice pakietów, wykrywanie nieużywanego kodu w trybie deweloperskim i produkcyjnym, testy, testy procesów natywnych oraz rzeczywiste sprawdzenia helperów Android. Każdy moduł aplikacji TypeScript, także workery i narzędzia wydania, musi osiągnąć 90% pokrycia linii oraz 85% gałęzi. Funkcje TypeScript/JavaScript mają limit klasycznej złożoności cyklomatycznej 10, zagnieżdżenia 4 i 80 niepustych linii bez komentarzy. Funkcje Rust i Java mają limit złożoności cyklomatycznej 10; działają też Rustfmt, Clippy i ShellCheck. Tożsamość bieżących źródeł, wersje narzędzi i dowody dla modułów zapisują się w `.quality/report.json` oraz `.quality/report.md`. Te sprawdzenia nie potwierdzają akceptacji urządzenia na żywo.
 
 Dalsze przykłady używają zainstalowanego polecenia `pxv`. W drzewie źródłowym użyj `pnpm pxv`. Utwórz prywatny projekt poza instalacją i repozytorium:
 
@@ -40,7 +43,7 @@ Projekt zawiera `pxv.project.json` z formatem `pxv-ts`, `policy.yaml`, `inventor
 
 Sprawdź oficjalny obraz OS, kod urządzenia, podpis i zaufany klucz, wersje APK, skróty treści, przypięte podpisy aplikacji i repozytoriów, profile, uprawnienia, ustawienia, VPN, transport kopii oraz wymagane kontrole ręczne. Wymagany jest dokładnie jeden profil właściciela. Liczba i nazwy pozostałych profili zależą od wdrożenia.
 
-Blokada polityki wiąże produkt, silnik, konfigurację, artefakty i rozszerzenia. Zmiana któregokolwiek z tych elementów wymaga nowego przeglądu. Powtórzone klucze i nieznane pola są błędami.
+Blokada polityki wiąże produkt, silnik, konfigurację, artefakty i rozszerzenia. Zmiana któregokolwiek z tych elementów wymaga nowego przeglądu. Powtórzone klucze i nieznane pola są błędami. Jeżeli po załadowaniu zmienią się konfiguracja projektu, polityka, inwentarz lub kod wykonywalny, silnik odrzuci nieaktualny kontekst. Załaduj projekt ponownie przez nowe wywołanie CLI lub świeże żądanie MCP, odtwórz blokadę po zmianie jej danych wejściowych i przygotuj nowy plan do przeglądu. Zapisana zgoda nie zatwierdza edytowanych danych.
 
 ~~~sh
 pxv policy validate --project-root "$P"
@@ -75,9 +78,9 @@ pxv device attest --project-root "$P" --asset lab-01 \
 pxv agent resume --project-root "$P" --run RUN_ID --yes
 ~~~
 
-Receptura UI jest związana z odciskiem OS i dokładną wersją/podpisem aplikacji. Nieobsługiwany ekran pozostaje zadaniem ręcznym. Próba kliknięcia nie dowodzi wykonania konfiguracji. Notatka nie może zastąpić pomiaru, który przeczy wymaganiu polityki.
+Receptura UI jest związana z odciskiem OS i dokładną wersją/podpisem aplikacji. Nieobsługiwany ekran pozostaje zadaniem ręcznym. Próba kliknięcia nie dowodzi wykonania konfiguracji. Receptura wybierająca prywatny plik tymczasowy sprawdza zaakceptowany adapter wyboru pliku przed uruchomieniem aplikacji i transferem. Bez takiej obsługi wykonaj cały import prywatnie zatwierdzoną metodą transferu; plik tymczasowy nie czeka na późniejszy ręczny wybór. Jeżeli obsługa zmieni się po transferze, własne pliki tymczasowe są usuwane; nieudane sprzątanie pozostaje zobowiązaniem do odzyskania. Notatka nie może zastąpić pomiaru, który przeczy wymaganiu polityki.
 
-Jeżeli przegląd pozostałej pracy wygaśnie, użyj `agent refresh --run RUN_ID`. Otrzymasz nowy plan wyłącznie niewykonanych kroków, jego `planId`, dokładny `reviewSummary` i termin. Zapisz zdekodowaną treść reviewSummary bez zmian w prywatnym pliku, sprawdź nowy plan i użyj `agent execute --plan NEW_PLAN_ID --review-file FILE --operator NAME`. Odświeżenie samo nie zatwierdza ani nie wykonuje zmian; przerwana mutacja nadal wymaga inspekcji i odzyskiwania.
+Jeżeli przegląd pozostałej pracy wygaśnie, użyj `agent refresh --run RUN_ID`. Otrzymasz nowy plan wyłącznie niewykonanych kroków, jego `planId`, dokładny `reviewSummary` i termin. Zapisz zdekodowaną treść reviewSummary bez zmian w prywatnym pliku, sprawdź nowy plan i użyj `agent execute --plan NEW_PLAN_ID --review-file FILE --operator NAME`. Odświeżenie samo nie zatwierdza ani nie wykonuje zmian i nie stanowi zgody na zmienioną politykę lub kod wykonywalny. Zmienione dane załaduj ponownie i przygotuj świeży przegląd. Przerwana mutacja nadal wymaga inspekcji i odzyskiwania.
 
 ## Instalacja systemu i wymazanie
 
@@ -117,7 +120,7 @@ pxv device recover --project-root "$P" --asset lab-01 \
 
 Najpierw obejrzyj telefon i zapisane zobowiązania. Odzyskiwanie wiąże użytkownika z jego stabilnym numerem seryjnym Androida, nie tylko ponownie użytym ID i nazwą. Nowo utworzony użytkownik nie jest starym celem sprzątania. Podoperacja sondy sieciowej zwalnia tylko własne zasoby, nigdy zasoby całego wdrożenia.
 
-Nieudane odzyskiwanie zachowuje rezerwację i historię prób. Żywego nadzorcy nie da się ominąć potwierdzeniem ręcznym. Nieudowodnione sprzątanie procesów może wymagać restartu hosta i inspekcji. Nigdy nie usuwaj blokad, bazy ani pokwitowań, żeby wymusić gotowość. Przerwane mutacje nie są samoczynnie odtwarzane. Anulowanie nie cofa dowolnego flashowania, zmiany aplikacji ani wpisania konta.
+Nieudane sprzątanie otrzymuje stan `blocked`, zachowując nierozwiązane zobowiązanie, ewentualną rezerwację natywną i historię prób. Po inspekcji telefonu i dowodów właściciela ponów odzyskiwanie jawnie przez `device recover` w zapisanej linii odzyskiwania. Każda próba sprawdza pierwotny zakres właściciela, urządzenie i stabilnego użytkownika Androida; rozwiązane zobowiązania nie są odtwarzane. Żywego nadzorcy nie da się ominąć potwierdzeniem ręcznym. Nieudowodnione sprzątanie procesów może wymagać restartu hosta i inspekcji. Nigdy nie usuwaj blokad, bazy ani pokwitowań, żeby wymusić gotowość. Przerwane mutacje nie są samoczynnie odtwarzane. Anulowanie nie cofa dowolnego flashowania, zmiany aplikacji ani wpisania konta.
 
 ## Pomiar, akceptacja i przekazanie
 
@@ -155,7 +158,7 @@ Wersja white-label jest osobnym forkiem z własnymi zasobami, manifestami i konf
 6. Odłącz telefon i zabezpiecz prywatny projekt.
 7. Zapisz nieukończoną kwalifikację zgodnie z faktami.
 
-Testy offline nie certyfikują polityki ani przepływu UI. Kwalifikacja wymaga zachowanych dowodów emulatora GrapheneOS i autoryzowanego Pixel 8a w EN/PL, z izolacją, restartem, routingiem, awarią, restore i przekazaniem. Zwykły emulator Google APIs nie jest dowodem pochodzenia GrapheneOS.
+Testy offline nie certyfikują polityki ani przepływu UI. Kwalifikacja wymaga zachowanych dowodów emulatora GrapheneOS i autoryzowanego Pixel 8a w EN/PL, z izolacją, restartem, routingiem, awarią, restore i przekazaniem. Zwykły emulator Google APIs nie jest dowodem pochodzenia GrapheneOS. Bieżący refaktoring źródeł ma wyłącznie weryfikację offline. Zachowane wyniki Pixel dotyczą kandydata wskazanego w zapisie, a nie nowego buildu po refaktoringu.
 
 ## Wskazówki z wybranej polityki
 

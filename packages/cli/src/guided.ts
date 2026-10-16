@@ -49,7 +49,7 @@ export function guidedNextSteps(
 ): string[] {
   const quote = (value: string): string => `'${value.replaceAll("'", "'\\''")}'`;
   const scope = `--project-root ${quote(projectRoot)}`;
-  if (run.status === 'needs-inspection' || run.status === 'failed' || run.status === 'cancelled')
+  if (['needs-inspection', 'failed', 'cancelled'].includes(run.status))
     return [
       locale === 'pl'
         ? 'Sprawdź urządzenie i zachowane zobowiązania odzyskiwania. Nie odtwarzaj przerwanej operacji.'

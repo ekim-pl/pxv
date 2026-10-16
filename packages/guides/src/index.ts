@@ -21,7 +21,8 @@ export interface HandoffSnapshot {
   assetId: string;
   resolvedPolicy: ResolvedPolicy;
 }
-export interface RenderedHandoff {
+/** Pure renderer result. */
+interface RenderedHandoff {
   markdown: string;
   html: string;
 }
@@ -77,12 +78,14 @@ function markdown(value: string): string {
   return value.replace(/[\\`*_[\]{}()#+.!|<>-]/gu, '\\$&').replace(/[\r\n]/gu, ' ');
 }
 
-/** Only this explicit projection enters recipient artifacts; project state,
- * device serials, account names and arbitrary configuration are never rendered. */
-export function renderHandoff(
-  snapshot: HandoffSnapshot,
-  locale: 'en' | 'pl' = snapshot.record.locale,
-): RenderedHandoff {
+function validateDisplay(snapshot: HandoffSnapshot, record: HandoffRecord, locale: 'en' | 'pl'): void {
+  if (locale !== 'en' && locale !== 'pl') throw new Error('Unsupported handoff locale');
+  if (record.outcome !== 'ready-for-handoff' && record.outcome !== 'completed-custody')
+    throw new Error('Only accepted handoff outcomes can produce recipient documents');
+  if (!snapshot.assetId || snapshot.assetId.length > 160 || /[\r\n]/u.test(snapshot.assetId))
+    throw new Error('Invalid public asset identifier');
+}
+function validatedHandoff(snapshot: HandoffSnapshot, locale: 'en' | 'pl') {
   const product = validateProduct(snapshot.product);
   const policy = validatePolicy(snapshot.policy);
   const record = validateHandoff(snapshot.record);
@@ -94,11 +97,19 @@ export function renderHandoff(
     digest(product) !== digest(resolved.product)
   )
     throw new Error('Handoff documents require the exact accepted policy snapshot');
-  if (locale !== 'en' && locale !== 'pl') throw new Error('Unsupported handoff locale');
-  if (record.outcome !== 'ready-for-handoff' && record.outcome !== 'completed-custody')
-    throw new Error('Only accepted handoff outcomes can produce recipient documents');
-  if (!snapshot.assetId || snapshot.assetId.length > 160 || /[\r\n]/u.test(snapshot.assetId))
-    throw new Error('Invalid public asset identifier');
+
+  validateDisplay(snapshot, record, locale);
+  return { product, policy, record };
+}
+
+/** Only this explicit projection enters recipient artifacts; project state,
+ * device serials, account names and arbitrary configuration are never rendered. */
+/** @internal Pure rendering contract, exercised separately from filesystem/PDF effects. */
+export function renderHandoff(
+  snapshot: HandoffSnapshot,
+  locale: 'en' | 'pl' = snapshot.record.locale,
+): RenderedHandoff {
+  const { product, policy, record } = validatedHandoff(snapshot, locale);
   const text = labels[locale];
   const rows: [[string, string], ...[string, string][]] = [
     [text.asset, snapshot.assetId],

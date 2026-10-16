@@ -28,6 +28,8 @@ Zapytaj, jakie zadania wykonuje się w każdym profilu, jakie zmiany wymagają w
 
 Ustaw zwykłą blokadę przy zapewnionej prywatności. Konta, MFA i dane odzyskiwania wpisuj na telefonie lub w zatwierdzonym procesie danej usługi. Nie dopisuj ich do przewodnika, notatki operatora, repozytorium, rozmowy ze wsparciem ani niezatwierdzonego zdjęcia. Wsparcie nie powinno potrzebować tych wartości w załączniku projektu.
 
+Jeżeli przygotowanie przekazuje Ci ręczne zadanie importu, plik tymczasowy nie pozostaje do późniejszego wyboru. Poproś o pełną zatwierdzoną procedurę prywatnego transferu i importu. Prywatna konfiguracja nie należy do rozmów ze wsparciem ani załączników projektu.
+
 Ustal sposób przechowywania danych odzyskiwania poza telefonem. Oddziel informacje pozwalające odblokować urządzenie od samego urządzenia. Jeśli potrzebna jest pomoc w odzyskaniu dostępu, poproś o procedurę chroniącą prywatność.
 
 Najpierw kończy się zwykłe dane, potem język, a następnie opcjonalną konfigurację duress. Duress może mieć destrukcyjne skutki. Nie wpisuj takiego kodu, żeby sprawdzić działanie. Poproś dostawcę o dokładną instrukcję unikania pomyłek oraz bezpiecznej wymiany i wycofania telefonu. Korzystaj z oficjalnych instrukcji GrapheneOS dla rzeczywiście zainstalowanej wersji.

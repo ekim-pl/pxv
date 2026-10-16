@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createHash } from 'node:crypto';
-import { lstat, mkdir, mkdtemp, readFile, readdir, rm, symlink } from 'node:fs/promises';
+import { lstat, mkdir, mkdtemp, readdir, rm, symlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { CommandOptions, CommandResult, CommandRunner } from '@pxv/adapters';
@@ -92,7 +92,7 @@ afterEach(async () => {
   await rm(root, { recursive: true, force: true });
 });
 describe('explicit Docker execution and independent ADB lifecycle', () => {
-  it('defaults raw image execution to foreground host-ADB mode unless direct mode is explicit', async () => {
+  it('defaults raw image execution to foreground host-ADB mode unless direct mode is explicit', () => {
     const manifest = {
       product,
       version: '0.1.0',
@@ -100,9 +100,6 @@ describe('explicit Docker execution and independent ADB lifecycle', () => {
       sourceDigest: 'a'.repeat(64),
     } as CandidateManifest;
     expect(dockerfile(manifest)).toContain(' PXV_DOCKER_MODE=host-adb ');
-    expect(await readFile(new URL('../../Dockerfile', import.meta.url), 'utf8')).toContain(
-      ' PXV_DOCKER_MODE=host-adb ',
-    );
   });
   it('prepares private persistent control and keys only through the explicit preparation command', async () => {
     const unprepared = {

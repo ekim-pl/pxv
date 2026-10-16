@@ -1,0 +1,12 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "composite": false,
+    "noEmit": true,
+    "allowJs": true,
+    "checkJs": true,
+    "allowImportingTsExtensions": true,
+    "rootDir": "."
+  },
+  "include": ["tools/**/*.mjs", "guides/source/rebuild.mjs", "eslint.config.mjs"]
+}

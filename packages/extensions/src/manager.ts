@@ -1,20 +1,16 @@
+import type { Action, ExtensionLock, PolicyPack } from '@pxv/contracts';
+import { canonicalJson, parseDocument, validateExtension, validatePolicy } from '@pxv/contracts';
+import { readBounded } from '@pxv/runtime';
 import { createHash, randomUUID } from 'node:crypto';
 import { chmod, lstat, mkdir, readdir, rename, rm, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { Worker } from 'node:worker_threads';
-import { extract, list } from 'tar';
-import {
-  canonicalJson,
-  parseDocument,
-  validateAction,
-  validateExtension,
-  validatePolicy,
-} from '@pxv/contracts';
-import type { Action, ExtensionLock, PolicyPack } from '@pxv/contracts';
-import { readBounded } from '@pxv/runtime';
-import { safeRelativePath, validateMetadata } from './metadata.js';
+import { extract } from 'tar';
+import { ExtensionDownloader, registryUrl } from './download.js';
 import type { ExtensionMetadata } from './metadata.js';
+import { validateMetadata } from './metadata.js';
+import { validateWorkerInput, validateWorkerResult } from './worker-protocol.js';
 
 export type ExtensionSource = { tarball: string; integrity?: string } | { package: string; version: string };
 export interface ExtensionManagerOptions {
@@ -25,57 +21,10 @@ export interface ExtensionManagerOptions {
   maxArchiveBytes?: number;
   maxExpandedBytes?: number;
 }
-interface ArchiveEntry {
-  path: string;
-  size: number;
-  sha256: string;
-}
-
 const hash = (value: Uint8Array): string => createHash('sha512').update(value).digest('base64');
 const isMissing = (error: unknown): boolean => (error as NodeJS.ErrnoException).code === 'ENOENT';
 
-async function archiveEntries(file: string, maxExpandedBytes: number): Promise<ArchiveEntry[]> {
-  const entries: ArchiveEntry[] = [];
-  const completions: Promise<void>[] = [];
-  let total = 0;
-  let invalid: string | undefined;
-  const names = new Set<string>();
-  await list({
-    file,
-    strict: true,
-    onReadEntry(entry) {
-      const path = entry.path.replace(/\/$/u, '');
-      if (!path.startsWith('package/') && path !== 'package')
-        invalid = 'Extension tarball must have a package/ root';
-      const relative = path.slice('package/'.length);
-      if (path !== 'package' && !safeRelativePath(relative)) invalid = 'Unsafe extension archive path';
-      if (entry.type !== 'File' && entry.type !== 'Directory')
-        invalid = 'Extension archives cannot contain links or special files';
-      if (names.has(path)) invalid = 'Duplicate extension archive path';
-      names.add(path);
-      if (relative.split('/').some((part) => ['.npmrc', '.env', 'node_modules'].includes(part)))
-        invalid = 'Extension archives cannot contain credentials or runtime dependencies';
-      total += entry.size;
-      if (total > maxExpandedBytes) invalid = 'Expanded extension archive exceeds size limit';
-      if (entry.type === 'File') {
-        const digest = createHash('sha256');
-        completions.push(
-          new Promise<void>((resolveEntry, reject) => {
-            entry.on('data', (chunk: Buffer) => digest.update(chunk));
-            entry.on('end', () => {
-              entries.push({ path: relative, size: entry.size, sha256: digest.digest('hex') });
-              resolveEntry();
-            });
-            entry.on('error', reject);
-          }),
-        );
-      }
-    },
-  });
-  await Promise.all(completions);
-  if (invalid) throw new Error(invalid);
-  return entries.sort((a, b) => a.path.localeCompare(b.path));
-}
+import { archiveEntries, type ArchiveEntry } from './archive.js';
 
 async function validateTree(directory: string, entries: ArchiveEntry[]): Promise<void> {
   const expected = new Set(entries.map((entry) => entry.path));
@@ -102,13 +51,7 @@ async function validateTree(directory: string, entries: ArchiveEntry[]): Promise
   }
 }
 
-async function metadataAt(directory: string): Promise<ExtensionMetadata> {
-  const metadata = validateMetadata(
-    parseDocument((await readBounded(join(directory, 'pxv-extension.json'), 1024 * 1024)).toString('utf8')),
-  );
-  const parsed = parseDocument(
-    (await readBounded(join(directory, 'package.json'), 1024 * 1024)).toString('utf8'),
-  );
+function validateManifest(parsed: unknown, metadata: ExtensionMetadata): void {
   if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed))
     throw new Error('Invalid extension package manifest');
   const manifest = parsed as Record<string, unknown>;
@@ -119,6 +62,10 @@ async function metadataAt(directory: string): Promise<ExtensionMetadata> {
     manifest['type'] !== 'module'
   )
     throw new Error('Extension package identity or entry does not match metadata');
+
+  validateBundleDependencies(manifest);
+}
+function validateBundleDependencies(manifest: Record<string, unknown>): void {
   for (const key of [
     'scripts',
     'dependencies',
@@ -132,6 +79,15 @@ async function metadataAt(directory: string): Promise<ExtensionMetadata> {
     if (value !== undefined && (value === null || typeof value !== 'object' || Object.keys(value).length > 0))
       throw new Error('Extension bundles must not contain lifecycle scripts or dependencies');
   }
+}
+async function metadataAt(directory: string): Promise<ExtensionMetadata> {
+  const metadata = validateMetadata(
+    parseDocument((await readBounded(join(directory, 'pxv-extension.json'), 1024 * 1024)).toString('utf8')),
+  );
+  validateManifest(
+    parseDocument((await readBounded(join(directory, 'package.json'), 1024 * 1024)).toString('utf8')),
+    metadata,
+  );
   for (const path of [
     metadata.entry,
     ...metadata.contributions.policyPacks,
@@ -144,32 +100,48 @@ async function metadataAt(directory: string): Promise<ExtensionMetadata> {
   return metadata;
 }
 
+function registryDistribution(
+  body: Buffer,
+  source: { package: string; version: string },
+): { tarball: string; integrity: string } {
+  const parsed: unknown = parseDocument(body.toString('utf8'));
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed))
+    throw new Error('Invalid registry metadata');
+  const manifest = parsed as Record<string, unknown>;
+  const dist = manifest['dist'] as Record<string, unknown> | undefined;
+  if (
+    manifest['name'] !== source.package ||
+    manifest['version'] !== source.version ||
+    !dist ||
+    typeof dist['tarball'] !== 'string' ||
+    typeof dist['integrity'] !== 'string'
+  )
+    throw new Error('Registry metadata does not match the requested exact version');
+  validateExtension({
+    id: source.package,
+    version: source.version,
+    integrity: dist['integrity'],
+    apiVersion: 1,
+    entry: 'index.js',
+    installPath: 'validation-only',
+  });
+
+  return dist as { tarball: string; integrity: string };
+}
+
 export class ExtensionManager {
   readonly installRoot: string;
   readonly #registry: URL | undefined;
-  readonly #token: string | undefined;
-  readonly #fetch: typeof fetch;
+  readonly #downloader: ExtensionDownloader;
   readonly #maxArchiveBytes: number;
   readonly #maxExpandedBytes: number;
 
   constructor(options: ExtensionManagerOptions) {
     this.installRoot = resolve(options.installRoot);
-    this.#registry = options.registry
-      ? new URL(options.registry.endsWith('/') ? options.registry : `${options.registry}/`)
-      : undefined;
-    if (
-      this.#registry &&
-      (this.#registry.protocol !== 'https:' ||
-        this.#registry.username ||
-        this.#registry.password ||
-        this.#registry.search ||
-        this.#registry.hash)
-    )
-      throw new Error('Private registry must use HTTPS without embedded credentials');
+    this.#registry = registryUrl(options.registry);
     if (options.token?.includes('\n') || options.token?.includes('\r'))
       throw new Error('Invalid registry token');
-    this.#token = options.token;
-    this.#fetch = options.fetch ?? fetch;
+    this.#downloader = new ExtensionDownloader(this.#registry, options.token, options.fetch ?? fetch);
     this.#maxArchiveBytes = options.maxArchiveBytes ?? 25 * 1024 * 1024;
     this.#maxExpandedBytes = options.maxExpandedBytes ?? 100 * 1024 * 1024;
     if (
@@ -178,58 +150,6 @@ export class ExtensionManager {
       )
     )
       throw new Error('Invalid extension size limit');
-  }
-
-  async #download(initial: URL, maxBytes: number): Promise<Buffer> {
-    let url = initial;
-    for (let redirects = 0; redirects <= 5; redirects++) {
-      if (url.protocol !== 'https:' || url.username || url.password)
-        throw new Error('Unsafe extension download URL');
-      const headers: Record<string, string> = {};
-      if (this.#token && url.origin === this.#registry?.origin)
-        headers['authorization'] = `Bearer ${this.#token}`;
-      let response: Response;
-      try {
-        response = await this.#fetch(url, {
-          headers,
-          redirect: 'manual',
-          signal: AbortSignal.timeout(30_000),
-        });
-      } catch {
-        throw new Error('Extension registry request failed');
-      }
-      if ([301, 302, 303, 307, 308].includes(response.status)) {
-        const location = response.headers.get('location');
-        await response.body?.cancel();
-        if (!location) throw new Error('Extension registry redirect has no location');
-        url = new URL(location, url);
-        continue;
-      }
-      if (!response.ok) {
-        await response.body?.cancel();
-        throw new Error(`Extension registry returned HTTP ${response.status}`);
-      }
-      if (!response.body) throw new Error('Extension registry returned an empty response');
-      const chunks: Uint8Array[] = [];
-      let total = 0;
-      const reader = response.body.getReader();
-      try {
-        while (true) {
-          const next = await reader.read();
-          if (next.done) break;
-          total += next.value.byteLength;
-          if (total > maxBytes) {
-            await reader.cancel();
-            throw new Error('Extension download exceeds size limit');
-          }
-          chunks.push(next.value);
-        }
-      } finally {
-        reader.releaseLock();
-      }
-      return Buffer.concat(chunks);
-    }
-    throw new Error('Too many extension registry redirects');
   }
 
   async #source(
@@ -250,32 +170,12 @@ export class ExtensionManager {
       entry: 'index.js',
       installPath: 'validation-only',
     });
-    const body = await this.#download(
+    const body = await this.#downloader.download(
       new URL(`${encodeURIComponent(source.package)}/${encodeURIComponent(source.version)}`, this.#registry),
       1024 * 1024,
     );
-    const parsed: unknown = JSON.parse(body.toString('utf8'));
-    if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed))
-      throw new Error('Invalid registry metadata');
-    const manifest = parsed as Record<string, unknown>;
-    const dist = manifest['dist'] as Record<string, unknown> | undefined;
-    if (
-      manifest['name'] !== source.package ||
-      manifest['version'] !== source.version ||
-      !dist ||
-      typeof dist['tarball'] !== 'string' ||
-      typeof dist['integrity'] !== 'string'
-    )
-      throw new Error('Registry metadata does not match the requested exact version');
-    validateExtension({
-      id: source.package,
-      version: source.version,
-      integrity: dist['integrity'],
-      apiVersion: 1,
-      entry: 'index.js',
-      installPath: 'validation-only',
-    });
-    const content = await this.#download(new URL(dist['tarball']), this.#maxArchiveBytes);
+    const dist = registryDistribution(body, source);
+    const content = await this.#downloader.download(new URL(dist['tarball']), this.#maxArchiveBytes);
     const integrity = `sha512-${hash(content)}`;
     if (integrity !== dist['integrity']) throw new Error('Extension integrity mismatch');
     return { content, integrity, expected: { id: source.package, version: source.version } };
@@ -296,8 +196,6 @@ export class ExtensionManager {
     try {
       await writeFile(archive, content, { flag: 'wx', mode: 0o600 });
       const entries = await archiveEntries(archive, this.#maxExpandedBytes);
-      if (entries.some((entry) => entry.path.startsWith('.pxv-')))
-        throw new Error('Reserved extension archive path');
       await extract({
         file: archive,
         cwd: stage,
@@ -388,17 +286,6 @@ export class ExtensionManager {
     return next;
   }
 
-  async remove(lock: ExtensionLock, options: { inUse?: ExtensionLock[] } = {}): Promise<void> {
-    if (
-      options.inUse?.some(
-        (used) => used.id === lock.id && used.version === lock.version && used.integrity === lock.integrity,
-      )
-    )
-      throw new Error('Extension is still referenced by a project lock');
-    await this.inspect(lock);
-    await rm(join(this.installRoot, lock.installPath), { recursive: true });
-  }
-
   async invoke(lock: ExtensionLock, command: string, input: unknown, timeoutMs = 30_000): Promise<Action[]> {
     const metadata = await this.inspect(lock);
     if (!metadata.contributions.commands.includes(command))
@@ -444,7 +331,7 @@ export class ExtensionManager {
   ): Promise<Action[]> {
     if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 300_000)
       throw new Error('Invalid extension worker timeout');
-    if (canonicalJson(input).length > 1024 * 1024) throw new Error('Extension input exceeds size limit');
+    validateWorkerInput(input);
     let workerPath = fileURLToPath(new URL('./worker.js', import.meta.url));
     if (
       await lstat(workerPath)
@@ -454,12 +341,15 @@ export class ExtensionManager {
           throw error;
         })
     )
-      workerPath = fileURLToPath(new URL('./worker.ts', import.meta.url));
+      workerPath = fileURLToPath(new URL('../dist/worker.js', import.meta.url));
+    const instrumentation = process.env['NODE_V8_COVERAGE'];
+    const workerEnv: Record<string, string> = {};
+    if (instrumentation) workerEnv['NODE_V8_COVERAGE'] = instrumentation;
     const entry = pathToFileURL(join(this.installRoot, lock.installPath, entryPath)).href;
     return await new Promise<Action[]>((resolveActions, reject) => {
       const worker = new Worker(workerPath, {
         workerData: { entry, mode, command, input },
-        env: {},
+        env: workerEnv,
         stdout: true,
         stderr: true,
         resourceLimits: { maxOldGenerationSizeMb: 128 },
@@ -477,10 +367,11 @@ export class ExtensionManager {
       worker.once('message', (message: unknown) => {
         finish();
         try {
-          if (!Array.isArray(message)) throw new Error('Extension command must return planned core actions');
-          if (message.length > 10_000 || canonicalJson(message).length > 1024 * 1024)
-            throw new Error('Extension result exceeds size limit');
-          resolveActions(message.map(validateAction));
+          if (!message || typeof message !== 'object') throw new Error('Invalid extension worker response');
+          const envelope = message as { ok?: unknown; actions?: unknown; error?: unknown };
+          if (envelope.ok !== true)
+            throw new Error(typeof envelope.error === 'string' ? envelope.error : 'Extension worker failed');
+          resolveActions(validateWorkerResult(envelope.actions));
         } catch (error) {
           reject(error instanceof Error ? error : new Error('Invalid extension result'));
         }

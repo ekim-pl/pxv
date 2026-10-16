@@ -245,7 +245,50 @@ export const networkProbePolicySchema = z
     failurePackages: z.array(packageId).refine(uniqueStrings, 'Duplicate failure package'),
   })
   .strict();
-export const profilePolicySchema = z
+function profilePackageReferences(value: z.infer<typeof profileBaseSchema>, context: z.RefinementCtx): void {
+  for (const permission of value.permissions) {
+    if (!value.packages.some((artifact) => artifact.packageId === permission.packageId))
+      context.addIssue({
+        code: 'custom',
+        message: `Permission references undeclared package ${permission.packageId}`,
+      });
+  }
+  if (
+    value.vpn.packageId !== null &&
+    !value.packages.some((artifact) => artifact.packageId === value.vpn.packageId)
+  )
+    context.addIssue({ code: 'custom', message: 'VPN references an undeclared package' });
+}
+function profileRecipeReferences(value: z.infer<typeof profileBaseSchema>, context: z.RefinementCtx): void {
+  for (const recipe of value.recipes ?? []) {
+    if (
+      !value.packages.some(
+        (artifact) =>
+          artifact.packageId === recipe.packageId &&
+          artifact.versionCode === recipe.versionCode &&
+          artifact.signerSha256 === recipe.signerSha256,
+      )
+    )
+      context.addIssue({
+        code: 'custom',
+        message: 'Recipe app identity must match a declared pinned artifact',
+      });
+  }
+}
+function profileProbeReferences(value: z.infer<typeof profileBaseSchema>, context: z.RefinementCtx): void {
+  if (
+    value.networkProbe?.failurePackages.some(
+      (packageName) => !value.packages.some((artifact) => artifact.packageId === packageName),
+    )
+  )
+    context.addIssue({ code: 'custom', message: 'Probe failure package is not declared in the profile' });
+  if (
+    value.networkProbe?.failurePackages.length &&
+    (!value.networkProbe.requireVpn || !value.vpn.alwaysOn || !value.vpn.lockdown)
+  )
+    context.addIssue({ code: 'custom', message: 'Probe failure exercises require enforced VPN lockdown' });
+}
+const profileBaseSchema = z
   .object({
     id,
     name: nonempty,
@@ -262,52 +305,18 @@ export const profilePolicySchema = z
     networkProbe: networkProbePolicySchema.optional(),
     backup: z.object({ enabled: z.boolean(), transportPackage: packageId }).strict().optional(),
   })
-  .strict()
-  .superRefine((value, context) => {
-    if (!distinct(value.packages, (artifact) => artifact.packageId))
-      context.addIssue({ code: 'custom', message: 'Duplicate profile package' });
-    if (!distinct(value.settings, (setting) => `${setting.namespace}:${setting.key}`))
-      context.addIssue({ code: 'custom', message: 'Duplicate profile setting' });
-    if (!distinct(value.permissions, (permission) => `${permission.packageId}:${permission.permission}`))
-      context.addIssue({ code: 'custom', message: 'Duplicate profile permission' });
-    for (const permission of value.permissions) {
-      if (!value.packages.some((artifact) => artifact.packageId === permission.packageId))
-        context.addIssue({
-          code: 'custom',
-          message: `Permission references undeclared package ${permission.packageId}`,
-        });
-    }
-    if (
-      value.vpn.packageId !== null &&
-      !value.packages.some((artifact) => artifact.packageId === value.vpn.packageId)
-    )
-      context.addIssue({ code: 'custom', message: 'VPN references an undeclared package' });
-    for (const recipe of value.recipes ?? []) {
-      if (
-        !value.packages.some(
-          (artifact) =>
-            artifact.packageId === recipe.packageId &&
-            artifact.versionCode === recipe.versionCode &&
-            artifact.signerSha256 === recipe.signerSha256,
-        )
-      )
-        context.addIssue({
-          code: 'custom',
-          message: 'Recipe app identity must match a declared pinned artifact',
-        });
-    }
-    if (
-      value.networkProbe?.failurePackages.some(
-        (packageName) => !value.packages.some((artifact) => artifact.packageId === packageName),
-      )
-    )
-      context.addIssue({ code: 'custom', message: 'Probe failure package is not declared in the profile' });
-    if (
-      value.networkProbe?.failurePackages.length &&
-      (!value.networkProbe.requireVpn || !value.vpn.alwaysOn || !value.vpn.lockdown)
-    )
-      context.addIssue({ code: 'custom', message: 'Probe failure exercises require enforced VPN lockdown' });
-  });
+  .strict();
+export const profilePolicySchema = profileBaseSchema.superRefine((value, context) => {
+  if (!distinct(value.packages, (artifact) => artifact.packageId))
+    context.addIssue({ code: 'custom', message: 'Duplicate profile package' });
+  if (!distinct(value.settings, (setting) => `${setting.namespace}:${setting.key}`))
+    context.addIssue({ code: 'custom', message: 'Duplicate profile setting' });
+  if (!distinct(value.permissions, (permission) => `${permission.packageId}:${permission.permission}`))
+    context.addIssue({ code: 'custom', message: 'Duplicate profile permission' });
+  profilePackageReferences(value, context);
+  profileRecipeReferences(value, context);
+  profileProbeReferences(value, context);
+});
 export const repositoryPolicySchema = z
   .object({
     id,
@@ -342,7 +351,24 @@ export const DEFAULT_ATTESTATIONS = [
   'operator_signoff',
 ] as const;
 
-export const policyPackSchema = z
+function policyArtifactReferences(value: z.infer<typeof policyBaseSchema>, context: z.RefinementCtx): void {
+  const shared = new Map<string, string>();
+  for (const profile of value.profiles)
+    for (const artifact of profile.packages) {
+      if (
+        artifact.repositoryId &&
+        !value.repositories.some((repository) => repository.id === artifact.repositoryId)
+      )
+        context.addIssue({ code: 'custom', message: `Unknown repository ${artifact.repositoryId}` });
+      const identity = `${artifact.versionCode}:${artifact.sha256}:${artifact.signerSha256}`;
+      const existing = shared.get(artifact.packageId);
+      if (existing !== undefined && existing !== identity)
+        context.addIssue({ code: 'custom', message: `Conflicting device-wide APK ${artifact.packageId}` });
+      shared.set(artifact.packageId, identity);
+    }
+}
+
+const policyBaseSchema = z
   .object({
     schemaVersion: z.literal(1),
     id,
@@ -357,31 +383,18 @@ export const policyPackSchema = z
     repositories: z.array(repositoryPolicySchema),
     os: osPolicySchema.optional(),
   })
-  .strict()
-  .superRefine((value, context) => {
-    if (value.profiles.filter((profile) => profile.kind === 'owner').length !== 1)
-      context.addIssue({ code: 'custom', message: 'Exactly one owner profile is required' });
-    if (!distinct(value.profiles, (profile) => profile.id))
-      context.addIssue({ code: 'custom', message: 'Duplicate profile ID' });
-    if (!distinct(value.profiles, (profile) => profile.name))
-      context.addIssue({ code: 'custom', message: 'Duplicate Android user name' });
-    if (!distinct(value.repositories, (repository) => repository.id))
-      context.addIssue({ code: 'custom', message: 'Duplicate repository ID' });
-    const shared = new Map<string, string>();
-    for (const profile of value.profiles)
-      for (const artifact of profile.packages) {
-        if (
-          artifact.repositoryId &&
-          !value.repositories.some((repository) => repository.id === artifact.repositoryId)
-        )
-          context.addIssue({ code: 'custom', message: `Unknown repository ${artifact.repositoryId}` });
-        const identity = `${artifact.versionCode}:${artifact.sha256}:${artifact.signerSha256}`;
-        const existing = shared.get(artifact.packageId);
-        if (existing !== undefined && existing !== identity)
-          context.addIssue({ code: 'custom', message: `Conflicting device-wide APK ${artifact.packageId}` });
-        shared.set(artifact.packageId, identity);
-      }
-  });
+  .strict();
+export const policyPackSchema = policyBaseSchema.superRefine((value, context) => {
+  if (value.profiles.filter((profile) => profile.kind === 'owner').length !== 1)
+    context.addIssue({ code: 'custom', message: 'Exactly one owner profile is required' });
+  if (!distinct(value.profiles, (profile) => profile.id))
+    context.addIssue({ code: 'custom', message: 'Duplicate profile ID' });
+  if (!distinct(value.profiles, (profile) => profile.name))
+    context.addIssue({ code: 'custom', message: 'Duplicate Android user name' });
+  if (!distinct(value.repositories, (repository) => repository.id))
+    context.addIssue({ code: 'custom', message: 'Duplicate repository ID' });
+  policyArtifactReferences(value, context);
+});
 
 export const extensionLockSchema = z
   .object({

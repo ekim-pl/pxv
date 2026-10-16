@@ -12,6 +12,8 @@ Choose a starter and explicitly review OS release/codename/signing key, APK vers
 
 Edit the project's policy, validate it and write its lock before planning. The lock binds the product descriptor, engine identity, policy, project configuration and installed extensions. Duplicate keys, unknown fields, duplicate identities and ambiguous selections are rejected. A changed lock or engine invalidates prior reviews.
 
+If another process changes policy, configuration, inventory or executable bytes during a prompt, pxv rejects the stale context before approval, execution, signoff, finalization, custody or lifecycle changes. Reload the command/project, validate the intended configuration and prepare a new review. Expiry-only `agent refresh` does not authorize changed policy. Conflicting state changes are serialized; a stale update never silently replaces a newer one.
+
 ~~~sh
 pxv policy validate --project-root "$P"
 pxv policy lock --project-root "$P" --yes
@@ -34,6 +36,8 @@ pxv agent status --project-root "$P" --run RUN_ID --after 0
 ~~~
 
 A pending run names its manual checkpoint. Configure only that checkpoint, record a named check, then resume the same approved run. `normal_credentials` must precede final language and optional `duress`. Complete ordinary app setup before language-sensitive final steps. Recipes bind OS fingerprint and exact package version/signer; an unsupported screen stays manual and does not become verified from a tap attempt.
+
+File-selection automation is checked before an app is launched or private input is staged. If the exact accepted adapter is unavailable, complete the full import privately using the pending instructions; there is no staged file waiting for selection. A later adapter failure also removes owned temporary input where cleanup can be proven. Inspect retained recovery obligations if cleanup fails.
 
 ~~~sh
 pxv device attest --project-root "$P" --asset lab-01 \
@@ -58,6 +62,8 @@ The reviewed installer verifies image/signature bytes and runs the authenticated
 
 ## Recovery and loss of supervision
 
+For backup preparation, restore drills and recovery procedures for disposable, protected reference/master and primary/master phones, use the separate [canary, backup and recovery runbook](CANARY_BACKUP_RECOVERY.md). It also explains consistent private project backups and the limits of restoring operator state.
+
 Cancellation requests stop future work and clean owned resources where provable; they do not undo an arbitrary flash, account entry or APK change. A native supervisor persists process ownership and completion receipts. An interrupted mutation reserves the physical device and transport across projects, forks and Docker workers.
 
 ~~~sh
@@ -68,6 +74,8 @@ pxv device recover --project-root "$P" --asset lab-01 \
 ~~~
 
 Inspect the phone and retained evidence first. Recovery uses stable Android user serial numbers, not reusable IDs/names. A recreated user must remain unresolved. Child probe cleanup must not release a parent workflow's resources. Unproven native cleanup can require a host reboot; manual acknowledgment cannot bypass a live native owner. Failed recovery retains its fence and may be retried through the recorded recovery lineage. Never delete a database, lock or receipt to make a blocked device appear ready.
+
+Failed obligations stay blocked until an explicit inspected retry succeeds. Each child can register/resolve only its own resources. A resolved obligation is not replayed, and ownership or stable-user mismatches remain unresolved.
 
 ## Signoff and custody
 

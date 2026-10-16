@@ -1,11 +1,11 @@
 import { createHash } from 'node:crypto';
-import { chmod, lstat, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
+import { chmod, lstat, mkdir, mkdtemp, readFile, rename, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { gzipSync } from 'node:zlib';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { canonicalJson } from '@pxv/contracts';
-import { defineExtension, ExtensionManager, safeRelativePath, validateMetadata } from '@pxv/extensions';
+import { ExtensionManager, safeRelativePath, validateMetadata } from '@pxv/extensions';
 import type { ExtensionMetadata } from '@pxv/extensions';
 import { policy } from '../contracts/fixtures.js';
 
@@ -105,9 +105,28 @@ describe('extension distribution and isolation', () => {
       { kind: 'manual', capability: 'operator_signoff', instructions: 'Review phone-001' },
     ]);
     expect(await manager.install({ tarball: await pathFor(root, content) })).toEqual(lock);
-    await expect(manager.remove(lock, { inUse: [lock] })).rejects.toThrow('referenced by a project');
-    await manager.remove(lock);
-    expect(await manager.list()).toEqual([]);
+    expect(await manager.list()).toEqual([lock]);
+  });
+
+  it('rejects symlink installation roots, symlink installed trees and unexpected shared entries', async () => {
+    const path = await pathFor(root, bundle());
+    const actual = join(root, 'actual');
+    await mkdir(actual);
+    const alias = join(root, 'alias');
+    await symlink(actual, alias);
+    await expect(new ExtensionManager({ installRoot: alias }).install({ tarball: path })).rejects.toThrow(
+      'root cannot be a symlink',
+    );
+    const lock = await manager.install({ tarball: path });
+    const installed = join(manager.installRoot, lock.installPath);
+    const retained = join(root, 'retained');
+    await rename(installed, retained);
+    await symlink(retained, installed);
+    await expect(manager.inspect(lock)).rejects.toThrow('Installed extension cannot be a symlink');
+    await rm(installed);
+    await rename(retained, installed);
+    await writeFile(join(manager.installRoot, 'unexpected'), 'unowned');
+    await expect(manager.list()).rejects.toThrow('Unexpected extension installation entry');
   });
 
   it('explicitly updates to another exact immutable version while retaining old locks', async () => {
@@ -179,6 +198,21 @@ describe('extension distribution and isolation', () => {
     expect(receipts).not.toContain('registry-secret-sentinel');
     expect(canonicalJson(await manager.list())).not.toContain('registry-secret-sentinel');
     expect(await manager.inspect(lock)).toEqual(metadata);
+  });
+
+  it('rejects duplicate registry metadata keys before downloading a bundle', async () => {
+    const transport = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(new Response('{"name":"@private/fleet","name":"@private/fleet"}'));
+    const online = new ExtensionManager({
+      installRoot: manager.installRoot,
+      registry: 'https://registry.example.org',
+      fetch: transport,
+    });
+    await expect(online.install({ package: metadata.id, version: metadata.version })).rejects.toThrow(
+      /duplicate|unique/iu,
+    );
+    expect(transport).toHaveBeenCalledOnce();
   });
 
   it('does not resolve ranges or contact a registry implicitly', async () => {
@@ -303,6 +337,31 @@ describe('extension distribution and isolation', () => {
     await expect(manager.invoke(unsafe, 'review', null, 0)).rejects.toThrow('timeout');
   });
 
+  it('revalidates worker IPC and redacts asynchronous worker crashes', async () => {
+    const forged = await manager.install({
+      tarball: await pathFor(
+        root,
+        bundle({
+          code: `import {parentPort} from 'node:worker_threads';parentPort.postMessage({ok:true,actions:[{kind:'shell',command:'wipe'}]});export default{apiVersion:1,commands:{review:()=>new Promise(()=>{})}};`,
+        }),
+      ),
+    });
+    await expect(manager.invoke(forged, 'review', null)).rejects.toThrow();
+    const masked = await manager.install({
+      tarball: await pathFor(root, bundle({ code: `throw new Error('Extension result private sentinel');` })),
+    });
+    await expect(manager.invoke(masked, 'review', null)).rejects.toThrow(/^Extension worker failed$/u);
+    const crashed = await manager.install({
+      tarball: await pathFor(
+        root,
+        bundle({
+          code: `process.nextTick(()=>{throw new Error('private async failure sentinel')});export default{apiVersion:1,commands:{review:()=>new Promise(()=>{})}};`,
+        }),
+      ),
+    });
+    await expect(manager.invoke(crashed, 'review', null)).rejects.toThrow(/^Extension worker failed$/u);
+  });
+
   it('does not pass inherited host environment to extension workers', async () => {
     process.env['PXV_EXTENSION_PRIVATE_SENTINEL'] = 'do-not-inherit';
     try {
@@ -358,8 +417,6 @@ describe('extension distribution and isolation', () => {
 
 describe('extension metadata SDK', () => {
   it('exports definitions without changing commands and validates metadata', () => {
-    const extension = { apiVersion: 1 as const, commands: {} };
-    expect(defineExtension(extension)).toBe(extension);
     expect(validateMetadata(metadata)).toEqual(metadata);
     expect(safeRelativePath('guides/en.md')).toBe(true);
     for (const path of ['../escape', '/absolute', 'C:/windows', 'a\\b', './entry', 'a//b', 'a\0b'])

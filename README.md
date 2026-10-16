@@ -10,14 +10,16 @@ Linux x86_64 is the initial platform. Use exactly **Node 24.22.0 LTS**, **pnpm 1
 
 ```sh
 pnpm install --frozen-lockfile
+pnpm quality:setup
 pnpm build:native
-pnpm check
-pnpm test
-pnpm test:coverage
-pnpm test:native
+PXV_REQUIRE_CRYPTO=1 pnpm quality
 ```
 
 The compiler is TypeScript 7.0.2. A separate TypeScript 6.0.2 package supplies the JavaScript compiler API required by typed ESLint rules; it does not compile the application. SQLite uses Node's built-in API in a dedicated worker. Runtime updates require process, storage and concurrency regression checks.
+
+`quality:setup` explicitly downloads checksum-pinned Rust Code Analysis and ShellCheck into the operator's cache; `PXV_QUALITY_TOOLS` selects another directory. `quality` runs production/test/tool typechecks, lint, dependency and cycle checks, native faults, merged worker/subprocess coverage and all Android helper builds/signature checks. It writes source-bound JSON and readable reports under `.quality/`. See [testing](docs/TESTING.md) for prerequisites and individual gates.
+
+Use [development testing](docs/TESTING.md) for focused test/watch loops and coverage diagnosis. The separate [canary, backup and recovery runbook](docs/CANARY_BACKUP_RECOVERY.md) covers physical trials, protected reference/master phones, primary phones with real data, disposable rebuilds and operator-state backups.
 
 ## Start a project
 
@@ -81,6 +83,6 @@ Artifacts carry checksums, source/toolchain provenance, an SBOM and notices. Sta
 
 ## Evidence and limitations
 
-Offline tests include real cryptographic verification, native crash/fence tests, extension failures, two fork identities, and package execution outside the checkout. Required coverage is at least 90% lines and 85% branches for application packages.
+Offline tests include real cryptographic verification, native crash/fence tests, extension failures, external SDK consumers, two fork identities, and package execution outside the checkout. Every TypeScript application module and package, including release code and workers, must reach 90% lines and 85% branches. TS/JS functions are limited to classic cyclomatic complexity 10, nesting 4 and 80 nonblank, noncomment lines; Rust/Java functions also have a complexity limit of 10.
 
 Physical and GrapheneOS emulator acceptance are tracked separately in [verification](docs/VERIFICATION.md). Passing offline tests does not certify a policy pack, UI adapter, networking configuration or restore. Maintenance creates fresh evidence and renewed handoff; retirement records confirmed erasure and custody without silently wiping a device. Headwind integration and custom OS source builds remain later workflows.

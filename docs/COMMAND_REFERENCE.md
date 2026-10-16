@@ -27,3 +27,5 @@ Docker execution adds `--execution docker --image EXPLICIT_IMAGE --docker-mode d
 An exact asset called `all` uses `--asset all`. `--all` is the fleet selector and cannot be combined with `--asset` or `--group`. First enrollment uses USB or a dedicated emulator; Wi-Fi transport data requires reviewed inventory configuration.
 
 Common exit outcomes: 0 means the requested command completed; 3 indicates a failed/inspection-required execution; 4 indicates pending work or an unmet readiness/tool check; 130 indicates cancellation. Unexpected input/errors return a nonzero launcher result. Inspect the JSON result and retained run status rather than inferring readiness from process exit alone.
+
+Repository maintainer commands are separate from the installed phone CLI: `pnpm check` runs static gates, `pnpm test:coverage` enforces complete per-module coverage, and `pnpm quality` aggregates static/native/coverage/helper checks and reports. Run `pnpm quality:setup` explicitly for pinned analysis tools. See [testing](TESTING.md); ordinary checks/builds never publish or install the product globally.

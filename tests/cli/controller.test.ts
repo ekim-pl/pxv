@@ -68,6 +68,8 @@ vi.mock('@pxv/runtime', async (original) => ({
     run = mocks.runCommand;
   },
   recoveryReservations: mocks.reservations,
+  commitProjectFile: async (input: RuntimeModule.ProjectFileCommit) =>
+    (await original<typeof RuntimeModule>()).atomicWritePrivate(input.path, input.data),
 }));
 vi.mock('@pxv/adapters', async (original) => ({
   ...(await original<typeof AdapterModule>()),
@@ -153,12 +155,15 @@ beforeEach(async () => {
   await writeFile(join(projectRoot, config.policyFile), JSON.stringify(policy));
   project = {
     root: projectRoot,
+    revisions: { config: 'a'.repeat(64), policy: 'b'.repeat(64), inventory: 'c'.repeat(64) },
     config: structuredClone(config),
     product,
     policy,
     inventory: { schemaVersion: 1, devices: [device] },
     resolved: { digest: 'a'.repeat(64) },
   } as unknown as ProjectContext;
+  await writeFile(join(projectRoot, config.inventoryFile), JSON.stringify(project.inventory));
+  await writeFile(join(projectRoot, 'pxv.project.json'), JSON.stringify(project.config));
   output = [];
   io = { out: (value) => output.push(value), error: (value) => output.push(value) };
   mocks.resourceRoot.mockResolvedValue(resources);
@@ -218,6 +223,99 @@ afterEach(async () => {
 });
 const args = (values: string[]) => [...values, '--resource-root', resources, '--project-root', projectRoot];
 describe('operator controller dispatch without device access', () => {
+  it('keeps internal worker outcomes durable for completed, manual and failed runs', async () => {
+    if (typeof process.disconnect === 'function')
+      vi.spyOn(process, 'disconnect').mockImplementation(() => undefined);
+    if (typeof process.send === 'function') vi.spyOn(process, 'send').mockImplementation(() => true);
+    for (const [status, code] of [
+      ['completed', 0],
+      ['pending', 4],
+      ['failed', 3],
+    ] as const) {
+      engine.execute.mockResolvedValueOnce({ id: 'run', status });
+      expect(await runCli(args(['internal-worker', '--run', 'run']), io)).toBe(code);
+    }
+    expect(store.delete).toHaveBeenCalledTimes(3);
+    engine.execute.mockRejectedValueOnce(new Error('missing run'));
+    store.get.mockResolvedValueOnce(undefined);
+    await expect(runCli(args(['internal-worker', '--run', 'missing']), io)).rejects.toThrow('missing run');
+    expect(store.set).not.toHaveBeenCalled();
+  });
+  it('rejects missing workflows and ambiguous multi-asset device commands before actions', async () => {
+    await expect(runCli(args(['device', '--asset', 'all']), io)).rejects.toThrow('Unknown device workflow');
+    await expect(runCli(args(['device', 'constructor', '--asset', 'all']), io)).rejects.toThrow(
+      'Unknown device workflow',
+    );
+    await expect(runCli(args(['lifecycle']), io)).rejects.toThrow('Unknown lifecycle');
+    await expect(runCli(args(['handoff', 'unknown']), io)).rejects.toThrow('Unknown command');
+    project.inventory.devices.push({
+      ...device,
+      assetId: 'second',
+      canonicalSerial: 'SECOND',
+      transports: [{ kind: 'usb', serial: 'SECOND' }],
+    });
+    await expect(runCli(args(['device', 'inspect', '--all']), io)).rejects.toThrow('exactly one asset');
+    expect(engine.observe).not.toHaveBeenCalled();
+  });
+
+  it('enrolls only the measured USB or emulator target and rejects mismatched fastboot identities', async () => {
+    const base = [
+      'inventory',
+      'enroll',
+      '--asset',
+      'second',
+      '--serial',
+      'SECOND',
+      '--model',
+      'Pixel 8a',
+      '--codename',
+      'akita',
+      '--yes',
+    ];
+    expect(await runCli(args([...base, '--group', 'visit']), io)).toBe(0);
+    const selected: unknown = mocks.guardTarget.mock.calls[0]?.[0];
+    expect(selected).toMatchObject({ device: { assetId: 'second', groups: ['visit'] } });
+    mocks.toolDiscover.mockResolvedValueOnce(undefined);
+    expect(await runCli(args([...base, '--kind', 'emulator', '--transport', 'emulator']), io)).toBe(0);
+    mocks.runCommand
+      .mockResolvedValueOnce({ code: 0, stdout: 'SECOND\tfastboot\nOTHER\tfastboot\n', stderr: '' })
+      .mockResolvedValueOnce({ code: 0, stdout: '', stderr: '(bootloader) product: akita\n' });
+    expect(await runCli(args([...base, '--mode', 'fastboot']), io)).toBe(0);
+    expect(mocks.runCommand).toHaveBeenLastCalledWith(['/fixture/adb', '-s', 'SECOND', 'getvar', 'product']);
+    for (const [stdout, error] of [
+      ['', 'unavailable or ambiguous'],
+      ['SECOND\tfastboot\nSECOND\tfastboot\n', 'unavailable or ambiguous'],
+    ]) {
+      mocks.runCommand.mockResolvedValueOnce({ code: 0, stdout, stderr: '' });
+      await expect(runCli(args([...base, '--mode', 'fastboot']), io)).rejects.toThrow(error);
+    }
+    mocks.runCommand
+      .mockResolvedValueOnce({ code: 0, stdout: 'SECOND\tfastboot', stderr: '' })
+      .mockResolvedValueOnce({ code: 0, stdout: 'product: husky', stderr: '' });
+    await expect(runCli(args([...base, '--mode', 'fastboot']), io)).rejects.toThrow(
+      'differs from enrollment',
+    );
+    mocks.runCommand
+      .mockResolvedValueOnce({ code: 0, stdout: 'SECOND\tfastboot', stderr: '' })
+      .mockResolvedValueOnce({ code: 0, stdout: 'unrecognized', stderr: '' });
+    await expect(runCli(args([...base, '--mode', 'fastboot']), io)).rejects.toThrow(
+      'differs from enrollment',
+    );
+    await expect(runCli(args([...base, '--kind', 'emulator', '--mode', 'fastboot']), io)).rejects.toThrow(
+      'USB Pixel',
+    );
+    await expect(runCli(args([...base, '--kind', 'tablet']), io)).rejects.toThrow('Device kind');
+    await expect(runCli(args([...base, '--transport', 'wifi']), io)).rejects.toThrow('First enrollment');
+    await expect(runCli(args([...base, '--mode', 'invalid']), io)).rejects.toThrow('Enrollment mode');
+  });
+  it('starts ADB only by explicit host request and handles missing HOME', async () => {
+    process.env['HOME'] = join(root, 'private-home');
+    expect(await runCli(args(['host', 'adb-start', '--yes']), io)).toBe(0);
+    expect(mocks.startLocalAdbServer).toHaveBeenCalledOnce();
+    delete process.env['HOME'];
+    expect(await runCli(args(['host', 'adb-start', '--yes']), io)).toBe(0);
+  });
+
   it('reads declared extension guides, explicitly selects validated policies and plans adapter actions', async () => {
     project.config.extensions.push(lock);
     expect(
@@ -446,13 +544,19 @@ describe('operator controller dispatch without device access', () => {
           io,
         ),
       ).toBe(0);
-    expect(mocks.recordLifecycle).toHaveBeenLastCalledWith(project, store, {
-      assetId: 'all',
-      type: 'retirement',
-      operator: 'operator',
-      note: 'Reviewed event',
-      confirmedErasure: true,
-    });
+    expect(mocks.recordLifecycle).toHaveBeenLastCalledWith(
+      project,
+      store,
+      {
+        assetId: 'all',
+        type: 'retirement',
+        operator: 'operator',
+        note: 'Reviewed event',
+        confirmedErasure: true,
+      },
+      undefined,
+      undefined,
+    );
     expect(store.close).toHaveBeenCalledTimes(4);
     await expect(runCli(args(['lifecycle', 'unknown', '--asset', 'all', '--yes']), io)).rejects.toThrow(
       /Unknown lifecycle/,
@@ -557,10 +661,14 @@ describe('operator controller dispatch without device access', () => {
   it('preserves worker failures and returns status codes for queued fleet outcomes', async () => {
     engine.execute.mockRejectedValueOnce(new Error('worker interrupted'));
     store.get.mockResolvedValueOnce({ id: 'run', status: 'running' });
-    const disconnect = process.disconnect
-      ? vi.spyOn(process, 'disconnect').mockImplementation(() => undefined)
-      : undefined;
-    const send = process.send ? vi.spyOn(process, 'send').mockImplementation(() => true) : undefined;
+    const disconnect =
+      typeof process.disconnect === 'function'
+        ? vi.spyOn(process, 'disconnect').mockImplementation(() => undefined)
+        : undefined;
+    const send =
+      typeof process.send === 'function'
+        ? vi.spyOn(process, 'send').mockImplementation(() => true)
+        : undefined;
     try {
       await expect(runCli(args(['internal-worker', '--run', 'run']), io)).rejects.toThrow(
         /worker interrupted/,

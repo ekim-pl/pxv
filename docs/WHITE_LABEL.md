@@ -2,6 +2,8 @@
 
 A white-label product is a separate fork. Keep one build-time `product.json` as the product identity: ID/name, executable command, npm package, Debian package, image repository, upstream engine version/API, public assets, default policy and support contact. The fork owns its manifests, configuration templates and documentation. Keep the upstream engine/API marker and shared safety regressions when merging updates.
 
+Keep the composed core services behind the existing `WorkflowEngine` façade and preserve its documented public type exports. Extension authors and the host share the public API v1 SDK/contracts; retain their compiled JavaScript and declaration exports, and run the external-consumer test when merging SDK or packaging changes. Put product choices in the descriptor, policy and extension contributions rather than replacing ownership, evidence or recovery services.
+
 ## Create the first product
 
 1. Fork the Community repository and retain MIT attribution and third-party notices.
@@ -11,13 +13,20 @@ A white-label product is a separate fork. Keep one build-time `product.json` as 
 5. Validate policy, build a uniquely named preview and exercise the complete operator/recipient workflow with an isolated project and a disposable canary.
 6. Retain exact-build EN/PL, restore/network and physical acceptance evidence before promising a hardened deployment. Refresh it after relevant updates.
 
-~~~sh
-pnpm check
-pnpm test
+Historical acceptance records identify the build actually tested. A later refactor or upstream merge needs its own verification; retain old records without treating them as acceptance of changed code.
+
+```sh
+pnpm quality:setup
+pnpm build:native
+PXV_REQUIRE_CRYPTO=1 pnpm quality
 pnpm build:preview --formats portable,deb,npm,oci
-~~~
+```
 
 The preview records a dirty-tree content digest, has unique command/package/image identities, and uses a separate project by default. Portable archives/DEBs include Node and the supervisor; npm requires the pinned Node runtime. Ordinary builds do not publish or replace stable launchers.
+
+## Generate branded guide PDFs
+
+> **Branding note:** Follow [Generate PDFs with your branding](../guides/README.md#generate-pdfs-with-your-branding) before distributing the EN/PL guides. The descriptor supplies the general guide title/header name; logos, guide text, support details and the fixed PDF footer require the documented source/asset/template edits. Rebuild all six editions and review every rendered page. Generated PDFs are ignored build/release artifacts and must not be committed to Git.
 
 ## Commercial boundary
 

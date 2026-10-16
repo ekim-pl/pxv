@@ -16,6 +16,7 @@ const catalog = JSON.parse(await readFile(join(root, 'resources/third-party/nati
 const libc = await readFile(join(sysroot, 'lib/rustlib', target, 'lib/self-contained/libc.a'));
 if (createHash('sha256').update(libc).digest('hex') !== catalog.musl.sysrootLibcSha256)
   throw Error('Rust musl runtime differs from the reviewed pin');
+/** @type {NodeJS.ProcessEnv} */
 const env = {
   ...process.env,
   CARGO_TARGET_X86_64_UNKNOWN_LINUX_MUSL_LINKER: join(

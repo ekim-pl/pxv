@@ -6,9 +6,13 @@ pxv 0.1.0 is undergoing release qualification. Automated tests, artifact verific
 
 Record the engine candidate/version/content hash, product/policy lock, pinned extension bytes, host/tool versions, OS build/fingerprint and relevant app versions/signers. Keep real serials, raw logs and private recipient data out of public reports. Public evidence may reference a private record through a non-sensitive asset alias and digest.
 
+First retain a passing source-bound `pnpm quality` report and verify all formats of the intended immutable candidate. The cleanup/service refactor has offline qualification only. Earlier Pixel fixture evidence remains attached to its recorded candidate; use fresh observations, approvals and EN/PL recipient evidence for this engine rather than reusing that acceptance.
+
 A dedicated stock Android emulator can test transport, JSON parsing and generic adapter behavior. It cannot establish GrapheneOS security features or image provenance. GrapheneOS emulator evidence must bind the actual image path/hash/fingerprint/source and the policy's capabilities; a note is not a substitute. Emulator outcomes remain emulator-only.
 
 ## Disposable canary procedure
+
+Use the detailed [canary, backup and recovery runbook](CANARY_BACKUP_RECOVERY.md) for preparation, backup coverage, representative restore drills and interrupted-operation recovery. It also covers protected reference/master phones and primary/master phones with real data; disposable-test authorization does not apply to them.
 
 1. Obtain explicit authorization for this disposable device, including any erasure. Match its observed serial/model/codename to enrollment before selecting it.
 2. Freeze and verify the candidate, reviewed OS/app artifacts and policy before mutations. Keep physical unlock/relock/boot checks attended.

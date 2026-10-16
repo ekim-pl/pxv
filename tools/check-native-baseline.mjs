@@ -31,8 +31,8 @@ try {
     result.code !== 0 ||
     result.stdout !== 'pxv-native-baseline' ||
     completed.length !== 1 ||
-    completed[0].code !== 0 ||
-    completed[0].cleanupProven !== true ||
+    completed[0]?.code !== 0 ||
+    completed[0]?.cleanupProven !== true ||
     (await recoveryReservations(control)).length
   )
     throw Error('Native baseline lease/receipt failed');

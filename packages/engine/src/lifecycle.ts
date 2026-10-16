@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
-import type { SqliteStore } from '@pxv/runtime';
+import { hostControlRoot, type Store } from '@pxv/runtime';
 import type { ProjectContext } from './project.js';
-
+import { NativeDeviceOwnership, NativeProjectOwnership, type DeviceOwnership } from './ownership.js';
 export interface LifecycleRecord {
   schemaVersion: 1;
   id: string;
@@ -12,33 +12,72 @@ export interface LifecycleRecord {
   at: string;
   confirmedErasure: boolean;
 }
-
-export async function recordLifecycle(
-  project: ProjectContext,
-  store: SqliteStore,
-  input: Omit<LifecycleRecord, 'schemaVersion' | 'id' | 'at'>,
-  clock: () => Date = () => new Date(),
-): Promise<LifecycleRecord> {
-  if (!project.inventory.devices.some((value) => value.assetId === input.assetId))
-    throw new Error('Unknown enrolled asset');
+type LifecycleInput = Omit<LifecycleRecord, 'schemaVersion' | 'id' | 'at'>;
+function validateInput(project: ProjectContext, input: LifecycleInput) {
+  const device = project.inventory.devices.find((value) => value.assetId === input.assetId);
+  if (!device) throw new Error('Unknown enrolled asset');
   if (!['maintenance', 'policy-change', 'loss', 'retirement'].includes(input.type))
     throw new Error('Unknown lifecycle event');
   if (!input.operator.trim() || input.note.length > 1000 || !input.note.trim())
     throw new Error('Operator and bounded non-secret note required');
   if (input.type === 'retirement' && !input.confirmedErasure)
     throw new Error('Retirement requires confirmed on-device erasure and custody review');
-  const record: LifecycleRecord = { ...input, schemaVersion: 1, id: randomUUID(), at: clock().toISOString() };
-  // Begin a fresh maintenance generation; old receipts remain inspectable, not reusable.
-  await store.set('lifecycle-evidence', record.id, {
+  return device;
+}
+async function commitLifecycle(store: Store, record: LifecycleRecord): Promise<void> {
+  const keys = ['workflow', 'handoff', 'attestations'];
+  const values = await Promise.all(keys.map((collection) => store.get<unknown>(collection, record.assetId)));
+  const expected = keys.map((collection, index) => ({
+    collection,
+    key: record.assetId,
+    value: values[index],
+  }));
+  const archive = {
     record,
-    workflow: (await store.get('workflow', input.assetId)) ?? null,
-    handoff: (await store.get('handoff', input.assetId)) ?? null,
-    attestations: (await store.get('attestations', input.assetId)) ?? [],
+    workflow: values[0] ?? null,
+    handoff: values[1] ?? null,
+    attestations: values[2] ?? [],
+  };
+  const committed = await store.transition({
+    expected,
+    changes: [
+      { kind: 'set', collection: 'lifecycle-evidence', key: record.id, value: archive },
+      ...keys.map((collection) => ({ kind: 'delete' as const, collection, key: record.assetId })),
+      { kind: 'set', collection: 'lifecycle', key: record.id, value: record },
+    ],
+    events: [{ runId: `asset:${record.assetId}`, value: record }],
   });
-  await store.delete('workflow', input.assetId);
-  await store.delete('handoff', input.assetId);
-  await store.delete('attestations', input.assetId);
-  await store.set('lifecycle', record.id, record);
-  await store.appendEvent(`asset:${input.assetId}`, record);
-  return record;
+  if (!committed) throw new Error('Asset evidence changed; reload before recording lifecycle');
+}
+async function recordLifecycleOwned(
+  project: ProjectContext,
+  store: Store,
+  input: LifecycleInput,
+  clock: () => Date,
+  ownership: DeviceOwnership,
+): Promise<LifecycleRecord> {
+  const device = validateInput(project, input);
+  const transport = device.transports.find((value) => value.kind === 'usb') ?? device.transports[0];
+  if (!transport) throw new Error('Enrolled asset has no transport');
+  return ownership.run({ device, transport }, `lifecycle-${randomUUID()}`, async () => {
+    const record: LifecycleRecord = {
+      ...input,
+      schemaVersion: 1,
+      id: randomUUID(),
+      at: clock().toISOString(),
+    };
+    await commitLifecycle(store, record);
+    return record;
+  });
+}
+export function recordLifecycle(
+  project: ProjectContext,
+  store: Store,
+  input: LifecycleInput,
+  clock: () => Date = () => new Date(),
+  controlRoot = hostControlRoot(),
+): Promise<LifecycleRecord> {
+  return new NativeProjectOwnership(project, controlRoot).run(() =>
+    recordLifecycleOwned(project, store, input, clock, new NativeDeviceOwnership(controlRoot)),
+  );
 }

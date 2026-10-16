@@ -47,11 +47,7 @@ public final class MainActivity extends Activity {
         });
     }
 
-    @Override protected void onActivityResult(int request, int result, Intent data) {
-        super.onActivityResult(request, result, data);
-        if (request != 1 || result != RESULT_OK || data == null || data.getData() == null) return;
-        try (InputStream input = getContentResolver().openInputStream(data.getData())) {
-            if (input == null) throw new IllegalStateException();
+    private static String documentDigest(InputStream input) throws Exception {
             MessageDigest hash = MessageDigest.getInstance("SHA-256");
             byte[] buffer = new byte[4096];
             int count, size = 0;
@@ -62,6 +58,15 @@ public final class MainActivity extends Activity {
             }
             StringBuilder digest = new StringBuilder();
             for (byte value : hash.digest()) digest.append(String.format("%02x", value & 255));
+            return digest.toString();
+    }
+
+    @Override protected void onActivityResult(int request, int result, Intent data) {
+        super.onActivityResult(request, result, data);
+        if (request != 1 || result != RESULT_OK || data == null || data.getData() == null) return;
+        try (InputStream input = getContentResolver().openInputStream(data.getData())) {
+            if (input == null) throw new IllegalStateException();
+            String digest = documentDigest(input);
             if (!preferences.edit().putString("import_sha256", digest.toString()).commit()) {
                 throw new IllegalStateException();
             }

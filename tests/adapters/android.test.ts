@@ -1,6 +1,11 @@
+import { recordObligation } from '../engine/obligations.js';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createServer, type Server } from 'node:net';
-import { writeFile } from 'node:fs/promises';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { ResourceScope } from '@pxv/engine';
+import { SqliteStore } from '@pxv/runtime';
 import {
   AndroidAdapter,
   ArtifactService,
@@ -39,6 +44,7 @@ const target: SelectedTarget = {
   transport: { kind: 'usb', serial: 'PIXEL123' },
 };
 const policy: PolicyPack = {
+  requiredAttestations: [],
   schemaVersion: 1,
   id: 'test',
   version: '1.0.0',
@@ -466,14 +472,20 @@ describe('identity-bound Android adapter', () => {
     const android = adapter(runner);
     const profile = policy.profiles[0];
     if (!profile) throw new Error('Missing profile');
-    await android.applySettings(
+    await android.applySetting(
       target,
       user,
-      {
-        ...profile,
-        settings: [{ namespace: 'system', key: 'screen_off_timeout', value: '30000' }],
-        vpn: { packageId: 'org.example.app', alwaysOn: true, lockdown: true },
-      },
+      { namespace: 'system', key: 'screen_off_timeout', value: '30000' },
+      { lease: {} },
+    );
+    expect(runner.values.get('system:screen_off_timeout')).toBe('30000');
+    for (const permission of profile.permissions)
+      await android.applyPermission(target, user, permission, { lease: {} });
+    expect(runner.granted).toBe(true);
+    await android.applyVpn(
+      target,
+      user,
+      { packageId: 'org.example.app', alwaysOn: true, lockdown: true },
       { lease: {} },
     );
     expect(await android.vpn(target, user)).toEqual({
@@ -708,4 +720,235 @@ describe('identity-bound Android adapter', () => {
     await expect(android.guardTarget(target)).rejects.toThrow(/server is unavailable/);
     expect(runner.calls).toHaveLength(0);
   });
+});
+
+describe('fail-closed observation and mutation boundaries', () => {
+  it('rejects malformed user identities and incomplete named lists before commands', async () => {
+    const runner = new FakeRunner();
+    const android = adapter(runner);
+    for (const identity of [
+      { ...user, userId: -1 },
+      { ...user, serialNo: -1 },
+      { ...user, name: '' },
+    ])
+      await expect(android.guardUser(target, identity)).rejects.toThrow(/Invalid stable/);
+    for (const value of [
+      '',
+      '2 users:\n0: id=0, name=Owner, type=full.SYSTEM',
+      '1 users:\n0: id=10, name=Work, type=full.SECONDARY',
+      '2 users:\n0: id=0, name=Owner, type=full.SYSTEM\n1: id=0, name=Owner, type=full.SYSTEM',
+    ])
+      expect(() => parseNamedUsers(value)).toThrow();
+    expect(() => parseUsers('UserInfo{9007199254740992:Owner:c13} serialNo=0')).toThrow(/Invalid/);
+    expect(() => parseUsers('UserInfo{0:Owner:c13} serialNo=0\nUserInfo{0:Owner:c13} serialNo=1')).toThrow(
+      /ambiguous/,
+    );
+    expect(runner.calls).toHaveLength(0);
+  });
+  it('keeps missing profiles, absent packages and language observations distinct', async () => {
+    const runner = new FakeRunner();
+    const android = adapter(runner);
+    const configured: PolicyPack = {
+      ...policy,
+      profiles: policy.profiles.map((profile) => ({
+        ...profile,
+        language: 'pl-PL',
+        settings: [{ namespace: 'system', key: 'system_locales', value: 'pl-PL' }],
+        packages: [
+          ...profile.packages,
+          {
+            packageId: 'org.absent.app',
+            versionCode: 1,
+            sha256: 'a'.repeat(64),
+            signerSha256: 'b'.repeat(64),
+          },
+        ],
+        permissions: [
+          ...profile.permissions,
+          { packageId: 'org.absent.app', permission: 'android.permission.CAMERA', granted: true },
+        ],
+      })),
+    };
+    runner.values.set('system:system_locales', 'pl-PL');
+    let observed = await android.inspect(target, configured, new AbortController().signal);
+    expect(observed.profiles[0]?.language).toBe('pl-PL');
+    expect(observed.profiles[0]?.permissions.at(-1)?.granted).toBe(false);
+    runner.values.set('system:system_locales', 'en-US');
+    observed = await android.inspect(target, configured);
+    expect(observed.profiles[0]?.language).toBe('en-US');
+    runner.values.set('system:system_locales', 'unknown');
+    observed = await android.inspect(target, {
+      ...configured,
+      profiles: [{ ...configured.profiles[0]!, name: 'missing' }],
+    });
+    expect(observed.profiles).toEqual([]);
+    runner.values.set('global:adb_enabled', '0');
+    runner.values.set('global:adb_wifi_enabled', '1');
+    expect((await android.inspect(target, policy)).debuggingEnabled).toBe(true);
+    runner.values.set('global:adb_wifi_enabled', 'invalid');
+    await expect(android.inspect(target, policy)).rejects.toThrow(/Debugging state/);
+  });
+  it('rejects unmeasurable APK paths and ambiguous runtime permissions', async () => {
+    const android = adapter(new FakeRunner());
+    for (const output of [
+      '',
+      'not-a-package',
+      'package:/tmp/untrusted.apk',
+      'package:/data/app/a/split-a.apk\npackage:/data/app/a/split-b.apk',
+    ]) {
+      android.shell = () => Promise.resolve(output);
+      await expect(android.installedIdentity(target, user, 'org.example.app')).rejects.toThrow(/APK/);
+    }
+    const permission = {
+      packageId: 'org.example.app',
+      permission: 'android.permission.CAMERA',
+      granted: true,
+    };
+    android.shell = () => Promise.resolve('User 0: installed=true\n');
+    await expect(android.permission(target, user, permission)).rejects.toThrow(/Per-user/);
+    android.shell = () =>
+      Promise.resolve(
+        'User 10: installed=true\n android.permission.CAMERA: granted=true\n android.permission.CAMERA: granted=false\n',
+      );
+    await expect(android.permission(target, user, permission)).rejects.toThrow(/ambiguous/);
+    await expect(android.permission(target, user, { ...permission, permission: 'unsafe' })).rejects.toThrow(
+      /runtime permission/,
+    );
+  });
+  it('retains malformed cleanup evidence and rejects missing owner identity', async () => {
+    const runner = new FakeRunner();
+    const android = adapter(runner);
+    const obligation: RecoveryObligation = {
+      schemaVersion: 1,
+      id: 'x',
+      operationId: 'root',
+      ownerOperationId: 'root',
+      deviceSerial: target.device.canonicalSerial,
+      user,
+      kind: 'restore-setting',
+      resource: 'x',
+      payload: {},
+      status: 'pending',
+    };
+    for (const payload of [
+      { namespace: 'unsafe', key: 'x', previous: '0' },
+      { namespace: 'global', key: 2, previous: '0' },
+      { namespace: 'global', key: 'x', previous: null },
+    ])
+      await expect(
+        android.cleanup(target, { ...obligation, payload }, { lease: {}, operationId: 'root' }),
+      ).rejects.toThrow(/Malformed/);
+    await expect(
+      android.cleanup(
+        target,
+        {
+          ...obligation,
+          kind: 'remove-helper',
+          payload: { packageId: 'org.other.app', versionCode: 1, signerSha256: 'b'.repeat(64) },
+        },
+        { lease: {}, operationId: 'root' },
+      ),
+    ).rejects.toThrow(/Malformed helper/);
+    const { user: _removed, ...missing } = obligation;
+    void _removed;
+    await expect(android.cleanup(target, missing, { lease: {}, operationId: 'root' })).rejects.toThrow(
+      /recorded stable/,
+    );
+    expect(runner.mutations).toHaveLength(0);
+  });
+  it('refuses signer changes, downgrades and unsuccessful post-mutation measurements', async () => {
+    const runner = new FakeRunner();
+    const android = adapter(runner);
+    const artifact = {
+      path: '/reviewed.apk',
+      packageId: 'org.example.app',
+      versionCode: 2,
+      sha256: 'a'.repeat(64),
+      signerSha256: 'b'.repeat(64),
+    };
+    android.inspectSharedEffects = () =>
+      Promise.resolve([
+        { packageId: artifact.packageId, users: [{ user, versionCode: 1, signerSha256: 'c'.repeat(64) }] },
+      ]);
+    await expect(android.install(target, user, artifact, { lease: {} })).rejects.toThrow(/signer differs/);
+    android.inspectSharedEffects = () =>
+      Promise.resolve([
+        {
+          packageId: artifact.packageId,
+          users: [{ user, versionCode: 3, signerSha256: artifact.signerSha256 }],
+        },
+      ]);
+    await expect(android.install(target, user, artifact, { lease: {} })).rejects.toThrow(/downgrade/);
+    android.readSetting = () => Promise.resolve('wrong');
+    await expect(
+      android.applySetting(
+        target,
+        user,
+        { namespace: 'global', key: 'safe', value: 'wanted' },
+        { lease: {} },
+      ),
+    ).rejects.toThrow(/retain/);
+    android.permission = () =>
+      Promise.resolve({
+        packageId: artifact.packageId,
+        permission: 'android.permission.CAMERA',
+        granted: false,
+      });
+    await expect(
+      android.applyPermission(
+        target,
+        user,
+        { packageId: artifact.packageId, permission: 'android.permission.CAMERA', granted: true },
+        { lease: {} },
+      ),
+    ).rejects.toThrow(/retain/);
+    await expect(
+      android.applyVpn(target, user, { packageId: null, alwaysOn: false, lockdown: false }, { lease: {} }),
+    ).rejects.toThrow(/retain/);
+  });
+});
+
+it('explicitly retries a blocked durable obligation through the real Android cleanup boundary', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'pxv-adapter-recovery-'));
+  const store = await SqliteStore.open(join(directory, 'state.sqlite'));
+  try {
+    const runner = new FakeRunner();
+    const android = adapter(runner);
+    const scope = new ResourceScope(store, target.device.canonicalSerial, 'recovery-run');
+    const record = await recordObligation(
+      scope,
+      'restore-setting',
+      'awake',
+      { namespace: 'global', key: 'stay_on_while_plugged_in', previous: '0' },
+      user,
+    );
+    const run = runner.run.bind(runner);
+    let unavailable = true;
+    runner.run = (args, options) =>
+      options?.mutation && unavailable
+        ? Promise.reject(new Error('Device disconnected during cleanup'))
+        : run(args, options);
+    const inspect = async (expected: AndroidUserIdentity): Promise<AndroidUserIdentity> => {
+      const observed = (await android.users(target)).find((value) => value.userId === expected.userId);
+      if (!observed) throw new Error('Missing live user');
+      return observed;
+    };
+    const cleanup = (entry: RecoveryObligation) =>
+      android.cleanup(target, entry, { lease: {}, operationId: entry.ownerOperationId });
+    await expect(scope.cleanup(inspect, cleanup)).rejects.toThrow('Device disconnected during cleanup');
+    expect((await scope.list())[0]).toMatchObject({ id: record.id, status: 'blocked', user });
+    unavailable = false;
+    await scope.cleanup(inspect, cleanup);
+    const resolved = (await scope.list())[0];
+    expect(resolved).toMatchObject({ id: record.id, status: 'resolved' });
+    expect(runner.values.get('global:stay_on_while_plugged_in')).toBe('0');
+    if (!resolved) throw new Error('Missing recovery record');
+    await expect(cleanup(resolved)).rejects.toThrow(/scope/);
+    const mutations = runner.mutations.length;
+    await scope.cleanup(inspect, cleanup);
+    expect(runner.mutations).toHaveLength(mutations);
+  } finally {
+    await store.close();
+    await rm(directory, { recursive: true, force: true });
+  }
 });

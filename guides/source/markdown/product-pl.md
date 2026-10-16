@@ -22,7 +22,7 @@ Operator sprawdza host, tworzy prywatny izolowany projekt i rejestruje dokładny
 
 Instalacja OS sprawdza podpis i treść obrazu przed uruchomieniem uwierzytelnionego skryptu przez wrapper fastboot związany z numerem telefonu. Wymaga oddzielnej zgody na wymazanie, bezpośredniego USB oraz fizycznej kontroli odblokowania i ponownego zablokowania. CLI, MCP i pełne przygotowanie korzystają z jednej ścieżki weryfikowanej instalacji aplikacji.
 
-Receptury są przypięte do odcisku OS oraz wersji i podpisu aplikacji. Nieobsługiwany ekran pozostaje zadaniem ręcznym. Odbiorca prywatnie wprowadza końcowe dane, konta, MFA i odzyskiwanie. Kolejność to zwykłe dane uwierzytelniające, język końcowy i opcjonalny duress. Destrukcyjna aktywacja duress nigdy nie jest krokiem testowym.
+Receptury są przypięte do odcisku OS oraz wersji i podpisu aplikacji. Nieobsługiwany ekran pozostaje zadaniem ręcznym. Receptura z prywatnym plikiem sprawdza zaakceptowaną obsługę wyboru pliku przed przesłaniem danych tymczasowych; nieobsługiwany import wymaga pełnej prywatnej procedury. Odbiorca prywatnie wprowadza końcowe dane, konta, MFA i odzyskiwanie. Kolejność to zwykłe dane uwierzytelniające, język końcowy i opcjonalny duress. Destrukcyjna aktywacja duress nigdy nie jest krokiem testowym.
 
 ## Dowody i zakończenie
 
@@ -36,7 +36,7 @@ Gotowość do przekazania i zakończona piecza to osobne wyniki. Dokument EN/PL 
 
 Nadzorca Linux zarządza mutacjami przez prywatne IPC, blokady jądra, tożsamość procesów, adopcję potomków i trwałe zredagowane pokwitowania. Zabicie Node nie dowodzi zakończenia polecenia ani sprzątania. Rezerwacje urządzenia i transportu są wspólne dla projektów, forków, buildów próbnych i kontenerów. Kontrola jednego telefonu z kilku stacji równocześnie jest nieobsługiwana.
 
-Przerwane mutacje nie są odtwarzane automatycznie. Odzyskiwanie sprawdza zapis, właściciela natywnego i stabilne numery seryjne użytkowników Androida. Nowy użytkownik z powtórzonym ID i nazwą nie jest poprzednim celem sprzątania. Podoperacja posiada tylko własne zasoby. Brak dowodu sprzątania zachowuje rezerwację; może wymagać restartu hosta i inspekcji.
+Przerwane mutacje nie są odtwarzane automatycznie. Odzyskiwanie sprawdza zapis, właściciela natywnego i stabilne numery seryjne użytkowników Androida. Nowy użytkownik z powtórzonym ID i nazwą nie jest poprzednim celem sprzątania. Podoperacja posiada tylko własne zasoby. Nieudane sprzątanie pozostaje zablokowane do jawnej, poprzedzonej inspekcją próby, która ponownie sprawdza zakres właściciela i stabilnego użytkownika. Rozwiązane zobowiązania nie są odtwarzane. Brak dowodu sprzątania zachowuje rezerwację; może wymagać restartu hosta i inspekcji.
 
 ## Rozszerzenia
 
@@ -46,7 +46,7 @@ Instalacja jest jawna i przypięta do dokładnej wersji oraz integralności. Dan
 
 ## Dystrybucja i wersje próbne
 
-Początkowa platforma to Linux x86_64, z kwalifikacją Debian 12 i Ubuntu 24.04. Przypięto Node 24.22.0 LTS, kompilator TypeScript 7.0.2 i pnpm 12.11.2. Archiwum przenośne i pakiet Debian zawierają runtime oraz nadzorcę. Pakiet npm wymaga obsługiwanego Node. Docker zawiera narzędzia wykonawcze.
+Początkowa platforma to Linux x86_64, z docelową weryfikacją na Debianie 12 i Ubuntu 24.04. Przypięto Node 24.22.0 LTS, kompilator TypeScript 7.0.2 i pnpm 12.11.2. Archiwum przenośne i pakiet Debian zawierają runtime oraz nadzorcę. Pakiet npm wymaga obsługiwanego Node. Docker zawiera narzędzia wykonawcze.
 
 Jeden niezmienny kandydat stanowi źródło formatów portable, Debian, npm i OCI. Build próbny dopuszcza niezacommitowane zmiany, zapisuje skrót treści i używa unikalnej wersji, katalogu, komendy/pakietu Debian oraz tagu obrazu. Zwykłe budowanie niczego nie publikuje, nie instaluje globalnie i nie zastępuje stabilnego launchera. Promocja jest oddzielna i jawna. Pojedynczy plik wykonywalny pozostaje eksperymentem; archiwum portable jest obsługiwanym wariantem bez zewnętrznego Node.
 
@@ -56,6 +56,6 @@ Host sprawdza Android, Java i OpenSSH oraz udostępnia jawny weryfikowany bootst
 
 Serwis zbiera nowe dowody i odnawia przekazanie. Zmiana polityki unieważnia poprzednie zatwierdzenia. Zapis utraty wspiera reakcję, ale nie wymazuje zdalnie. Wycofanie dokumentuje osobno potwierdzone wymazanie oraz pieczę, bez niejawnego wipe. Community jest lokalnym toolkitem, a nie zdalnym MDM. Headwind i budowanie własnego OS to późniejsze, osobno kwalifikowane integracje.
 
-Testy jednostkowe, kryptograficzne, procesów, bazy, rozszerzeń i pakowania wspierają wiarygodność silnika. Nie certyfikują receptury UI, polityki ani telefonu. Kwalifikacja wymaga zachowanego pochodzenia emulatora GrapheneOS i autoryzowanego Pixel 8a w EN/PL, w tym restore, restartu, trasowania/awarii i przekazania. Zwykły emulator nie dowodzi pochodzenia GrapheneOS.
+Testy jednostkowe, kryptograficzne, procesów, bazy, rozszerzeń i pakowania wspierają wiarygodność silnika. Nie certyfikują receptury UI, polityki ani telefonu. Kwalifikacja wymaga zachowanego pochodzenia emulatora GrapheneOS i autoryzowanego Pixel 8a w EN/PL, w tym restore, restartu, trasowania/awarii i przekazania. Zwykły emulator nie dowodzi pochodzenia GrapheneOS. Bieżący refaktoring źródeł ma wyłącznie weryfikację offline. Historyczne sprawdzenia Pixel dotyczą zapisanego kandydata i nie kwalifikują nowszego buildu.
 
 Operator powinien korzystać z podręcznika operatora i aktualnego help CLI. Odbiorca otrzymuje podręcznik wraz z zaakceptowanym dokumentem własnego telefonu. Maintainer korzysta z dokumentacji architektury, rozszerzeń, forków i publikacji. Prywatne projekty oraz sekrety pozostają poza publicznymi zasobami wydania.

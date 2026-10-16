@@ -14,12 +14,19 @@ const names = [
 ];
 export default defineConfig({
   resolve: {
-    alias: Object.fromEntries(
-      names.map((name) => [
-        `@pxv/${name}`,
-        fileURLToPath(new URL(`./packages/${name}/src/index.ts`, import.meta.url)),
-      ]),
-    ),
+    alias: Object.fromEntries([
+      [
+        '@pxv/contracts/extensions',
+        fileURLToPath(new URL('./packages/contracts/src/extensions.ts', import.meta.url)),
+      ] as const,
+      ...names.map(
+        (name) =>
+          [
+            `@pxv/${name}`,
+            fileURLToPath(new URL(`./packages/${name}/src/index.ts`, import.meta.url)),
+          ] as const,
+      ),
+    ]),
   },
   test: {
     include: ['tests/**/*.test.ts', 'packages/**/test/**/*.test.ts'],
@@ -28,8 +35,7 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       include: ['packages/*/src/**/*.ts'],
-      exclude: ['**/main.ts', 'packages/release/**', '**/worker.ts'],
-      thresholds: { lines: 90, branches: 85 },
+      reporter: ['text', 'json'],
     },
   },
 });

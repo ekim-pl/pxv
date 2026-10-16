@@ -1,4 +1,5 @@
-import { ChildProcess, spawn } from 'node:child_process';
+import { ChildProcess } from 'node:child_process';
+import type * as RuntimeModule from '@pxv/runtime';
 import type * as ChildProcessModule from 'node:child_process';
 import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -13,10 +14,32 @@ import { resolvePolicy, type ExtensionLock } from '@pxv/contracts';
 import { MemoryPort, basePolicy } from '../engine/fixtures.js';
 import { device, policy as setupPolicy, product } from '../contracts/fixtures.js';
 
-vi.mock('node:child_process', async (importOriginal) => ({
-  ...(await importOriginal<typeof ChildProcessModule>()),
-  spawn: vi.fn(),
-}));
+const { detachedSpawn } = vi.hoisted(() => ({ detachedSpawn: vi.fn<typeof ChildProcessModule.spawn>() }));
+vi.mock('node:child_process', async (importOriginal) => {
+  const actual = await importOriginal<typeof ChildProcessModule>();
+  return {
+    ...actual,
+    spawn: new Proxy(actual.spawn, {
+      apply(target, receiver, args: Parameters<typeof actual.spawn>) {
+        if (Array.isArray(args[1]) && args[1][1] === 'internal-worker') return detachedSpawn(...args);
+        return Reflect.apply<unknown, Parameters<typeof actual.spawn>, ReturnType<typeof actual.spawn>>(
+          target,
+          receiver,
+          args,
+        );
+      },
+    }),
+  };
+});
+vi.mock('@pxv/runtime', async (original) => {
+  const actual = await original<typeof RuntimeModule>();
+  return {
+    ...actual,
+    commitProjectFile: vi.fn((input: RuntimeModule.ProjectFileCommit) =>
+      actual.atomicWritePrivate(input.path, input.data),
+    ),
+  };
+});
 vi.mock('../../packages/cli/src/host.js', () => ({
   inspectHost: () => Promise.resolve({ supported: true }),
 }));
@@ -51,7 +74,7 @@ describe('MCP/CLI backend ports and detached execution', () => {
       controlRoot: join(root, 'control'),
     });
     saved = { ...process.env };
-    vi.mocked(spawn).mockReset();
+    detachedSpawn.mockReset();
   });
   afterEach(async () => {
     vi.restoreAllMocks();
@@ -89,7 +112,7 @@ describe('MCP/CLI backend ports and detached execution', () => {
     const backend = agentBackend(engine, resourceRoot, 'launcher.js', false);
     await expect(backend.executePlan('plan', 'review', 'operator')).rejects.toThrow('disabled');
     await expect(backend.cancelRun('run')).rejects.toThrow('mutations enabled');
-    expect(spawn).not.toHaveBeenCalled();
+    expect(detachedSpawn).not.toHaveBeenCalled();
     for (const action of [
       () => backend.attestDevice('all', 'operator_signoff', 'Alice'),
       () => backend.finalizeDevice('all', 'Alice', 'pl'),
@@ -115,9 +138,6 @@ describe('MCP/CLI backend ports and detached execution', () => {
   });
 
   it('uses shared engine gates for checks, handoff, custody, lifecycle and typed recovery', async () => {
-    vi.mocked(spawn).mockImplementation(
-      (await vi.importActual<typeof ChildProcessModule>('node:child_process')).spawn,
-    );
     const backend = live();
     const prepared = await engine.prepare({ device, transport: { kind: 'usb', serial: 'PIXEL1' } });
     const run = await engine.submit(prepared.plan.id, prepared.reviewSummary, 'Alice');
@@ -147,9 +167,6 @@ describe('MCP/CLI backend ports and detached execution', () => {
   });
 
   it('prepares fresh reviews through the backend without executing them', async () => {
-    vi.mocked(spawn).mockImplementation(
-      (await vi.importActual<typeof ChildProcessModule>('node:child_process')).spawn,
-    );
     const project = await createProject(join(root, 'setup'), product, setupPolicy);
     await saveInventory(project, { schemaVersion: 1, devices: [device] });
     const setup = new WorkflowEngine({
@@ -166,7 +183,7 @@ describe('MCP/CLI backend ports and detached execution', () => {
     expect(typeof (result as { planId: string }).planId).toBe('string');
     expect(typeof (result as { reviewSummary: string }).reviewSummary).toBe('string');
     expect(await store.get('runs', run.id)).toMatchObject({ status: 'superseded' });
-    expect(JSON.stringify(vi.mocked(spawn).mock.calls)).not.toContain('internal-worker');
+    expect(detachedSpawn).not.toHaveBeenCalled();
   });
 
   it('updates explicit extension locks, reads declared contributions and reviews adapter actions', async () => {
@@ -253,7 +270,7 @@ describe('MCP/CLI backend ports and detached execution', () => {
       () => backend.extensionCommand('all', lock.id, 'review', {}),
     ])
       expect(typeof ((await action()) as { planId: string }).planId).toBe('string');
-    expect(spawn).not.toHaveBeenCalled();
+    expect(detachedSpawn).not.toHaveBeenCalled();
     expect(await backend.extensionRemove(lock.id, true)).toEqual({
       removedFromProject: lock.id,
       retainedInSharedStore: true,
@@ -303,7 +320,7 @@ describe('MCP/CLI backend ports and detached execution', () => {
     process.env['PXV_TOOL_ADB'] = '/approved/adb';
     process.env['PXV_DOCKER_MODE'] = 'host-adb';
     const unref = vi.fn();
-    vi.mocked(spawn).mockImplementation(() => {
+    detachedSpawn.mockImplementation(() => {
       const child = new ChildProcess();
       child.unref = unref;
       queueMicrotask(() => {
@@ -318,9 +335,9 @@ describe('MCP/CLI backend ports and detached execution', () => {
       id: run.id,
     });
     await backend.executePlan(prepared.plan.id, prepared.reviewSummary, 'operator');
-    expect(spawn).toHaveBeenCalledTimes(1);
+    expect(detachedSpawn).toHaveBeenCalledTimes(1);
     expect(unref).toHaveBeenCalledOnce();
-    const options = vi.mocked(spawn).mock.calls[0]?.[2];
+    const options = detachedSpawn.mock.calls[0]?.[2];
     expect(options?.env?.['PXV_TOOL_ADB']).toBe('/approved/adb');
     expect(options?.env?.['PXV_DOCKER_MODE']).toBe('host-adb');
     expect(options?.env?.['PXV_REGISTRY_TOKEN']).toBeUndefined();
@@ -336,17 +353,17 @@ describe('MCP/CLI backend ports and detached execution', () => {
       manualGate: 'normal_credentials',
       cursor: 0,
     });
-    vi.mocked(spawn).mockImplementation(() => {
+    detachedSpawn.mockImplementation(() => {
       const child = new ChildProcess();
       queueMicrotask(() => child.emit('message', { type: 'ready', runId: run.id }));
       return child;
     });
     const backend = agentBackend(engine, resourceRoot, 'launcher.js', true);
     await backend.executePlan(prepared.plan.id, prepared.reviewSummary, 'operator');
-    expect(spawn).toHaveBeenCalledOnce();
+    expect(detachedSpawn).toHaveBeenCalledOnce();
     await store.set('runs', run.id, { ...run, status: 'needs-inspection' });
     await backend.executePlan(prepared.plan.id, prepared.reviewSummary, 'operator');
-    expect(spawn).toHaveBeenCalledOnce();
+    expect(detachedSpawn).toHaveBeenCalledOnce();
   });
 
   it.each(['exit', 'error'])(
@@ -354,7 +371,7 @@ describe('MCP/CLI backend ports and detached execution', () => {
     async (failure) => {
       const prepared = await engine.prepare({ device, transport: { kind: 'usb', serial: 'PIXEL1' } });
       const run = await engine.submit(prepared.plan.id, prepared.reviewSummary, 'operator');
-      vi.mocked(spawn).mockImplementation(() => {
+      detachedSpawn.mockImplementation(() => {
         const child = new ChildProcess();
         queueMicrotask(() => child.emit(failure, failure === 'error' ? new Error('startup failure') : 1));
         return child;
@@ -371,7 +388,7 @@ describe('MCP/CLI backend ports and detached execution', () => {
     const prepared = await engine.prepare({ device, transport: { kind: 'usb', serial: 'PIXEL1' } });
     const run = await engine.submit(prepared.plan.id, prepared.reviewSummary, 'operator');
     const killed = vi.fn();
-    vi.mocked(spawn).mockImplementation(() => {
+    detachedSpawn.mockImplementation(() => {
       const child = new ChildProcess();
       child.kill = killed;
       return child;
@@ -384,7 +401,7 @@ describe('MCP/CLI backend ports and detached execution', () => {
         'operator',
       );
       const rejected = expect(pending).rejects.toThrow('did not acknowledge');
-      await vi.waitFor(() => expect(spawn).toHaveBeenCalled());
+      await vi.waitFor(() => expect(detachedSpawn).toHaveBeenCalled());
       await vi.advanceTimersByTimeAsync(10_000);
       await rejected;
       expect(killed).toHaveBeenCalledWith('SIGTERM');

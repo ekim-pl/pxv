@@ -1,20 +1,20 @@
-import { spawn } from 'node:child_process';
-import { readFile } from 'node:fs/promises';
-import { join } from 'node:path';
-import { homedir } from 'node:os';
 import { resolveSelection, validateProject } from '@pxv/contracts';
-import type { AgentBackend } from '@pxv/mcp';
 import {
   containedPath,
   recordLifecycle,
-  type WorkflowEngine,
-  type RunRecord,
   type PreparedOperation,
+  type RunRecord,
+  type WorkflowEngine,
 } from '@pxv/engine';
-import { atomicWritePrivate } from '@pxv/runtime';
 import { ExtensionManager } from '@pxv/extensions';
-import { inspectHost } from './host.js';
+import type { AgentBackend } from '@pxv/mcp';
+import { commitProjectFile } from '@pxv/runtime';
+import { spawn } from 'node:child_process';
+import { readFile } from 'node:fs/promises';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
 import { application, redact } from './context.js';
+import { inspectHost } from './host.js';
 
 function extensionManager(registry?: string): ExtensionManager {
   return new ExtensionManager({
@@ -25,13 +25,7 @@ function extensionManager(registry?: string): ExtensionManager {
     ...(process.env['PXV_REGISTRY_TOKEN'] ? { token: process.env['PXV_REGISTRY_TOKEN'] } : {}),
   });
 }
-
-export function agentBackend(
-  engine: WorkflowEngine,
-  resources: string,
-  launcher: string,
-  allowMutations: boolean,
-): AgentBackend {
+function backendContext(engine: WorkflowEngine, allowMutations: boolean) {
   const serials = engine.project.inventory.devices.flatMap((value) => [
     value.canonicalSerial,
     ...value.transports.map((transport) => transport.serial),
@@ -49,7 +43,7 @@ export function agentBackend(
     requireMutation();
     if (reviewed !== true) throw new Error('Explicit review confirmation is required');
   };
-  const manager = extensionManager;
+
   const pinned = (id: string) => {
     const lock = engine.project.config.extensions.find((value) => value.id === id);
     if (!lock) throw new Error('Extension is not pinned in this project');
@@ -62,11 +56,127 @@ export function agentBackend(
   });
   const writeConfig = async (extensions: typeof engine.project.config.extensions): Promise<void> => {
     const config = validateProject({ ...engine.project.config, extensions });
-    await atomicWritePrivate(
-      await containedPath(engine.project.root, 'pxv.project.json'),
-      JSON.stringify(config, null, 2),
-    );
+    await commitProjectFile({
+      controlRoot: engine.controlRoot,
+      projectId: engine.project.config.id,
+      path: await containedPath(engine.project.root, 'pxv.project.json'),
+      expectedSha256: engine.project.revisions.config,
+      data: JSON.stringify(config, null, 2),
+    });
   };
+
+  return {
+    engine,
+    allowMutations,
+    publicValue,
+    select,
+    requireMutation,
+    requireReview,
+    pinned,
+    review,
+    writeConfig,
+  };
+}
+type BackendContext = ReturnType<typeof backendContext>;
+
+function workerEnvironment(): Record<string, string> {
+  const env: Record<string, string> = { PATH: process.env['PATH'] ?? '/usr/bin:/bin' };
+  for (const name of [
+    'NODE_V8_COVERAGE',
+    'HOME',
+    'XDG_STATE_HOME',
+    'PXV_CONTROL_ROOT',
+    'PXV_SUPERVISOR',
+    'ANDROID_HOME',
+    'ANDROID_SDK_ROOT',
+    'PXV_HOST_ADB_HOST',
+    'PXV_HOST_ADB_PORT',
+    'PXV_DOCKER_MODE',
+    'ADB_SERVER_SOCKET',
+    'PXV_EXTENSION_ROOT',
+    'PXV_TOOL_ADB',
+    'PXV_TOOL_FASTBOOT',
+    'PXV_TOOL_AAPT',
+    'PXV_TOOL_APKSIGNER',
+    'PXV_TOOL_JAVA',
+    'PXV_TOOL_SSH_KEYGEN',
+    'PXV_BUILD_TOOLS',
+    'PXV_TOOLS_DIR',
+  ]) {
+    if (process.env[name]) env[name] = process.env[name];
+  }
+
+  return env;
+}
+function acknowledgeStartup(child: ReturnType<typeof spawn>, runId: string): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      child.kill('SIGTERM');
+      reject(new Error('Detached worker did not acknowledge startup'));
+    }, 10_000);
+    child.once('error', (error) => {
+      clearTimeout(timer);
+      reject(error);
+    });
+    child.once('exit', () => {
+      clearTimeout(timer);
+      reject(new Error('Detached worker exited before startup'));
+    });
+    child.on('message', (message: unknown) => {
+      if (
+        message &&
+        typeof message === 'object' &&
+        'type' in message &&
+        message.type === 'ready' &&
+        'runId' in message &&
+        message.runId === runId
+      ) {
+        clearTimeout(timer);
+        resolve();
+      }
+    });
+  });
+}
+async function launchWorker(
+  engine: WorkflowEngine,
+  resources: string,
+  launcher: string,
+  run: RunRecord,
+): Promise<void> {
+  const env = workerEnvironment();
+  const child = spawn(
+    process.execPath,
+    [
+      launcher,
+      'internal-worker',
+      '--project-root',
+      engine.project.root,
+      '--resource-root',
+      resources,
+      '--run',
+      run.id,
+    ],
+    { detached: true, stdio: ['ignore', 'ignore', 'ignore', 'ipc'], env },
+  );
+  try {
+    await acknowledgeStartup(child, run.id);
+  } catch (error) {
+    await engine.store.set('runs', run.id, {
+      ...run,
+      status: 'needs-inspection',
+      error: 'Detached worker startup failed; inspect before a fresh review',
+    });
+    throw error;
+  }
+  child.unref();
+}
+
+function readBackend(
+  context: BackendContext,
+  resources: string,
+): Pick<AgentBackend, 'inspectHost' | 'listDevices' | 'inspectDevice' | 'getRun' | 'listRuns' | 'guide'> {
+  const { engine, publicValue, select } = context;
+
   return {
     inspectHost,
     listDevices() {
@@ -75,6 +185,42 @@ export function agentBackend(
     async inspectDevice(assetId) {
       return publicValue(await engine.observe(select(assetId)));
     },
+    async getRun(runId, after) {
+      return publicValue({
+        run: await engine.store.get<RunRecord>('runs', runId),
+        events: await engine.store.events(runId, after, 100),
+      });
+    },
+    async listRuns() {
+      return publicValue(await engine.store.entries<RunRecord>('runs'));
+    },
+    async guide(name) {
+      return readFile(
+        join(resources, 'guides/source/markdown', name === 'operator' ? 'operator-en.md' : 'user-en.md'),
+        'utf8',
+      );
+    },
+  };
+}
+function workflowBackend(
+  context: BackendContext,
+  resources: string,
+  launcher: string,
+): Pick<
+  AgentBackend,
+  | 'prepareOperation'
+  | 'executePlan'
+  | 'cancelRun'
+  | 'attestDevice'
+  | 'finalizeDevice'
+  | 'confirmCustody'
+  | 'recoverDevice'
+  | 'recordLifecycle'
+  | 'refreshReview'
+> {
+  const { engine, allowMutations, publicValue, select, requireMutation, requireReview, review } = context;
+
+  return {
     async prepareOperation(assetId, operation) {
       const prepared = await engine.prepare(select(assetId), operation);
       return {
@@ -92,92 +238,9 @@ export function agentBackend(
           claimedAt: new Date().toISOString(),
         });
         if (!claimed) return publicValue(run);
-        const env: Record<string, string> = { PATH: process.env['PATH'] ?? '/usr/bin:/bin' };
-        for (const name of [
-          'HOME',
-          'XDG_STATE_HOME',
-          'PXV_CONTROL_ROOT',
-          'PXV_SUPERVISOR',
-          'ANDROID_HOME',
-          'ANDROID_SDK_ROOT',
-          'PXV_HOST_ADB_HOST',
-          'PXV_HOST_ADB_PORT',
-          'PXV_DOCKER_MODE',
-          'ADB_SERVER_SOCKET',
-          'PXV_EXTENSION_ROOT',
-          'PXV_TOOL_ADB',
-          'PXV_TOOL_FASTBOOT',
-          'PXV_TOOL_AAPT',
-          'PXV_TOOL_APKSIGNER',
-          'PXV_TOOL_JAVA',
-          'PXV_TOOL_SSH_KEYGEN',
-          'PXV_BUILD_TOOLS',
-          'PXV_TOOLS_DIR',
-        ]) {
-          if (process.env[name]) env[name] = process.env[name];
-        }
-        const child = spawn(
-          process.execPath,
-          [
-            launcher,
-            'internal-worker',
-            '--project-root',
-            engine.project.root,
-            '--resource-root',
-            resources,
-            '--run',
-            run.id,
-          ],
-          { detached: true, stdio: ['ignore', 'ignore', 'ignore', 'ipc'], env },
-        );
-        try {
-          await new Promise<void>((resolve, reject) => {
-            const timer = setTimeout(() => {
-              child.kill('SIGTERM');
-              reject(new Error('Detached worker did not acknowledge startup'));
-            }, 10_000);
-            child.once('error', (error) => {
-              clearTimeout(timer);
-              reject(error);
-            });
-            child.once('exit', () => {
-              clearTimeout(timer);
-              reject(new Error('Detached worker exited before startup'));
-            });
-            child.on('message', (message: unknown) => {
-              if (
-                message &&
-                typeof message === 'object' &&
-                'type' in message &&
-                message.type === 'ready' &&
-                'runId' in message &&
-                message.runId === run.id
-              ) {
-                clearTimeout(timer);
-                resolve();
-              }
-            });
-          });
-        } catch (error) {
-          await engine.store.set('runs', run.id, {
-            ...run,
-            status: 'needs-inspection',
-            error: 'Detached worker startup failed; inspect before a fresh review',
-          });
-          throw error;
-        }
-        child.unref();
+        await launchWorker(engine, resources, launcher, run);
       }
       return publicValue(run);
-    },
-    async getRun(runId, after) {
-      return publicValue({
-        run: await engine.store.get<RunRecord>('runs', runId),
-        events: await engine.store.events(runId, after, 100),
-      });
-    },
-    async listRuns() {
-      return publicValue(await engine.store.entries<RunRecord>('runs'));
     },
     async cancelRun(runId) {
       if (!allowMutations) throw new Error('Explicit cancellation requires mutations enabled');
@@ -204,18 +267,52 @@ export function agentBackend(
     async recordLifecycle(input) {
       requireMutation();
       select(input.assetId);
-      return publicValue(await recordLifecycle(engine.project, engine.store, input));
+      return publicValue(
+        await recordLifecycle(engine.project, engine.store, input, undefined, engine.controlRoot),
+      );
     },
     async refreshReview(runId) {
       requireMutation();
       return review(await engine.refreshReview(runId));
     },
+  };
+}
+function readExtensions(
+  context: BackendContext,
+): Pick<
+  AgentBackend,
+  'extensionList' | 'extensionInspect' | 'extensionGuide' | 'extensionAdapter' | 'extensionCommand'
+> {
+  const { engine, publicValue, select, requireMutation, pinned, review } = context;
+  const manager = extensionManager;
+  return {
     async extensionList() {
       return publicValue(await manager().list());
     },
     async extensionInspect(id) {
       return publicValue(await manager().inspect(pinned(id)));
     },
+    async extensionGuide(id, contribution) {
+      return manager().readContribution(pinned(id), 'guides', contribution);
+    },
+    async extensionAdapter(assetId, id, contribution, input) {
+      requireMutation();
+      const actions = await manager().invokeAdapter(pinned(id), contribution, input);
+      return review(await engine.prepareExtension(select(assetId), actions));
+    },
+    async extensionCommand(assetId, id, command, input) {
+      requireMutation();
+      const actions = await manager().invoke(pinned(id), command, input);
+      return review(await engine.prepareExtension(select(assetId), actions));
+    },
+  };
+}
+function writeExtensions(
+  context: BackendContext,
+): Pick<AgentBackend, 'extensionInstall' | 'extensionUpdate' | 'extensionRemove' | 'extensionPolicy'> {
+  const { engine, publicValue, requireReview, pinned, writeConfig } = context;
+  const manager = extensionManager;
+  return {
     async extensionInstall(source, reviewed, registry) {
       requireReview(reviewed);
       const installed = await manager(registry).install(source);
@@ -240,31 +337,34 @@ export function agentBackend(
     async extensionPolicy(id, contribution, reviewed) {
       requireReview(reviewed);
       const policy = await manager().readContribution(pinned(id), 'policyPacks', contribution);
-      await atomicWritePrivate(
-        await containedPath(engine.project.root, engine.project.config.policyFile),
-        JSON.stringify(policy, null, 2),
-      );
+      await commitProjectFile({
+        projectId: engine.project.config.id,
+        path: await containedPath(engine.project.root, engine.project.config.policyFile),
+        expectedSha256: engine.project.revisions.policy,
+        expectedSources: [
+          {
+            path: await containedPath(engine.project.root, 'pxv.project.json'),
+            sha256: engine.project.revisions.config,
+          },
+        ],
+        data: JSON.stringify(policy, null, 2),
+      });
       return { selectedPolicy: policy.id, extension: id, policyLockRequired: true };
     },
-    async extensionGuide(id, contribution) {
-      return manager().readContribution(pinned(id), 'guides', contribution);
-    },
-    async extensionAdapter(assetId, id, contribution, input) {
-      requireMutation();
-      const actions = await manager().invokeAdapter(pinned(id), contribution, input);
-      return review(await engine.prepareExtension(select(assetId), actions));
-    },
-    async extensionCommand(assetId, id, command, input) {
-      requireMutation();
-      const actions = await manager().invoke(pinned(id), command, input);
-      return review(await engine.prepareExtension(select(assetId), actions));
-    },
-    async guide(name) {
-      return readFile(
-        join(resources, 'guides/source/markdown', name === 'operator' ? 'operator-en.md' : 'user-en.md'),
-        'utf8',
-      );
-    },
+  };
+}
+export function agentBackend(
+  engine: WorkflowEngine,
+  resources: string,
+  launcher: string,
+  allowMutations: boolean,
+): AgentBackend {
+  const context = backendContext(engine, allowMutations);
+  return {
+    ...readBackend(context, resources),
+    ...workflowBackend(context, resources, launcher),
+    ...readExtensions(context),
+    ...writeExtensions(context),
   };
 }
 

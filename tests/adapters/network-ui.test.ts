@@ -1,3 +1,4 @@
+import { obligationWriter } from './obligations.js';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
@@ -8,7 +9,6 @@ import {
   AndroidAdapter,
   NetworkProbeService,
   UiAutomation,
-  finalSetupSequence,
   ipInCidrs,
   observeEmulatorProvenance,
   type CleanupOptions,
@@ -135,14 +135,17 @@ describe('app-UID network observations and cleanup ownership', () => {
     };
     const options = {
       lease: {},
-      operationId: 'recovery',
-      obligations: {
-        record: () => Promise.resolve(),
-        resolve: (id: string) => {
+
+      obligations: obligationWriter(
+        obligation.operationId,
+        () => Promise.resolve(),
+        (id: string) => {
           resolved.push(id);
           return Promise.resolve();
         },
-      },
+        obligation.ownerOperationId,
+        new Map([[obligation.id, obligation.ownerOperationId]]),
+      ),
     };
     await expect(
       service.recoverService(target, { ...obligation, deviceSerial: 'OTHER' }, helper, options),
@@ -155,7 +158,21 @@ describe('app-UID network observations and cleanup ownership', () => {
         options,
       ),
     ).rejects.toThrow(/APK changed/);
-    const evidence = await service.recoverService(target, obligation, helper, options);
+    await expect(
+      service.recoverService(target, { ...obligation, status: 'resolved' }, helper, options),
+    ).rejects.toThrow(/scope/);
+    await expect(
+      service.recoverService(target, { ...obligation, ownerOperationId: 'another-owner' }, helper, options),
+    ).rejects.toThrow(/scope/);
+    await expect(
+      service.recoverService(target, { ...obligation, operationId: 'another-root' }, helper, options),
+    ).rejects.toThrow(/scope/);
+    const evidence = await service.recoverService(
+      target,
+      { ...obligation, status: 'blocked' },
+      helper,
+      options,
+    );
     expect(evidence.scope).toBe('probe-app-uid-https-only');
     expect(resolved.at(-1)).toBe(obligation.id);
   });
@@ -174,22 +191,23 @@ describe('app-UID network observations and cleanup ownership', () => {
     const resolved: string[] = [];
     const result = await service.run(target, user, helper, request, {
       lease: {},
-      operationId: 'parent',
-      obligations: {
-        record: (obligation) => {
+
+      obligations: obligationWriter(
+        'root',
+        (obligation) => {
           expect(android.installed).toBe(false);
           records.push(obligation);
           return Promise.resolve();
         },
-        resolve: (id) => {
+        (id) => {
           resolved.push(id);
           return Promise.resolve();
         },
-      },
+      ),
     });
     expect(result.scope).toBe('probe-app-uid-https-only');
     expect(records).toHaveLength(1);
-    expect(records[0]?.ownerOperationId).toMatch(/^parent\/probe\//);
+    expect(records[0]?.ownerOperationId).toMatch(/^root:network-probe-/);
     expect(android.cleanupOwners).toEqual([records[0]?.ownerOperationId]);
     expect(resolved).toEqual([records[0]?.id]);
     expect(android.installed).toBe(false);
@@ -199,8 +217,12 @@ describe('app-UID network observations and cleanup ownership', () => {
     const service = new NetworkProbeService(android);
     const options = {
       lease: {},
-      operationId: 'parent',
-      obligations: { record: () => Promise.resolve(), resolve: () => Promise.resolve() },
+
+      obligations: obligationWriter(
+        'root',
+        () => Promise.resolve(),
+        () => Promise.resolve(),
+      ),
     };
     await expect(
       service.run(target, user, helper, { ...request, endpoint: 'http://probe.example/ip' }, options),
@@ -252,17 +274,18 @@ describe('app-UID network observations and cleanup ownership', () => {
       request,
       {
         lease: {},
-        operationId: 'parent',
-        obligations: {
-          record: (record) => {
+
+        obligations: obligationWriter(
+          'root',
+          (record) => {
             records.push(record);
             return Promise.resolve();
           },
-          resolve: (id) => {
+          (id) => {
             resolved.push(id);
             return Promise.resolve();
           },
-        },
+        ),
       },
       ['org.example.vpn'],
     );
@@ -272,14 +295,6 @@ describe('app-UID network observations and cleanup ownership', () => {
   });
 });
 describe('capability-based UI and emulator provenance', () => {
-  it('preserves private normal-credential, language and optional duress order', () => {
-    expect(finalSetupSequence('pl-PL', true).map((step) => step.capability)).toEqual([
-      'normal-credential',
-      'language',
-      'duress',
-    ]);
-    expect(finalSetupSequence()).toHaveLength(1);
-  });
   it('requires exact accepted Android build and language with intact recorded evidence', async () => {
     const acceptance = join(directory, 'acceptance.json');
     const bytes = JSON.stringify({ recorded: 'fixture evidence only' });
@@ -362,8 +377,37 @@ describe('capability-based UI and emulator provenance', () => {
     expect(evidence.acceptance).toBe('emulator-only');
     expect(evidence.capabilities).toContain('duress');
     await expect(observeEmulatorProvenance(android, target, pin, [])).rejects.toThrow(/physical device/);
+    android.fingerprint = 'changed/build';
+    await expect(
+      observeEmulatorProvenance(android, emulator, pin, [], new AbortController().signal),
+    ).rejects.toThrow(/Running emulator/);
+    android.fingerprint = 'accepted/build';
     await expect(
       observeEmulatorProvenance(android, emulator, { ...pin, sha256: '0'.repeat(64) }, []),
     ).rejects.toThrow(/provenance pin/);
   });
+});
+
+it('uses a supplied child capability without recording through or resolving its parent', async () => {
+  const android = new ProbeAndroid();
+  const records: RecoveryObligation[] = [];
+  const root = obligationWriter(
+    'root',
+    (value) => {
+      records.push(value);
+      return Promise.resolve();
+    },
+    () => Promise.resolve(),
+  );
+  const child = root.child('caller');
+  await new NetworkProbeService(android).run(target, user, helper, request, {
+    lease: {},
+
+    obligations: child,
+  });
+  const record = records[0];
+  if (!record) throw new Error('No helper record');
+  expect(record.operationId).toBe('root');
+  expect(record.ownerOperationId).toMatch(/^root:caller:network-probe-/);
+  await expect(root.resolve(record.id)).rejects.toThrow(/another owner/);
 });

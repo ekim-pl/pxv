@@ -1,3 +1,5 @@
+import type { ObligationWriter } from '@pxv/contracts';
+import { parseUiSnapshot, matchUiNode, type UiNode } from './ui-snapshot.js';
 import {
   digest,
   validateRecipe,
@@ -16,17 +18,12 @@ import { setTimeout as delay } from 'node:timers/promises';
 import type { AndroidAdapter } from './android.js';
 import { AdapterError, type OperationOptions } from './command.js';
 import { copySnapshot, fileDigest } from './files.js';
-import type { ObligationWriter } from './network.js';
 
-export interface UiNode {
-  attributes: Record<string, string>;
-}
-export interface RecipeInput {
+interface RecipeInput {
   path: string;
   sha256: string;
 }
 export interface RecipeOptions extends OperationOptions {
-  operationId: string;
   obligations: ObligationWriter;
   inputs?: Record<string, RecipeInput>;
 }
@@ -39,100 +36,9 @@ export type RecipeResult =
       verification: 'visible-ui-only';
     }
   | { status: 'manual-pending'; capability: 'app-setup'; recipeDigest: string; instructions: string };
-function decodeXml(value: string): string {
-  if (/&(?!amp;|lt;|gt;|quot;|apos;|#\d+;|#x[0-9a-fA-F]+;)/.test(value))
-    throw new AdapterError('UI XML contains unsupported entities');
-  return value.replace(/&(amp|lt|gt|quot|apos|#\d+|#x[0-9a-fA-F]+);/g, (_match: string, entity: string) => {
-    const known: Record<string, string> = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'" };
-    const named = known[entity];
-    if (named) return named;
-    const code = entity.startsWith('#x') ? Number.parseInt(entity.slice(2), 16) : Number(entity.slice(1));
-    if (!Number.isSafeInteger(code) || code < 32 || code > 0x10ffff || (code >= 0xd800 && code <= 0xdfff))
-      throw new AdapterError('UI XML contains invalid codepoints');
-    return String.fromCodePoint(code);
-  });
-}
-/** A strict parser for the bounded hierarchy/node-only uiautomator format. No DTDs. */
-export function parseUiSnapshot(xml: string): UiNode[] {
-  if (Buffer.byteLength(xml) > 2 * 1024 * 1024 || /<!|<\?[^x]|[\0]/.test(xml))
-    throw new AdapterError('UI snapshot exceeds limits or uses unsupported XML');
-  const nodes: UiNode[] = [];
-  const stack: string[] = [];
-  let cursor = 0;
-  let roots = 0;
-  const tokens = xml.matchAll(/<[^>]*>/g);
-  for (const token of tokens) {
-    const at = token.index;
-    if (xml.slice(cursor, at).trim()) throw new AdapterError('UI snapshot contains unexpected text');
-    const raw = token[0];
-    cursor = at + raw.length;
-    if (
-      /^<\?xml\s+version=(["'])1\.0\1(?:\s+encoding=(["'])UTF-8\2)?(?:\s+standalone=(["'])(yes|no)\3)?\s*\?>$/i.test(
-        raw,
-      )
-    ) {
-      if (at !== 0) throw new AdapterError('UI XML declaration is misplaced');
-      continue;
-    }
-    const close = /^<\/(hierarchy|node)\s*>$/.exec(raw);
-    if (close?.[1]) {
-      if (stack.pop() !== close[1]) throw new AdapterError('UI XML nesting is malformed');
-      continue;
-    }
-    const opening = /^<(hierarchy|node)(\s[\s\S]*?)?\s*(\/?)>$/.exec(raw);
-    if (!opening?.[1]) throw new AdapterError('UI XML contains unsupported elements');
-    const tag = opening[1];
-    if (tag === 'hierarchy') {
-      if (stack.length || roots++) throw new AdapterError('UI hierarchy root is ambiguous');
-    } else if (!stack.length || stack[0] !== 'hierarchy')
-      throw new AdapterError('UI node is outside the hierarchy');
-    const attributes: Record<string, string> = Object.create(null) as Record<string, string>;
-    const source = opening[2] ?? '';
-    let last = 0;
-    for (const attribute of source.matchAll(/([a-zA-Z][a-zA-Z0-9_-]*)\s*=\s*"([^"<>]*)"/g)) {
-      if (source.slice(last, attribute.index).trim())
-        throw new AdapterError('UI XML attributes are malformed');
-      const name = attribute[1];
-      const value = attribute[2];
-      if (!name || value === undefined || Object.hasOwn(attributes, name))
-        throw new AdapterError('UI XML attributes are duplicated');
-      attributes[name] = decodeXml(value);
-      last = attribute.index + attribute[0].length;
-    }
-    if (source.slice(last).trim()) throw new AdapterError('UI XML attributes are malformed');
-    if (tag === 'node') {
-      nodes.push({ attributes });
-      if (nodes.length > 10_000) throw new AdapterError('UI snapshot contains too many nodes');
-    }
-    if (!opening[3]) {
-      stack.push(tag);
-      if (stack.length > 100) throw new AdapterError('UI XML nesting exceeds limits');
-    }
-  }
-  if (xml.slice(cursor).trim() || roots !== 1 || stack.length)
-    throw new AdapterError('UI XML hierarchy is incomplete');
-  return nodes;
-}
-export function matchUiNode(
-  nodes: readonly UiNode[],
-  selector: UiSelector,
-  packageId: string,
-): UiNode | undefined {
-  const names: Record<string, string> = {
-    resourceId: 'resource-id',
-    text: 'text',
-    description: 'content-desc',
-    checked: 'checked',
-  };
-  const matches = nodes.filter(
-    (node) =>
-      node.attributes['package'] === packageId &&
-      node.attributes['enabled'] === 'true' &&
-      Object.entries(selector).every(([key, value]) => node.attributes[names[key] ?? ''] === String(value)),
-  );
-  if (matches.length > 1) throw new AdapterError('UI selector is ambiguous; review the pinned recipe');
-  return matches[0];
-}
+
+const PRIVATE_IMPORT_INSTRUCTIONS =
+  'No temporary import file is retained. Complete the full configuration import privately in the app using your approved private transfer method, or review an accepted file-selection adapter and rerun the recipe.';
 const CONSENT = new Set([
   'com.android.vpndialogs',
   'com.android.permissioncontroller',
@@ -204,28 +110,9 @@ export class RecipeService {
     node: UiNode,
     options: OperationOptions,
   ): Promise<void> {
-    const match = /^\[(\d+),(\d+)\]\[(\d+),(\d+)\]$/.exec(node.attributes['bounds'] ?? '');
-    if (!match) throw new AdapterError('UI node has no usable bounds');
-    const [left, top, right, bottom] = match.slice(1).map(Number);
-    if (
-      left === undefined ||
-      top === undefined ||
-      right === undefined ||
-      bottom === undefined ||
-      left < 0 ||
-      top < 0 ||
-      right <= left ||
-      bottom <= top ||
-      right > 10000 ||
-      bottom > 10000
-    )
-      throw new AdapterError('UI node bounds are outside the accepted range');
+    const [x, y] = tapPoint(node);
     await this.focus(target, user, packageId, options.signal);
-    await this.android.shell(
-      target,
-      ['input', 'tap', String(Math.floor((left + right) / 2)), String(Math.floor((top + bottom) / 2))],
-      { ...options, mutation: true },
-    );
+    await this.android.shell(target, ['input', 'tap', String(x), String(y)], { ...options, mutation: true });
   }
   async verifyIdentity(
     target: SelectedTarget,
@@ -251,143 +138,72 @@ export class RecipeService {
     options: RecipeOptions,
   ): Promise<RecipeResult> {
     recipe = validateRecipe(recipe);
-    const recipeDigest = digest(recipe);
-    const pending = (instructions: string): RecipeResult => ({
-      status: 'manual-pending',
-      capability: 'app-setup',
-      recipeDigest,
-      instructions,
-    });
+    const run = new RecipeRun(this, target, user, recipe, options);
     if (!(await this.verifyIdentity(target, user, recipe, options.signal)))
-      return pending(
+      return run.pending(
         'The app version, signer or Android build differs from the pinned recipe; complete setup privately or review an updated recipe.',
       );
-    const child = `${options.operationId}/recipe/${randomUUID()}`;
-    const obligations: RecoveryObligation[] = [];
-    const staged = new Map<string, string>();
+    if (!(await this.supportsPrivateImport(target, user, recipe, options)))
+      return run.pending(PRIVATE_IMPORT_INSTRUCTIONS);
     try {
-      await this.android.launch(target, user, recipe.packageId, options);
-      for (const step of recipe.steps) {
-        await this.focus(target, user, recipe.packageId, options.signal);
-        if (step.action === 'stage-file') {
-          const input = options.inputs?.[step.file];
-          if (!input) throw new AdapterError('The recipe input reference has no enrolled private file');
-          const stat = await lstat(input.path);
-          const suffix = extname(input.path);
-          if (
-            !stat.isFile() ||
-            stat.isSymbolicLink() ||
-            stat.mode & 0o077 ||
-            stat.size < 1 ||
-            stat.size > 128 * 1024 ||
-            !/^\.[A-Za-z0-9]{1,10}$/.test(suffix)
-          )
-            throw new AdapterError(
-              'Recipe input must be a bounded private regular file with a safe extension',
-            );
-          const directory = await mkdtemp(join(tmpdir(), 'pxv-recipe-input-'));
-          try {
-            const path = join(directory, `input${suffix}`);
-            await copySnapshot(input.path, path, 128 * 1024, options.signal);
-            if ((await fileDigest(path, 128 * 1024, options.signal)) !== input.sha256)
-              throw new AdapterError('Private recipe input changed after preparation');
-            const remote = `/storage/emulated/${user.userId}/Download/pxv-import-${randomUUID()}${suffix}`;
-            const obligation: RecoveryObligation = {
-              schemaVersion: 1,
-              id: randomUUID(),
-              operationId: options.operationId,
-              ownerOperationId: child,
-              deviceSerial: target.device.canonicalSerial,
-              user,
-              kind: 'remove-file',
-              resource: remote,
-              payload: { path: remote },
-              status: 'pending',
-            };
-            await options.obligations.record(obligation);
-            obligations.push(obligation);
-            await this.android.guardUser(target, user, options.signal);
-            const pushed = await this.android.runAdb(['-s', target.transport.serial, 'push', path, remote], {
-              ...options,
-              mutation: true,
-            });
-            if (pushed.code !== 0)
-              throw new AdapterError('Private recipe input transfer failed; preserve cleanup evidence');
-            staged.set(step.file, remote);
-          } finally {
-            await rm(directory, { recursive: true, force: true });
-          }
-          continue;
-        }
-        if (step.action === 'select-staged-file') {
-          const remote = staged.get(step.file);
-          if (!remote) throw new AdapterError('The selected file reference has not been staged');
-          if (!this.android.ui)
-            return pending(
-              'Select the staged input privately through the Android file picker; no accepted system UI adapter is available.',
-            );
-          const selected = await this.android.ui.execute(
-            this.android,
-            target,
-            user,
-            { capability: 'file-selection', remotePath: remote },
-            options,
-          );
-          if (selected.status !== 'measured') return pending(selected.instructions);
-          continue;
-        }
-        if (step.action === 'back') {
-          await this.snapshot(target, user, recipe.packageId, options.signal);
-          await this.focus(target, user, recipe.packageId, options.signal);
-          await this.android.shell(target, ['input', 'keyevent', 'KEYCODE_BACK'], {
-            ...options,
-            mutation: true,
-          });
-          continue;
-        }
-        if (!('selector' in step)) throw new AdapterError('Unsupported recipe action');
-        await this.performStep(target, user, recipe, step, options);
-      }
-      const nodes = await this.snapshot(target, user, recipe.packageId, options.signal);
-      if (!recipe.postconditions.every((selector) => matchUiNode(nodes, selector, recipe.packageId)))
-        throw new AdapterError(
-          'App setup postconditions did not match; inspect this profile before continuing',
-        );
-      return {
-        status: 'measured',
-        capability: 'app-setup',
-        recipeDigest,
-        postconditions: recipe.postconditions.length,
-        verification: 'visible-ui-only',
-      };
+      return await run.execute();
     } catch (error) {
-      if (error instanceof AdapterError && error.code === 'MANUAL_PENDING') return pending(error.message);
+      if (error instanceof AdapterError && error.code === 'MANUAL_PENDING') return run.pending(error.message);
       throw error;
     } finally {
-      for (const obligation of obligations.reverse()) {
-        await this.android.cleanup(target, obligation, { lease: options.lease, operationId: child });
-        await options.obligations.resolve(obligation.id);
-      }
+      await run.cleanup();
     }
   }
-  private async performStep(
+  private async supportsPrivateImport(
     target: SelectedTarget,
     user: AndroidUserIdentity,
     recipe: RecipePolicy,
-    step: Exclude<RecipeStep, { action: 'back' | 'stage-file' | 'select-staged-file' }>,
+    options: RecipeOptions,
+  ): Promise<boolean> {
+    if (!recipe.steps.some((step) => step.action === 'select-staged-file')) return true;
+    if (!this.android.ui) return false;
+    return this.android.ui.supports(this.android, target, user, { capability: 'file-selection' }, options);
+  }
+  async performStep(
+    target: SelectedTarget,
+    user: AndroidUserIdentity,
+    recipe: RecipePolicy,
+    step: SelectorStep,
     options: RecipeOptions,
   ): Promise<void> {
     const selector: UiSelector = { ...step.selector };
     if (step.action === 'toggle') delete selector.checked;
+    const node = await this.waitForNode(target, user, recipe.packageId, selector, step, options);
+    if (
+      step.action === 'tap' ||
+      (step.action === 'toggle' && node.attributes['checked'] !== String(step.value))
+    )
+      await this.tap(target, user, recipe.packageId, node, options);
+    if (step.action === 'toggle') {
+      const nodes = await this.snapshot(target, user, recipe.packageId, options.signal);
+      if (!matchUiNode(nodes, { ...selector, checked: step.value }, recipe.packageId))
+        throw new AdapterError('The UI toggle did not retain the reviewed value');
+    }
+    if (step.action === 'text' && node.attributes['text'] !== step.value)
+      await this.enterText(target, user, recipe.packageId, node, step, options);
+  }
+
+  private async waitForNode(
+    target: SelectedTarget,
+    user: AndroidUserIdentity,
+    packageId: string,
+    selector: UiSelector,
+    step: SelectorStep,
+    options: RecipeOptions,
+  ): Promise<UiNode> {
     const deadline = Date.now() + (step.timeoutMs ?? 30000);
-    let node: UiNode | undefined;
-    do {
-      node = matchUiNode(
-        await this.snapshot(target, user, recipe.packageId, options.signal),
+    while (true) {
+      const node = matchUiNode(
+        await this.snapshot(target, user, packageId, options.signal),
         selector,
-        recipe.packageId,
+        packageId,
       );
-      if (node) break;
+      if (node) return node;
       if (step.action !== 'wait' || Date.now() >= deadline)
         throw new AdapterError(
           'Expected UI element was not found; review the pinned recipe or complete setup privately',
@@ -398,48 +214,218 @@ export class RecipeService {
         undefined,
         options.signal ? { signal: options.signal } : {},
       );
-    } while (!node);
-    if (
-      step.action === 'tap' ||
-      (step.action === 'toggle' && node.attributes['checked'] !== String(step.value))
-    )
-      await this.tap(target, user, recipe.packageId, node, options);
-    if (
-      step.action === 'toggle' &&
-      !matchUiNode(
-        await this.snapshot(target, user, recipe.packageId, options.signal),
-        { ...selector, checked: step.value },
-        recipe.packageId,
-      )
-    )
-      throw new AdapterError('The UI toggle did not retain the reviewed value');
-    if (step.action === 'text' && node.attributes['text'] !== step.value) {
-      const current = node.attributes['text'] ?? '';
-      if (
-        !step.selector.resourceId ||
-        !/^[A-Za-z0-9._:/@+-]{1,200}$/.test(step.value) ||
-        node.attributes['password'] === 'true' ||
-        !node.attributes['class']?.includes('EditText') ||
-        current.length > 200
-      )
-        throw new AdapterError(
-          'Recipe text entry accepts bounded public configuration in a visible non-password field',
-        );
-      await this.tap(target, user, recipe.packageId, node, options);
-      for (const key of ['KEYCODE_MOVE_END', ...Array<string>(current.length).fill('KEYCODE_DEL')]) {
-        await this.focus(target, user, recipe.packageId, options.signal);
-        await this.android.shell(target, ['input', 'keyevent', key], { ...options, mutation: true });
-      }
-      await this.focus(target, user, recipe.packageId, options.signal);
-      await this.android.shell(target, ['input', 'text', step.value], { ...options, mutation: true });
-      if (
-        !matchUiNode(
-          await this.snapshot(target, user, recipe.packageId, options.signal),
-          { resourceId: step.selector.resourceId, text: step.value },
-          recipe.packageId,
-        )
-      )
-        throw new AdapterError('The public configuration field did not report the requested value');
     }
   }
+  private async enterText(
+    target: SelectedTarget,
+    user: AndroidUserIdentity,
+    packageId: string,
+    node: UiNode,
+    step: Extract<RecipeStep, { action: 'text' }>,
+    options: RecipeOptions,
+  ): Promise<void> {
+    const current = node.attributes['text'] ?? '';
+    validateTextField(node, step, current);
+    await this.tap(target, user, packageId, node, options);
+    for (const key of ['KEYCODE_MOVE_END', ...Array<string>(current.length).fill('KEYCODE_DEL')]) {
+      await this.focus(target, user, packageId, options.signal);
+      await this.android.shell(target, ['input', 'keyevent', key], { ...options, mutation: true });
+    }
+    await this.focus(target, user, packageId, options.signal);
+    await this.android.shell(target, ['input', 'text', step.value], { ...options, mutation: true });
+    const nodes = await this.snapshot(target, user, packageId, options.signal);
+    if (!matchUiNode(nodes, { resourceId: step.selector.resourceId, text: step.value }, packageId))
+      throw new AdapterError('The public configuration field did not report the requested value');
+  }
+}
+
+type SelectorStep = Exclude<RecipeStep, { action: 'back' | 'stage-file' | 'select-staged-file' }>;
+
+function tapPoint(node: UiNode): [number, number] {
+  const match = /^\[(\d+),(\d+)\]\[(\d+),(\d+)\]$/.exec(node.attributes['bounds'] ?? '');
+  if (!match) throw new AdapterError('UI node has no usable bounds');
+  const left = Number(match[1]),
+    top = Number(match[2]),
+    right = Number(match[3]),
+    bottom = Number(match[4]);
+  if (
+    ![left, top, right, bottom].every(Number.isFinite) ||
+    left < 0 ||
+    top < 0 ||
+    right <= left ||
+    bottom <= top ||
+    right > 10000 ||
+    bottom > 10000
+  )
+    throw new AdapterError('UI node bounds are outside the accepted range');
+  return [Math.floor((left + right) / 2), Math.floor((top + bottom) / 2)];
+}
+function validateTextField(
+  node: UiNode,
+  step: Extract<RecipeStep, { action: 'text' }>,
+  current: string,
+): asserts step is Extract<RecipeStep, { action: 'text' }> & { selector: { resourceId: string } } {
+  if (
+    !step.selector.resourceId ||
+    !/^[A-Za-z0-9._:/@+-]{1,200}$/.test(step.value) ||
+    node.attributes['password'] === 'true' ||
+    !node.attributes['class']?.includes('EditText') ||
+    current.length > 200
+  )
+    throw new AdapterError(
+      'Recipe text entry accepts bounded public configuration in a visible non-password field',
+    );
+}
+class RecipeRun {
+  private readonly writer: ObligationWriter;
+  private readonly obligations: RecoveryObligation[] = [];
+  private readonly staged = new Map<string, string>();
+  private readonly recipeDigest: string;
+  constructor(
+    private readonly service: RecipeService,
+    private readonly target: SelectedTarget,
+    private readonly user: AndroidUserIdentity,
+    private readonly recipe: RecipePolicy,
+    private readonly options: RecipeOptions,
+  ) {
+    this.writer = options.obligations.child('recipe-' + randomUUID());
+    this.recipeDigest = digest(recipe);
+  }
+  pending(instructions: string): RecipeResult {
+    return {
+      status: 'manual-pending',
+      capability: 'app-setup',
+      recipeDigest: this.recipeDigest,
+      instructions,
+    };
+  }
+  async execute(): Promise<RecipeResult> {
+    await this.service.android.launch(this.target, this.user, this.recipe.packageId, this.options);
+    for (const step of this.recipe.steps) {
+      await this.service.focus(this.target, this.user, this.recipe.packageId, this.options.signal);
+      const result = await this.step(step);
+      if (result) return result;
+    }
+    const nodes = await this.service.snapshot(
+      this.target,
+      this.user,
+      this.recipe.packageId,
+      this.options.signal,
+    );
+    if (!this.recipe.postconditions.every((selector) => matchUiNode(nodes, selector, this.recipe.packageId)))
+      throw new AdapterError(
+        'App setup postconditions did not match; inspect this profile before continuing',
+      );
+    return {
+      status: 'measured',
+      capability: 'app-setup',
+      recipeDigest: this.recipeDigest,
+      postconditions: this.recipe.postconditions.length,
+      verification: 'visible-ui-only',
+    };
+  }
+  private async step(step: RecipeStep): Promise<RecipeResult | undefined> {
+    switch (step.action) {
+      case 'stage-file':
+        await this.stageFile(step.file);
+        return;
+      case 'select-staged-file':
+        return this.selectFile(step.file);
+      case 'back':
+        await this.back();
+        return;
+      case 'tap':
+      case 'text':
+      case 'toggle':
+      case 'wait':
+        await this.service.performStep(this.target, this.user, this.recipe, step, this.options);
+        return undefined;
+    }
+  }
+  private async back(): Promise<void> {
+    await this.service.snapshot(this.target, this.user, this.recipe.packageId, this.options.signal);
+    await this.service.focus(this.target, this.user, this.recipe.packageId, this.options.signal);
+    await this.service.android.shell(this.target, ['input', 'keyevent', 'KEYCODE_BACK'], {
+      ...this.options,
+      mutation: true,
+    });
+  }
+  private async selectFile(ref: string): Promise<RecipeResult | undefined> {
+    const remote = this.staged.get(ref);
+    if (!remote) throw new AdapterError('The selected file reference has not been staged');
+    if (!this.service.android.ui) return this.pending(PRIVATE_IMPORT_INSTRUCTIONS);
+    const selected = await this.service.android.ui.execute(
+      this.service.android,
+      this.target,
+      this.user,
+      { capability: 'file-selection', remotePath: remote },
+      this.options,
+    );
+    if (selected.status !== 'measured') return this.pending(PRIVATE_IMPORT_INSTRUCTIONS);
+    return undefined;
+  }
+  private async stageFile(ref: string): Promise<void> {
+    const input = this.options.inputs?.[ref];
+    if (!input) throw new AdapterError('The recipe input reference has no enrolled private file');
+    const suffix = await inputSuffix(input);
+    const directory = await mkdtemp(join(tmpdir(), 'pxv-recipe-input-'));
+    try {
+      const path = join(directory, 'input' + suffix);
+      await copySnapshot(input.path, path, 128 * 1024, this.options.signal);
+      if ((await fileDigest(path, 128 * 1024, this.options.signal)) !== input.sha256)
+        throw new AdapterError('Private recipe input changed after preparation');
+      const remote =
+        '/storage/emulated/' + this.user.userId + '/Download/pxv-import-' + randomUUID() + suffix;
+      await this.recordFile(remote);
+      await this.service.android.guardUser(this.target, this.user, this.options.signal);
+      const pushed = await this.service.android.runAdb(
+        ['-s', this.target.transport.serial, 'push', path, remote],
+        { ...this.options, mutation: true },
+      );
+      if (pushed.code !== 0)
+        throw new AdapterError('Private recipe input transfer failed; preserve cleanup evidence');
+      this.staged.set(ref, remote);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  }
+  private async recordFile(remote: string): Promise<void> {
+    const obligation: RecoveryObligation = {
+      schemaVersion: 1,
+      id: randomUUID(),
+      operationId: this.writer.operationId,
+      ownerOperationId: this.writer.ownerOperationId,
+      deviceSerial: this.target.device.canonicalSerial,
+      user: this.user,
+      kind: 'remove-file',
+      resource: remote,
+      payload: { path: remote },
+      status: 'pending',
+    };
+    await this.writer.record(obligation);
+    this.obligations.push(obligation);
+  }
+  async cleanup(): Promise<void> {
+    for (const obligation of this.obligations.reverse()) {
+      await this.service.android.cleanup(this.target, obligation, {
+        lease: this.options.lease,
+        operationId: this.writer.ownerOperationId,
+      });
+      await this.writer.resolve(obligation.id);
+    }
+  }
+}
+async function inputSuffix(input: RecipeInput): Promise<string> {
+  const stat = await lstat(input.path);
+  const suffix = extname(input.path);
+  if (
+    !stat.isFile() ||
+    stat.isSymbolicLink() ||
+    stat.mode & 0o077 ||
+    stat.size < 1 ||
+    stat.size > 128 * 1024 ||
+    !/^\.[A-Za-z0-9]{1,10}$/.test(suffix)
+  )
+    throw new AdapterError('Recipe input must be a bounded private regular file with a safe extension');
+  return suffix;
 }

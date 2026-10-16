@@ -2,21 +2,13 @@
   "schemaVersion": 1,
   "engineVersion": "0.1.0",
   "pipeline": "Node Markdown -> HTML -> explicit Chromium PDF -> Poppler QA",
-  "formats": [
-    "A4 PDF",
-    "HTML"
-  ],
-  "editions": [
-    "product-en",
-    "product-pl",
-    "operator-en",
-    "operator-pl",
-    "user-en",
-    "user-pl"
-  ],
+  "formats": ["A4 PDF", "HTML"],
+  "editions": ["product-en", "product-pl", "operator-en", "operator-pl", "user-en", "user-pl"],
   "source": "source/markdown",
   "output": "guides/",
   "qa": "qa/manifest.json",
+  "sourceQualityPrerequisite": "pnpm quality before guide edits and rendering",
+  "renderEstablishesLiveAcceptance": false,
   "qualification": "draft; no device certification",
   "printerProfile": null,
   "pdfX": false

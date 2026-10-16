@@ -245,3 +245,23 @@ describe('pinned repository metadata', () => {
     ).toThrow(/signer/);
   });
 });
+
+it('rejects malformed authenticated SDK ranges and ABI lists rather than selecting incompatible packages', () => {
+  const { repo } = service();
+  for (const change of [
+    { maxSdkVersion: 27 },
+    { minSdkVersion: 0 },
+    { nativecode: 'arm64-v8a' },
+    { nativecode: ['bad ABI'] },
+  ])
+    expect(() => repo.normalize(repository, { 'org.example.app': [{ ...row, ...change }] }, false)).toThrow();
+  expect(() => repo.normalize(repository, { 'org.example.app': {} }, false)).toThrow(/APK list/);
+  const normalized = repo.normalize(
+    { ...repository, redirectHosts: [] },
+    { 'org.example.app': [{ ...row, maxSdkVersion: 35 }] },
+    false,
+  );
+  const app = normalized['org.example.app']?.[0];
+  expect(app?.compatibility.maxSdk).toBe(35);
+  expect(app).not.toHaveProperty('redirectHosts');
+});

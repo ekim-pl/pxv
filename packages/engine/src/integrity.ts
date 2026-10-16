@@ -37,15 +37,7 @@ export async function engineIntegrity(codeRoot: string): Promise<string> {
     const info = await lstat(path).catch(() => undefined);
     if (info?.isDirectory()) await walk(path); // Workspace links are represented by packages above.
   }
-  for (const native of [
-    join(base, 'native/pxv-supervisor'),
-    join(base, 'native/supervisor/target/x86_64-unknown-linux-musl/release/pxv-supervisor'),
-    ...(process.env['PXV_SUPERVISOR'] ? [resolve(process.env['PXV_SUPERVISOR'])] : []),
-  ]) {
-    const nativeInfo = await lstat(native).catch(() => undefined);
-    if (nativeInfo?.isSymbolicLink()) throw new Error('Supervisor must be an immutable regular file');
-    if (nativeInfo?.isFile()) files.push(native);
-  }
+  files.push(...(await supervisorFiles(base)));
   if (files.length === 0) throw new Error('Executable build identity is unavailable');
   const hash = createHash('sha256');
   for (const path of [...new Set(files)].sort())
@@ -55,4 +47,18 @@ export async function engineIntegrity(codeRoot: string): Promise<string> {
       .update(await readFile(path))
       .update('\0');
   return hash.digest('hex');
+}
+
+async function supervisorFiles(base: string): Promise<string[]> {
+  const files: string[] = [];
+  for (const native of [
+    join(base, 'native/pxv-supervisor'),
+    join(base, 'native/supervisor/target/x86_64-unknown-linux-musl/release/pxv-supervisor'),
+    ...(process.env['PXV_SUPERVISOR'] ? [resolve(process.env['PXV_SUPERVISOR'])] : []),
+  ]) {
+    const nativeInfo = await lstat(native).catch(() => undefined);
+    if (nativeInfo?.isSymbolicLink()) throw new Error('Supervisor must be an immutable regular file');
+    if (nativeInfo?.isFile()) files.push(native);
+  }
+  return files;
 }

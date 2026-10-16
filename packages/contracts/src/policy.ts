@@ -16,6 +16,7 @@ import type {
   ObservationCheck,
   ObservationReport,
   PolicyPack,
+  ProfilePolicy,
   ProductDescriptor,
   ProjectConfig,
   ReadinessRequirement,
@@ -45,17 +46,20 @@ export function canonicalJson(value: unknown): string {
         throw new Error('Canonical data cannot contain sparse or decorated arrays');
       result = `[${item.map(encode).join(',')}]`;
     } else {
-      if (Object.getPrototypeOf(item) !== Object.prototype && Object.getPrototypeOf(item) !== null)
-        throw new Error('Canonical data requires plain objects');
-      if (Reflect.ownKeys(item).some((key) => typeof key !== 'string'))
-        throw new Error('Canonical data cannot contain symbol keys');
-      result = `{${Object.keys(item)
-        .sort()
-        .map((key) => `${JSON.stringify(key)}:${encode((item as Record<string, unknown>)[key])}`)
-        .join(',')}}`;
+      result = encodeObject(item);
     }
     ancestors.delete(item);
     return result;
+  };
+  const encodeObject = (item: object): string => {
+    if (Object.getPrototypeOf(item) !== Object.prototype && Object.getPrototypeOf(item) !== null)
+      throw new Error('Canonical data requires plain objects');
+    if (Reflect.ownKeys(item).some((key) => typeof key !== 'string'))
+      throw new Error('Canonical data cannot contain symbol keys');
+    return `{${Object.keys(item)
+      .sort()
+      .map((key) => `${JSON.stringify(key)}:${encode((item as Record<string, unknown>)[key])}`)
+      .join(',')}}`;
   };
   return encode(value);
 }
@@ -163,6 +167,48 @@ export function observationDigest(observation: DeviceObservation): string {
   });
 }
 
+type ObservationChecker = (key: string, expected: unknown, actual: unknown) => void;
+type ObservedProfile = DeviceObservation['profiles'][number];
+function checkPackages(profile: ProfilePolicy, actual: ObservedProfile, check: ObservationChecker): void {
+  for (const artifact of profile.packages) {
+    const installed = actual.packages.find((item) => item.packageId === artifact.packageId);
+    check(
+      `${profile.id}.package.${artifact.packageId}.version`,
+      artifact.versionCode,
+      installed?.versionCode,
+    );
+    check(
+      `${profile.id}.package.${artifact.packageId}.signer`,
+      artifact.signerSha256,
+      installed?.signerSha256,
+    );
+  }
+}
+function checkProfile(profile: ProfilePolicy, actual: ObservedProfile, check: ObservationChecker): void {
+  check(`${profile.id}.name`, profile.name, actual.user.name);
+  check(`${profile.id}.owner`, profile.kind === 'owner', actual.user.userId === 0);
+  checkPackages(profile, actual, check);
+  for (const setting of profile.settings) {
+    const observed = actual.settings.find(
+      (item) => item.namespace === setting.namespace && item.key === setting.key,
+    );
+    check(`${profile.id}.setting.${setting.namespace}.${setting.key}`, setting.value, observed?.value);
+  }
+  for (const permission of profile.permissions) {
+    const observed = actual.permissions.find(
+      (item) => item.packageId === permission.packageId && item.permission === permission.permission,
+    );
+    check(
+      `${profile.id}.permission.${permission.packageId}.${permission.permission}`,
+      permission.granted,
+      observed?.granted,
+    );
+  }
+  check(`${profile.id}.vpn`, profile.vpn, actual.vpn);
+  if (profile.language) check(`${profile.id}.language`, profile.language, actual.language);
+  if (profile.backup) check(`${profile.id}.backup`, profile.backup, actual.backup);
+}
+
 /** Shared by attestation and finalization; operator receipts cannot change failed checks. */
 export function evaluateObservation(
   input: PolicyPack | ResolvedPolicy,
@@ -190,40 +236,7 @@ export function evaluateObservation(
     const actual = measured.profiles.find((item) => item.profileId === profile.id);
     check(`${profile.id}.present`, true, actual !== undefined);
     if (!actual) continue;
-    check(`${profile.id}.name`, profile.name, actual.user.name);
-    check(`${profile.id}.owner`, profile.kind === 'owner', actual.user.userId === 0);
-    for (const artifact of profile.packages) {
-      const installed = actual.packages.find((item) => item.packageId === artifact.packageId);
-      check(
-        `${profile.id}.package.${artifact.packageId}.version`,
-        artifact.versionCode,
-        installed?.versionCode,
-      );
-      check(
-        `${profile.id}.package.${artifact.packageId}.signer`,
-        artifact.signerSha256,
-        installed?.signerSha256,
-      );
-    }
-    for (const setting of profile.settings) {
-      const observed = actual.settings.find(
-        (item) => item.namespace === setting.namespace && item.key === setting.key,
-      );
-      check(`${profile.id}.setting.${setting.namespace}.${setting.key}`, setting.value, observed?.value);
-    }
-    for (const permission of profile.permissions) {
-      const observed = actual.permissions.find(
-        (item) => item.packageId === permission.packageId && item.permission === permission.permission,
-      );
-      check(
-        `${profile.id}.permission.${permission.packageId}.${permission.permission}`,
-        permission.granted,
-        observed?.granted,
-      );
-    }
-    check(`${profile.id}.vpn`, profile.vpn, actual.vpn);
-    if (profile.language) check(`${profile.id}.language`, profile.language, actual.language);
-    if (profile.backup) check(`${profile.id}.backup`, profile.backup, actual.backup);
+    checkProfile(profile, actual, check);
   }
   return {
     schemaVersion: 1,

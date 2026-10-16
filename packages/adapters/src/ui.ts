@@ -3,7 +3,7 @@ import type { AndroidAdapter } from './android.js';
 import { AdapterError, type OperationOptions } from './command.js';
 import { fileDigest } from './files.js';
 
-export type AutomatedCapability =
+type AutomatedCapability =
   'language' | 'app-setup' | 'network-recipe' | 'backup-observation' | 'file-selection';
 export interface CapabilityRequest {
   capability: AutomatedCapability;
@@ -18,7 +18,7 @@ export type CapabilityResult =
       evidence: Record<string, unknown>;
     }
   | { status: 'manual-pending'; capability: AutomatedCapability; instructions: string };
-export interface UiContext {
+interface UiContext {
   android: AndroidAdapter;
   target: SelectedTarget;
   user: AndroidUserIdentity;
@@ -47,6 +47,33 @@ export class UiAutomation {
     request: CapabilityRequest,
     options: OperationOptions,
   ): Promise<CapabilityResult> {
+    const adapter = await this.accepted(android, target, user, request, options);
+    if (!adapter)
+      return {
+        status: 'manual-pending',
+        capability: request.capability,
+        instructions: `Complete ${request.capability} privately in Android user ${user.userId}; no accepted UI adapter matches this build and language.`,
+      };
+    const evidence = await adapter.execute({ android, target, user, request, options });
+    await android.guardUser(target, user, options.signal);
+    return { status: 'measured', capability: request.capability, adapterId: adapter.id, evidence };
+  }
+  async supports(
+    android: AndroidAdapter,
+    target: SelectedTarget,
+    user: AndroidUserIdentity,
+    request: CapabilityRequest,
+    options: OperationOptions,
+  ): Promise<boolean> {
+    return (await this.accepted(android, target, user, request, options)) !== undefined;
+  }
+  private async accepted(
+    android: AndroidAdapter,
+    target: SelectedTarget,
+    user: AndroidUserIdentity,
+    request: CapabilityRequest,
+    options: OperationOptions,
+  ): Promise<AcceptedUiAdapter | undefined> {
     await android.guardUser(target, user, options.signal);
     const fingerprint = (
       await android.shell(
@@ -64,47 +91,12 @@ export class UiAutomation {
     if (candidates.length > 1)
       throw new AdapterError('Multiple accepted UI adapters match the capability and Android build');
     const adapter = candidates[0];
-    if (!adapter)
-      return {
-        status: 'manual-pending',
-        capability: request.capability,
-        instructions: `Complete ${request.capability} privately in Android user ${user.userId}; no accepted UI adapter matches this build and language.`,
-      };
+    if (!adapter) return undefined;
     if (
       (await fileDigest(adapter.acceptance.path, 16 * 1024 * 1024, options.signal)) !==
       adapter.acceptance.sha256.toLowerCase()
     )
       throw new AdapterError('UI acceptance evidence changed');
-    const evidence = await adapter.execute({ android, target, user, request, options });
-    await android.guardUser(target, user, options.signal);
-    return { status: 'measured', capability: request.capability, adapterId: adapter.id, evidence };
+    return adapter;
   }
-}
-export interface FinalSetupStep {
-  capability: 'normal-credential' | 'language' | 'duress';
-  privateEntry: true;
-  instructions: string;
-}
-export function finalSetupSequence(language?: 'en-US' | 'pl-PL', duress = false): FinalSetupStep[] {
-  const steps: FinalSetupStep[] = [
-    {
-      capability: 'normal-credential',
-      privateEntry: true,
-      instructions: 'The recipient enters and verifies the normal credential privately.',
-    },
-  ];
-  if (language)
-    steps.push({
-      capability: 'language',
-      privateEntry: true,
-      instructions: `Set ${language} after confirming the normal credential.`,
-    });
-  if (duress)
-    steps.push({
-      capability: 'duress',
-      privateEntry: true,
-      instructions:
-        'The recipient optionally configures a distinct duress credential privately. Do not activate or test it.',
-    });
-  return steps;
 }

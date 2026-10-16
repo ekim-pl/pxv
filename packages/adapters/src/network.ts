@@ -1,3 +1,5 @@
+import type { ObligationWriter } from '@pxv/contracts';
+import { ipInCidrs } from './network-address.js';
 import { randomUUID } from 'node:crypto';
 import { isIP } from 'node:net';
 import {
@@ -28,52 +30,10 @@ export interface ProbeEvidence {
   normal: NetworkObservation;
   failures: { stoppedPackage: string; stopped: NetworkObservation; recovered: NetworkObservation }[];
 }
-export interface ObligationWriter {
-  record(obligation: RecoveryObligation): Promise<void>;
-  resolve(id: string): Promise<void>;
-}
 export interface ProbeOptions extends OperationOptions {
-  operationId: string;
   obligations: ObligationWriter;
 }
-function addressBits(value: string): { bits: number; value: bigint } {
-  const family = isIP(value);
-  if (!family) throw new AdapterError('Expected a valid IP address');
-  if (family === 4)
-    return { bits: 32, value: value.split('.').reduce((total, octet) => (total << 8n) | BigInt(octet), 0n) };
-  let address = value.toLowerCase();
-  if (address.includes('.')) {
-    const at = address.lastIndexOf(':');
-    const part = addressBits(address.slice(at + 1));
-    address =
-      address.slice(0, at + 1) + (part.value >> 16n).toString(16) + ':' + (part.value & 0xffffn).toString(16);
-  }
-  const halves = address.split('::');
-  const left = halves[0] ? halves[0].split(':') : [];
-  const right = halves[1] ? halves[1].split(':') : [];
-  const parts =
-    halves.length === 2
-      ? [...left, ...Array<string>(8 - left.length - right.length).fill('0'), ...right]
-      : left;
-  return { bits: 128, value: parts.reduce((total, part) => (total << 16n) | BigInt(`0x${part}`), 0n) };
-}
-export function ipInCidrs(address: string, cidrs: readonly string[]): boolean {
-  const observed = addressBits(address);
-  return cidrs
-    .map((cidr) => {
-      const [network, length, extra] = cidr.split('/');
-      if (!network || !length || extra || !/^\d+$/.test(length))
-        throw new AdapterError('Expected canonical egress CIDRs');
-      const expected = addressBits(network);
-      const prefix = Number(length);
-      if (prefix > expected.bits) throw new AdapterError('Invalid egress CIDR prefix');
-      const shift = BigInt(expected.bits - prefix);
-      if ((expected.value >> shift) << shift !== expected.value)
-        throw new AdapterError('Egress CIDR includes host bits');
-      return expected.bits === observed.bits && expected.value >> shift === observed.value >> shift;
-    })
-    .some(Boolean);
-}
+
 function validateRequest(request: NetworkProbeRequest): void {
   const endpoint = new URL(request.endpoint);
   if (endpoint.protocol !== 'https:' || endpoint.username || endpoint.password || endpoint.hash)
@@ -85,67 +45,22 @@ function validateRequest(request: NetworkProbeRequest): void {
 }
 export class NetworkProbeService {
   constructor(readonly android: AndroidAdapter) {}
-  /** Explicit recovery only; a pending restart is resolved after fresh app-UID route evidence. */
+  /** Explicit recovery only; unresolved restarts require fresh app-UID route evidence. */
   async recoverService(
     target: SelectedTarget,
     obligation: RecoveryObligation,
     helper: VerifiedArtifact,
     options: ProbeOptions,
   ): Promise<ProbeEvidence> {
-    if (
-      obligation.kind !== 'restart-service' ||
-      obligation.status !== 'pending' ||
-      obligation.deviceSerial !== target.device.canonicalSerial ||
-      !obligation.user
-    )
-      throw new AdapterError('Service recovery evidence is outside the selected device scope');
-    const payload = obligation.payload;
-    const id = payload['packageId'];
-    const version = payload['versionCode'];
-    const signer = payload['signerSha256'];
-    const raw = payload['request'];
-    if (
-      typeof id !== 'string' ||
-      typeof version !== 'number' ||
-      typeof signer !== 'string' ||
-      !raw ||
-      typeof raw !== 'object' ||
-      Array.isArray(raw)
-    )
-      throw new AdapterError('Malformed service recovery evidence');
-    const request = raw as Partial<NetworkProbeRequest>;
-    if (
-      typeof request.endpoint !== 'string' ||
-      !Array.isArray(request.expectedEgressCidrs) ||
-      request.expectedEgressCidrs.some((value) => typeof value !== 'string') ||
-      typeof request.requireVpn !== 'boolean'
-    )
-      throw new AdapterError('Malformed network recovery request');
-    const verifiedRequest: NetworkProbeRequest = {
-      endpoint: request.endpoint,
-      expectedEgressCidrs: request.expectedEgressCidrs,
-      requireVpn: request.requireVpn,
-    };
-    validateRequest(verifiedRequest);
-    await this.android.guardUser(target, obligation.user, options.signal);
-    const identity = await this.android.installedIdentity(target, obligation.user, id, options.signal);
+    const user = recoveryUser(target, obligation, options.obligations);
+    const { id, version, signer, request } = recoveryPayload(obligation.payload);
+    await this.android.guardUser(target, user, options.signal);
+    const identity = await this.android.installedIdentity(target, user, id, options.signal);
     if (identity.versionCode !== version || identity.signerSha256 !== signer)
       throw new AdapterError('The service APK changed; preserve its recovery obligation');
-    const vpn = await this.android.vpn(target, obligation.user, options.signal);
-    const previous = payload['vpn'];
-    if (
-      !previous ||
-      typeof previous !== 'object' ||
-      Array.isArray(previous) ||
-      (previous as Record<string, unknown>)['packageId'] !== vpn.packageId ||
-      (previous as Record<string, unknown>)['alwaysOn'] !== vpn.alwaysOn ||
-      (previous as Record<string, unknown>)['lockdown'] !== vpn.lockdown ||
-      !vpn.alwaysOn ||
-      !vpn.lockdown
-    )
-      throw new AdapterError('VPN protection changed; review it before restarting the service');
-    await this.android.launch(target, obligation.user, id, options);
-    const evidence = await this.run(target, obligation.user, helper, verifiedRequest, options);
+    assertRecoveryVpn(obligation.payload['vpn'], await this.android.vpn(target, user, options.signal));
+    await this.android.launch(target, user, id, options);
+    const evidence = await this.run(target, user, helper, request, options);
     await options.obligations.resolve(obligation.id);
     return evidence;
   }
@@ -172,50 +87,7 @@ export class NetworkProbeService {
       ],
       { ...options, mutation: true, timeoutMs: 90_000 },
     );
-    const rows = [...output.matchAll(/^INSTRUMENTATION_RESULT: pxv_json=(.+)$/gm)];
-    const raw = rows[0]?.[1];
-    if (rows.length !== 1 || !raw || Buffer.byteLength(raw) > 8192)
-      throw new AdapterError('Probe did not return exactly one bounded structured observation');
-    JSON.parse(raw) as unknown;
-    const parsed: unknown = parseDocument(raw);
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed))
-      throw new AdapterError('Invalid network observation');
-    const record = parsed as Record<string, unknown>;
-    const uid = record['uid'];
-    if (
-      record['schema_version'] !== 1 ||
-      typeof uid !== 'number' ||
-      !Number.isSafeInteger(uid) ||
-      uid < 0 ||
-      Math.floor(uid / 100000) !== user.userId ||
-      uid % 100000 < 10000 ||
-      typeof record['request_succeeded'] !== 'boolean' ||
-      typeof record['connection_observed'] !== 'boolean' ||
-      typeof record['vpn_active'] !== 'boolean'
-    )
-      throw new AdapterError(
-        'Network probe ran outside the intended user or returned malformed observations',
-      );
-    if (record['request_succeeded'] && !record['connection_observed'])
-      throw new AdapterError('Network probe returned contradictory observations');
-    const ip = record['egress_ip'];
-    const error = record['error_type'];
-    if (ip !== undefined && ip !== null && (typeof ip !== 'string' || !isIP(ip)))
-      throw new AdapterError('Probe endpoint did not report a valid egress IP');
-    if (
-      error !== undefined &&
-      error !== null &&
-      (typeof error !== 'string' || !/^[A-Za-z][A-Za-z0-9]{0,79}$/.test(error))
-    )
-      throw new AdapterError('Invalid network probe error type');
-    return {
-      uid,
-      requestSucceeded: record['request_succeeded'],
-      connectionObserved: record['connection_observed'],
-      vpnActive: record['vpn_active'],
-      egressIp: typeof ip === 'string' ? ip : null,
-      errorType: typeof error === 'string' ? error : null,
-    };
+    return parseObservation(output, user);
   }
   requireRoute(observation: NetworkObservation, request: NetworkProbeRequest): void {
     if (
@@ -245,80 +117,237 @@ export class NetworkProbeService {
       throw new AdapterError(
         'An existing probe helper may belong to another operation; inspect its ownership first',
       );
-    const childId = `${options.operationId}/probe/${randomUUID()}`;
-    const obligation: RecoveryObligation = {
-      schemaVersion: 1,
-      id: randomUUID(),
-      operationId: options.operationId,
-      ownerOperationId: childId,
-      deviceSerial: target.device.canonicalSerial,
-      user,
-      kind: 'remove-helper',
-      resource: `${user.serialNo}:org.pxv.probe`,
-      payload: {
-        packageId: helper.packageId,
-        versionCode: helper.versionCode,
-        signerSha256: helper.signerSha256,
-      },
-      status: 'pending',
-    };
-    await options.obligations.record(obligation); // Persist intent before installing.
+    const writer = options.obligations.child('network-probe-' + randomUUID());
+    const obligation = helperObligation(target, user, helper, writer);
+    await writer.record(obligation);
     try {
       await this.android.install(target, user, helper, options);
       const normal = await this.observe(target, user, request, options);
       this.requireRoute(normal, request);
       const failures: ProbeEvidence['failures'] = [];
-      for (const id of failurePackages) {
-        const vpn = await this.android.vpn(target, user, options.signal);
-        if (!vpn.alwaysOn || !vpn.lockdown || !vpn.packageId || !request.requireVpn)
-          throw new AdapterError(
-            'Failure exercises require measured always-on VPN and lockdown configuration',
-          );
-        const identity = await this.android.installedIdentity(target, user, id, options.signal);
-        const service: RecoveryObligation = {
-          ...obligation,
-          id: randomUUID(),
-          kind: 'restart-service',
-          resource: `${user.serialNo}:${id}`,
-          payload: { ...identity, request, vpn, helperArtifact: structuredClone(helper) },
-        };
-        await options.obligations.record(service);
-        await this.android.guardUser(target, user, options.signal);
-        await this.android.shell(target, ['am', 'force-stop', '--user', String(user.userId), id], {
-          ...options,
-          mutation: true,
-        });
-        let stopped: NetworkObservation;
-        let recovered: NetworkObservation;
-        try {
-          stopped = await this.observe(target, user, request, options);
-          if (
-            stopped.requestSucceeded ||
-            stopped.connectionObserved ||
-            !stopped.errorType ||
-            ![
-              'ConnectException',
-              'SocketTimeoutException',
-              'UnknownHostException',
-              'NoRouteToHostException',
-            ].includes(stopped.errorType)
-          )
-            throw new AdapterError('The app-UID network failure exercise did not measure blocked traffic');
-        } finally {
-          // Recovery is bounded and retains this child obligation on any failure.
-          const recoveryOptions: OperationOptions = { lease: options.lease };
-          await this.android.launch(target, user, id, recoveryOptions);
-          recovered = await this.observe(target, user, request, recoveryOptions);
-          this.requireRoute(recovered, request);
-          await options.obligations.resolve(service.id);
-        }
-        failures.push({ stoppedPackage: id, stopped, recovered });
-      }
+      for (const id of failurePackages)
+        failures.push(
+          await this.exerciseFailure(target, user, helper, request, options, writer, obligation, id),
+        );
       return { scope: 'probe-app-uid-https-only', normal, failures };
     } finally {
-      // Cleanup is deliberately limited to this helper; parent keep-awake and unrelated resources remain held.
-      await this.android.cleanup(target, obligation, { lease: options.lease, operationId: childId });
-      await options.obligations.resolve(obligation.id);
+      await this.android.cleanup(target, obligation, {
+        lease: options.lease,
+        operationId: writer.ownerOperationId,
+      });
+      await writer.resolve(obligation.id);
     }
   }
+
+  private async exerciseFailure(
+    target: SelectedTarget,
+    user: AndroidUserIdentity,
+    helper: VerifiedArtifact,
+    request: NetworkProbeRequest,
+    options: ProbeOptions,
+    writer: ObligationWriter,
+    parent: RecoveryObligation,
+    id: string,
+  ): Promise<ProbeEvidence['failures'][number]> {
+    const vpn = await this.android.vpn(target, user, options.signal);
+    if (!vpn.alwaysOn || !vpn.lockdown || !vpn.packageId || !request.requireVpn)
+      throw new AdapterError('Failure exercises require measured always-on VPN and lockdown configuration');
+    const identity = await this.android.installedIdentity(target, user, id, options.signal);
+    const service: RecoveryObligation = {
+      ...parent,
+      id: randomUUID(),
+      kind: 'restart-service',
+      resource: user.serialNo + ':' + id,
+      payload: { ...identity, request, vpn, helperArtifact: structuredClone(helper) },
+    };
+    await writer.record(service);
+    await this.android.guardUser(target, user, options.signal);
+    await this.android.shell(target, ['am', 'force-stop', '--user', String(user.userId), id], {
+      ...options,
+      mutation: true,
+    });
+    let stopped: NetworkObservation;
+    let recovered: NetworkObservation;
+    try {
+      stopped = await this.observe(target, user, request, options);
+      assertBlocked(stopped);
+    } finally {
+      const recoveryOptions: OperationOptions = { lease: options.lease };
+      await this.android.launch(target, user, id, recoveryOptions);
+      recovered = await this.observe(target, user, request, recoveryOptions);
+      this.requireRoute(recovered, request);
+      await writer.resolve(service.id);
+    }
+    return { stoppedPackage: id, stopped, recovered };
+  }
+}
+
+function recoveryUser(
+  target: SelectedTarget,
+  obligation: RecoveryObligation,
+  writer: ObligationWriter,
+): AndroidUserIdentity {
+  if (
+    obligation.kind !== 'restart-service' ||
+    !['pending', 'blocked'].includes(obligation.status) ||
+    obligation.operationId !== writer.operationId ||
+    obligation.ownerOperationId !== writer.ownerOperationId ||
+    obligation.deviceSerial !== target.device.canonicalSerial ||
+    !obligation.user
+  )
+    throw new AdapterError('Service recovery evidence is outside the selected device scope');
+  return obligation.user;
+}
+function recoveryPayload(payload: Record<string, unknown>): {
+  id: string;
+  version: number;
+  signer: string;
+  request: NetworkProbeRequest;
+} {
+  const id = payload['packageId'],
+    version = payload['versionCode'],
+    signer = payload['signerSha256'];
+  if (typeof id !== 'string' || typeof version !== 'number' || typeof signer !== 'string')
+    throw new AdapterError('Malformed service recovery evidence');
+  const request = recoveryRequest(payload['request']);
+  validateRequest(request);
+  return { id, version, signer, request };
+}
+function recoveryRequest(raw: unknown): NetworkProbeRequest {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw))
+    throw new AdapterError('Malformed service recovery evidence');
+  const value = raw as Partial<NetworkProbeRequest>;
+  if (
+    typeof value.endpoint !== 'string' ||
+    !Array.isArray(value.expectedEgressCidrs) ||
+    value.expectedEgressCidrs.some((entry) => typeof entry !== 'string') ||
+    typeof value.requireVpn !== 'boolean'
+  )
+    throw new AdapterError('Malformed network recovery request');
+  return {
+    endpoint: value.endpoint,
+    expectedEgressCidrs: value.expectedEgressCidrs,
+    requireVpn: value.requireVpn,
+  };
+}
+function assertRecoveryVpn(
+  previous: unknown,
+  vpn: { packageId: string | null; alwaysOn: boolean; lockdown: boolean },
+): void {
+  if (!previous || typeof previous !== 'object' || Array.isArray(previous))
+    throw new AdapterError('VPN protection changed; review it before restarting the service');
+  const record = previous as Record<string, unknown>;
+  if (
+    record['packageId'] !== vpn.packageId ||
+    record['alwaysOn'] !== vpn.alwaysOn ||
+    record['lockdown'] !== vpn.lockdown ||
+    !vpn.alwaysOn ||
+    !vpn.lockdown
+  )
+    throw new AdapterError('VPN protection changed; review it before restarting the service');
+}
+function observationRecord(output: string): Record<string, unknown> {
+  const rows = [...output.matchAll(/^INSTRUMENTATION_RESULT: pxv_json=(.+)$/gm)];
+  const raw = rows[0]?.[1];
+  if (rows.length !== 1 || !raw || Buffer.byteLength(raw) > 8192)
+    throw new AdapterError('Probe did not return exactly one bounded structured observation');
+  JSON.parse(raw) as unknown;
+  const parsed: unknown = parseDocument(raw);
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed))
+    throw new AdapterError('Invalid network observation');
+  return parsed as Record<string, unknown>;
+}
+function observationUid(record: Record<string, unknown>, user: AndroidUserIdentity): number {
+  const uid = record['uid'];
+  if (
+    record['schema_version'] !== 1 ||
+    typeof uid !== 'number' ||
+    !Number.isSafeInteger(uid) ||
+    uid < 0 ||
+    Math.floor(uid / 100000) !== user.userId ||
+    uid % 100000 < 10000
+  )
+    throw new AdapterError('Network probe ran outside the intended user or returned malformed observations');
+  return uid;
+}
+function booleanObservation(record: Record<string, unknown>, key: string): boolean {
+  const value = record[key];
+  if (typeof value !== 'boolean')
+    throw new AdapterError('Network probe ran outside the intended user or returned malformed observations');
+  return value;
+}
+function optionalObservation(
+  record: Record<string, unknown>,
+  key: string,
+  valid: (value: string) => boolean,
+  message: string,
+): string | null {
+  const value = record[key];
+  if (value === undefined || value === null) return null;
+  if (typeof value !== 'string' || !valid(value)) throw new AdapterError(message);
+  return value;
+}
+function parseObservation(output: string, user: AndroidUserIdentity): NetworkObservation {
+  const record = observationRecord(output);
+  const uid = observationUid(record, user);
+  const requestSucceeded = booleanObservation(record, 'request_succeeded');
+  const connectionObserved = booleanObservation(record, 'connection_observed');
+  const vpnActive = booleanObservation(record, 'vpn_active');
+  if (requestSucceeded && !connectionObserved)
+    throw new AdapterError('Network probe returned contradictory observations');
+  return {
+    uid,
+    requestSucceeded,
+    connectionObserved,
+    vpnActive,
+    egressIp: optionalObservation(
+      record,
+      'egress_ip',
+      (value) => !!isIP(value),
+      'Probe endpoint did not report a valid egress IP',
+    ),
+    errorType: optionalObservation(
+      record,
+      'error_type',
+      (value) => /^[A-Za-z][A-Za-z0-9]{0,79}$/.test(value),
+      'Invalid network probe error type',
+    ),
+  };
+}
+function helperObligation(
+  target: SelectedTarget,
+  user: AndroidUserIdentity,
+  helper: VerifiedArtifact,
+  writer: ObligationWriter,
+): RecoveryObligation {
+  return {
+    schemaVersion: 1,
+    id: randomUUID(),
+    operationId: writer.operationId,
+    ownerOperationId: writer.ownerOperationId,
+    deviceSerial: target.device.canonicalSerial,
+    user,
+    kind: 'remove-helper',
+    resource: user.serialNo + ':org.pxv.probe',
+    payload: {
+      packageId: helper.packageId,
+      versionCode: helper.versionCode,
+      signerSha256: helper.signerSha256,
+    },
+    status: 'pending',
+  };
+}
+function assertBlocked(stopped: NetworkObservation): void {
+  if (
+    stopped.requestSucceeded ||
+    stopped.connectionObserved ||
+    !stopped.errorType ||
+    ![
+      'ConnectException',
+      'SocketTimeoutException',
+      'UnknownHostException',
+      'NoRouteToHostException',
+    ].includes(stopped.errorType)
+  )
+    throw new AdapterError('The app-UID network failure exercise did not measure blocked traffic');
 }
