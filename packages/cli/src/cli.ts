@@ -12,6 +12,7 @@ import { application } from './context.js';
 import { deviceCommand } from './device-command.js';
 import { runInDocker } from './docker.js';
 import { extensionCommand } from './extension-command.js';
+import { guidesRebuildCommand } from './guide-rebuild-command.js';
 import { handoffCommand, lifecycleCommand } from './handoff-command.js';
 import { hostCommand } from './host-command.js';
 import { inventoryCommand } from './inventory-command.js';
@@ -23,6 +24,8 @@ import { seedvaultCommand } from './seedvault-command.js';
 export type { CliIo } from './arguments.js';
 async function externalCommand(context: CliContext): Promise<number | undefined> {
   const { section, command } = context;
+  const guides = await guidesRebuildCommand(context);
+  if (guides !== undefined) return guides;
   const delegated = await executionMode(context);
   if (delegated !== undefined) return delegated;
   if (section === 'guide' && command !== 'project') return staticGuide(context);

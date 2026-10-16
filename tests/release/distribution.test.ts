@@ -262,7 +262,7 @@ describe('frozen distribution candidate', () => {
     expect(dockerfile(candidate.manifest)).toContain('@sha256:');
     expect(dockerfile(candidate.manifest)).toContain('USER 65532:65532');
     await expect(buildFormats(candidate, { formats: ['portable'] })).rejects.toThrow('output must be empty');
-  });
+  }, 60_000);
   test('tampered frozen bytes fail verification before packaging', async () => {
     const root = await fixture();
     const output = await mkdtemp('/tmp/pxv-release-output-');

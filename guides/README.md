@@ -1,58 +1,70 @@
-# Current EN/PL guides
+# Guide sources, branding and print files
 
-Six A4 guides describe the TypeScript 0.1.0 application: product, operator and recipient in English and Polish. The Markdown sources in [source/markdown](source/markdown) are authoritative. Generated PDFs are ignored build outputs and are not stored in Git; build them locally from the current sources and product assets. PDFs are general qualification drafts, not device certificates. Device-specific handoff packets come from the accepted project snapshot.
+The Markdown under [source/markdown](source/markdown) is authoritative. Four guide types are available in English and Polish: product, operator, user and business fleet. The renderer creates eight accessible HTML editions and sixteen PDFs. Generic guides are qualification drafts, not device certificates. Only an accepted project record identifies the policy, software, checks and custody outcome for a particular phone.
 
-> **Branding note:** Generate your product's PDFs from its white-label fork after updating the descriptor, EN/PL guide sources and guide assets. Changing the descriptor's logo alone does not brand the guides. Follow [Generate PDFs with your branding](#generate-pdfs-with-your-branding) below; keep the generated PDFs out of Git.
+The generated PDFs and HTML are build outputs, ignored by Git. Keep reviewed copies with the matching release artifacts. Do not commit customer-specific or device-specific evidence here.
 
-## Rebuild
+## Rebuild from the source checkout
 
-Rebuilding requires the matching product's source checkout. Installed distributions include the public guide sources, assets, navigation and build records; the development renderer, test suite and toolchain belong to the source checkout. Source-code links below refer to that checkout.
-
-Prepare the pinned workspace and pass the source quality gate before revising and rebuilding the guides:
+The current source checkout includes the renderer and its developer toolchain; installed builds do not. From the checkout, use:
 
 ```sh
-pnpm install --frozen-lockfile
-pnpm quality:setup
-pnpm build:native
-pnpm build
-pnpm quality
+pxv guides rebuild --chromium /usr/bin/google-chrome
+```
+
+The command runs `pnpm build` automatically, then calls the existing `guides/rebuild.sh` pipeline. For a workspace invocation use `pnpm pxv guides rebuild --chromium /usr/bin/google-chrome` after installing dependencies. The command is handled before project initialization, so it does not require a `pxv.project.json` or device connection.
+
+If Chromium is already configured, set `PXV_CHROMIUM` instead of passing `--chromium`. The rebuild does not download a browser. The source checkout requires the pinned Node/pnpm versions; PDF checks require Poppler (`pdfinfo`, `pdftotext`, `pdffonts`, `pdftoppm`).
+
+```sh
+pxv guides rebuild [--output-dir DIR] [--chromium PATH] [--html-only] [--no-render]
+```
+
+`--output-dir` selects an alternate output directory. `--html-only` writes HTML without launching Chromium. `--no-render` still inspects the PDFs with Poppler but skips page PNGs. For the full page-by-page evidence, leave it off.
+
+The existing wrapper remains available for release tooling:
+
+```sh
 PXV_CHROMIUM=/usr/bin/google-chrome ./guides/rebuild.sh
 ```
 
-Dependency installation and `quality:setup` are explicit setup steps. The latter installs pinned analysis tools; the subsequent quality gate runs offline. Its source identity, tool versions and evidence are recorded in `.quality/report.json` and `.quality/report.md`. See the operator editions for the developer quality requirements and [host dependencies](../docs/HOST_DEPENDENCIES.md) for the Java, Android SDK and native build prerequisites.
+The rebuild does not install project dependencies, install Poppler, run the full source quality gate, contact devices or publish files. For source edits, follow the [contributor quality workflow](../CONTRIBUTING.md) before distributing the output.
 
-The wrapper works from any directory. It uses the Node Markdown/HTML pipeline and explicit Chromium for PDF, then Poppler for page metadata, UTF-8 text extraction and every-page raster QA. It does not install dependencies or download browsers. Use `--output-dir DIRECTORY` for an isolated rebuild, `--html-only` to omit PDF, or `--no-render` to omit page PNGs. A Node 24.22.0 runtime, pinned workspace packages and the selected Chromium executable are required; Poppler is needed for PDF QA.
+## Editions and print modes
 
-Outputs are product-en.pdf, product-pl.pdf, operator-en.pdf, operator-pl.pdf, user-en.pdf and user-pl.pdf. HTML remains alongside them for accessible reading and review. Raster QA and hashes live under `qa/` in the selected output directory. The default `guides/qa/` directory is entirely ignored by Git, including page images, extracted text, manifests and review records. Retain reviewed QA evidence with its matching release artifacts rather than committing it. No PDF/X, printer ICC, commercial print-proof or physical-device qualification is claimed.
+Each Markdown edition writes one HTML file and two PDFs:
 
-## Generate PDFs with your branding
+| Edition | HTML | Office PDF | Print PDF | Markdown |
+| --- | --- | --- | --- | --- |
+| Product EN | `product-en.html` | `product-en-office.pdf` | `product-en-print.pdf` | [source](source/markdown/product-en.md) |
+| Product PL | `product-pl.html` | `product-pl-office.pdf` | `product-pl-print.pdf` | [source](source/markdown/product-pl.md) |
+| Operator EN | `operator-en.html` | `operator-en-office.pdf` | `operator-en-print.pdf` | [source](source/markdown/operator-en.md) |
+| Operator PL | `operator-pl.html` | `operator-pl-office.pdf` | `operator-pl-print.pdf` | [source](source/markdown/operator-pl.md) |
+| User EN | `user-en.html` | `user-en-office.pdf` | `user-en-print.pdf` | [source](source/markdown/user-en.md) |
+| User PL | `user-pl.html` | `user-pl-office.pdf` | `user-pl-print.pdf` | [source](source/markdown/user-pl.md) |
+| Business fleet EN | `b2b-en.html` | `b2b-en-office.pdf` | `b2b-en-print.pdf` | [source](source/markdown/b2b-en.md) |
+| Business fleet PL | `b2b-pl.html` | `b2b-pl-office.pdf` | `b2b-pl-print.pdf` | [source](source/markdown/b2b-pl.md) |
 
-Work in the product's fork, following [white-label setup](../docs/WHITE_LABEL.md), and complete the prerequisites above. Branding is read from the fork's files at build time; there is no `--brand` option or runtime theme download.
+Office PDFs use A4 pages, a low-ink layout, and page numbers. Print PDFs have full-color branded pages, photo covers and selected color section openers. Their physical media is 216 × 303 mm, with an A4 `TrimBox` inset by 3 mm on every edge. The cover and marked section openers extend color into that bleed. The document is not PDF/X, does not specify an ICC profile, and is not a commercial printer proof.
 
-1. Edit [product.json](../product.json) for the product's name, command/package identities, support details and public assets. The general guide renderer automatically uses `name` in the HTML title and edition header and `upstreamVersion` in the edition header. Preserve the upstream engine version/API markers. Other descriptor fields do not automatically replace guide text or insert a logo.
-2. Customize all six [Markdown editions](source/markdown): headings, product references, command examples, support details and EN/PL wording. Keep the six EN/PL editions; the wrapper requires exactly six outputs, and the examples below use the existing filenames. Update the editable diagrams in [guide assets](assets/diagrams) as needed, and refresh CLI captures and their provenance/hashes using the fork's built CLI. Keep MIT attribution, third-party notices and asset/font licenses.
-3. Put the approved public logo under `guides/assets/`, for example `guides/assets/brand-logo.svg`, and reference it in each applicable Markdown edition as `![Your product](../../assets/brand-logo.svg)`. The generator copies `guides/assets/` into the output and rewrites those image paths. A logo referenced only by `product.json` under the repository's top-level `assets/` is not automatically included in general guide PDFs.
-4. For a fully customized visual layout, review the inline styles and `footerTemplate` in [the general guide renderer](../packages/release/src/docs.ts). Its current PDF footer contains fixed Community text; update that template in the fork if it needs the product name. Retain the qualification status and engine identity. Font changes also require updating the rebuild script's font verification and checking Polish glyphs; the current QA expects DejaVuSans.
+The QA manifest records hashes, language, embedded fonts, Polish glyph presence, page sizes, trim/bleed boxes, text extraction and raster paths for every generated page. Review every page image before distribution; automated checks do not determine whether a layout is visually acceptable. `guides/index.html` provides the static output index.
 
-After saving the branding changes, run from the fork root:
+## Fork branding and the starter policy
+
+The guide theme is [brand.json](assets/brand.json). It supplies a brand name, three colors, a font family, and optional local logo/font paths. Keep its `brandName` equal to `product.json.name`. Cover photos are public editorial assets under [assets/photos](assets/photos) and can be replaced while preserving `cover-product.png`, `cover-operator.png`, `cover-user.png` and `cover-b2b.png` filenames.
+
+Create a product identity, branded guide theme and an empty device starter from a versioned configuration:
 
 ```sh
-pnpm build
-PXV_REQUIRE_CRYPTO=1 pnpm quality
-PXV_CHROMIUM=/usr/bin/google-chrome ./guides/rebuild.sh \
-  --output-dir "$PWD/.pxv-preview/branded-guides"
+pnpm whitelabel:scaffold -- --config ./brand/acme.json
 ```
 
-Use the reviewed local Chromium executable's actual path. This generates the six PDF/HTML editions, copied guide assets and `qa/manifest.json` with page renders under `.pxv-preview/branded-guides/`. Edition filenames stay `product-en.pdf`, `product-pl.pdf`, `operator-en.pdf`, `operator-pl.pdf`, `user-en.pdf` and `user-pl.pdf`; branding changes their content, not those filenames. Choose another output directory if needed.
+The command validates `product.json`, policy and project objects against the existing schemas. It defaults to the `simple` policy, which contains no app pins, extra permissions, settings or VPN. `reference-five` can be selected explicitly. The Community `product.json` remains on `reference-five` unless the scaffold command is deliberately run in that checkout. See [the white-label guide](../docs/WHITE_LABEL.md) and [the example config](../config/templates/white-label.example.json).
 
-Inspect every rendered page, especially the logo, product name, footer, translated support details, command examples and page breaks. Confirm both languages use the intended branding and that no private values appear. Retain reviewed PDFs with the corresponding release artifacts; commit the source, asset and template changes only. `.pxv-preview/` and generated `*.pdf` files are ignored. The rebuild wrapper itself does not run the source quality gate or certify device acceptance.
+To generate the guides for the resulting brand, rebuild from its source checkout after review. A custom font file must be local for consistent embedding; without it, Chromium uses an installed font matching `fontFamily`. The optional logo and font are copied to public `guides/assets/`. Never add customer data, secrets, device identities, or recovery values to the theme or guide sources.
 
-Device-specific handoff documents use the product and policy snapshot accepted for that project. Editing the current fork's branding does not rewrite an already accepted handoff snapshot; see [operator signoff and custody](../docs/OPERATOR_GUIDE.md#signoff-and-custody).
+## Sources and evidence boundaries
 
-## Sources and assets
+The [diagrams](assets/diagrams) are editable SVG concepts, not UI captures. The [CLI capture manifest](assets/cli/manifest.json) binds the help capture to its content hash. The DejaVu fonts retain their upstream license next to the font files. The cover photos are generated editorial imagery, not photographs of tested phones or product UI.
 
-Diagrams are editable SVG concepts, not UI captures. The [CLI capture manifest](assets/cli/manifest.json) binds the current [`pxv --help` capture](assets/cli/overview.txt) to its content hash. The three DejaVu fonts retain their upstream license beside the font files. No real recipient screenshots, serial numbers, credentials or recovery values belong in this directory.
-
-The static [index](index.html) links the six editions' tracked Markdown sources and locally generated PDF/HTML outputs. PDF/HTML links become available after rebuilding into this directory; a fresh checkout contains no PDFs. Use `--output-dir` for customized outputs elsewhere and retain reviewed PDFs with the applicable release artifacts rather than committing them. [Build instructions](source/BUILD.txt), [build manifest](source/build-manifest.json) and [release gates](source/release-gates.json) distinguish document QA from live acceptance. The current source refactor has offline verification only; historical Pixel evidence applies to the candidate named in its original record. Rebuilding these guides does not extend that evidence to a newer build. Keep actual emulator/Pixel acceptance evidence in the private project and controlled release records.
-
-Historical verification records may name paths under `guides/qa/`. Those references describe evidence for the recorded candidate, not files supplied by a fresh checkout. Preserve the corresponding retained artifacts and original records; a new local render does not replace that historical evidence.
+Guide output proves document generation and selected text/font/page-box checks only. It does not establish that a policy is qualified, that a Seedvault dataset is restorable, or that a live phone was accepted. The historical Pixel record applies only to the candidate identified in its original evidence. Rebuilding guides does not extend that acceptance. See [build instructions](source/BUILD.txt), [build manifest](source/build-manifest.json), [release gates](source/release-gates.json), and the [canary and recovery runbook](../docs/CANARY_BACKUP_RECOVERY.md).

@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "brandName": "pxv Community",
+  "colors": {
+    "primary": "#17324D",
+    "secondary": "#2F6873",
+    "accent": "#D9952B"
+  },
+  "fontFamily": "DejaVu Sans",
+  "fontAsset": "assets/fonts/DejaVuSans.ttf"
+}

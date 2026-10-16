@@ -22,6 +22,7 @@ Run `pxv --help` for the installed product's identity and `pxv version` for its 
 | Extensions | `extension install --file FILE.tgz` or `--package NAME --version EXACT --registry HTTPS`; `list`, `inspect --extension ID`, `update --extension ID` with a new explicit package source, `remove --extension ID`, `policy|guide|adapter --extension ID --contribution PATH`, `invoke --extension ID --command NAME [--input-file FILE] --asset ID`. |
 | MCP | `mcp serve [--allow-mutations]` starts stdio transport; stdout is protocol-only. |
 | Guides | `guide operator|recipient --locale en|pl` prints installed Markdown; `guide project --locale en|pl --kind pixel|emulator` renders current policy requirements. |
+| Guide rebuild | `guides rebuild [--output-dir DIR] [--chromium PATH] [--html-only] [--no-render]` rebuilds public guides from a source checkout before project loading; it runs `pnpm build` and uses the existing Chromium/Poppler pipeline. |
 
 Docker execution adds `--execution docker --image EXPLICIT_IMAGE --docker-mode direct|host-adb`. Direct mode requires the independently started ADB sidecar; host-ADB mode uses a previously running host service. Installed extensions are mounted read-only into workers.
 

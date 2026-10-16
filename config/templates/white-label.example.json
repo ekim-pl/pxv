@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "product": {
+    "id": "acme",
+    "name": "Acme Fleet",
+    "command": "acme-pxv",
+    "packageName": "@acme/pxv",
+    "debName": "acme-pxv",
+    "image": "registry.example.org/acme/pxv",
+    "support": {
+      "name": "Acme Device Support",
+      "email": "support@example.org",
+      "url": "https://example.org/support"
+    }
+  },
+  "brand": {
+    "primary": "#17324D",
+    "secondary": "#2F6873",
+    "accent": "#D9952B",
+    "fontFamily": "DejaVu Sans"
+  },
+  "starter": {
+    "policyTemplate": "simple",
+    "language": "en-US",
+    "ownerProfileName": "Employee"
+  }
+}

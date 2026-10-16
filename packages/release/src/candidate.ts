@@ -202,6 +202,7 @@ async function sourceFiles(root: string): Promise<string[]> {
     'policy-packs',
     'manifests',
     'config/templates',
+    'starter',
     'resources',
     'android',
     'guides/source/markdown',

@@ -2,7 +2,7 @@
 
 This documentation describes the TypeScript 0.1.0 Community engine. Linux x86_64 is the initial target. The free MIT-licensed toolkit supports local projects, reviewed provisioning, recovery, CLI/MCP automation, maintenance and white-label forks. Commercial capabilities arrive as explicitly installed extensions from private repositories and registries.
 
-Start with [operator quickstart](OPERATOR_QUICKSTART.md), [host dependencies](HOST_DEPENDENCIES.md) and [command reference](COMMAND_REFERENCE.md). Recipients should use [user quickstart](USER_QUICKSTART.md), [user guide](USER_GUIDE.md) and [FAQ](USER_FAQ.md). The six English/Polish guides in [guides](../guides/README.md) are generated from current Markdown.
+Start with [operator quickstart](OPERATOR_QUICKSTART.md), [host dependencies](HOST_DEPENDENCIES.md) and [command reference](COMMAND_REFERENCE.md). Recipients should use [user quickstart](USER_QUICKSTART.md), [user guide](USER_GUIDE.md) and [FAQ](USER_FAQ.md). The eight EN/PL editions across product, operator, user and business fleet in [guides](../guides/README.md) are generated from Markdown. Maintainers creating a branded fork should start with [white-label setup](WHITE_LABEL.md).
 
 For operators: [complete workflow](OPERATOR_GUIDE.md), [fleet work](FLEET.md), [network policies](NETWORK_POLICIES.md), [Docker](DOCKER.md), [direct USB](DOCKER_OPERATOR_QUICKSTART.md), [host ADB](DOCKER_HOST_ADB_QUICKSTART.md), [agent](AGENT.md) and [MCP automation](AUTOMATION.md).
 

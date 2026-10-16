@@ -59,6 +59,8 @@ const stringFlags = [
   'endpoint',
   'pair-endpoint',
   'seedvault-adapter',
+  'output-dir',
+  'chromium',
 ] as const;
 const booleanFlags = [
   'help',
@@ -70,6 +72,8 @@ const booleanFlags = [
   'debugging-off',
   'erased',
   'inspected',
+  'html-only',
+  'no-render',
 ] as const;
 const options: Record<string, { type: 'string' | 'boolean' }> = {};
 for (const name of stringFlags) options[name] = { type: 'string' };
@@ -89,6 +93,7 @@ function help(product: ProductDescriptor, version: string): string {
     `mcp serve [--allow-mutations]\nextension install|update --package NAME --version EXACT --registry HTTPS\nextension install --file PACKAGE.tgz | list | inspect | remove | invoke\nextension policy|guide|adapter --extension ID --contribution PATH\n` +
     `lifecycle maintenance|policy-change|loss|retirement --asset ID --operator NAME --note TEXT [--erased]\n` +
     `handoff accept --asset ID --recipient NAME --debugging-off --yes\nhandoff export --asset ID --output DIRECTORY [--locale en|pl]\nguide operator|recipient|project [--locale en|pl]\n` +
+    `guides rebuild [--output-dir DIR] [--chromium PATH] [--html-only] [--no-render]\n` +
     `Use --execution docker --image EXPLICIT_IMAGE --docker-mode direct|host-adb for container execution.\n` +
     `All mutations require an enrolled target and explicit review. Physical confirmations remain on the phone.`
   );

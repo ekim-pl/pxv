@@ -1,23 +1,21 @@
 pxv 0.1.0 Node documentation pipeline
 
-Sources: six UTF-8 Markdown editions under source/markdown.
-Renderer: @pxv/release buildDocumentation, pinned marked/Playwright, explicit system Chromium.
-Formats: six A4 PDFs and six HTML files. No office/print split or PDF/X claim.
-Generated PDFs are ignored build outputs, not Git sources. Rebuild them locally;
-retain reviewed copies with release artifacts instead of committing them.
+Sources: eight UTF-8 Markdown editions under source/markdown (four guide types, EN/PL).
+Brand theme: guides/assets/brand.json; optional local logo and font; replaceable cover photos.
+Renderer: @pxv/release buildDocumentation, pinned marked/Playwright/pdf-lib, explicit system Chromium.
+Formats: eight HTML files, eight A4 office PDFs, eight full-color print PDFs.
+Print page: 216 x 303 mm media, A4 TrimBox, 3 mm bleed on selected cover and section opener pages.
+Generated PDFs and HTML are ignored build outputs, not Git sources. Keep reviewed copies with the release.
 Workspace: Node 24.22.0, pnpm 12.11.2, pinned TypeScript compiler 7.0.2.
 Native build: Rust 1.99.1, x86_64-unknown-linux-musl, rustfmt and Clippy.
 Quality prerequisites: Java, Android SDK and host tools from docs/HOST_DEPENDENCIES.md.
 Explicit setup: pnpm install --frozen-lockfile; pnpm quality:setup.
-Before guide edits/rendering: pnpm build:native; pnpm build; pnpm quality.
-Quality evidence: .quality/report.json and .quality/report.md bind the checked source identity.
-Render: PXV_CHROMIUM=/usr/bin/google-chrome ./guides/rebuild.sh
-Options: --output-dir DIRECTORY, --html-only, --no-render, --chromium EXECUTABLE.
-QA: Poppler pdfinfo, pdftotext and pdftoppm; hashes and every-page PNGs under qa/.
-The complete default guides/qa/ directory is ignored by Git. Keep reviewed QA
-artifacts and review records alongside the matching release, not in source control.
-Review every rendered page after each source revision; generation alone is not visual approval.
+Before guide edits/distribution: pnpm build:native; pnpm build; pnpm quality.
+CLI rebuild: pxv guides rebuild [--output-dir DIR] [--chromium PATH] [--html-only] [--no-render].
+The CLI rebuild automatically runs pnpm build; it does not install tools or run the full quality gate.
+QA: Poppler pdfinfo, pdftotext, pdffonts and pdftoppm; hashes and every-page PNGs under qa/.
+The complete default guides/qa/ directory is ignored by Git. Retain reviewed QA evidence with matching artifacts.
+Review every rendered page after each source/brand revision; generation alone is not visual approval.
 The rebuild wrapper performs no package installation, browser download, device command or publication.
 A successful render does not establish policy, emulator or physical-device acceptance.
-The current source refactor has offline verification only. Historical Pixel evidence remains
-limited to its recorded candidate; preserve the osInstallationSubset record unchanged.
+Historical Pixel evidence remains limited to the candidate named in its original record.

@@ -133,7 +133,7 @@ pxv handoff export --project-root "$P" --asset lab-01 --locale en --output "$P/h
 pxv handoff export --project-root "$P" --asset lab-01 --locale pl --output "$P/handoff"
 ~~~
 
-Handoff export uses the accepted product and resolved-policy snapshot, even if the current editable policy has changed. Keep such a packet as historical evidence; it does not establish current readiness. The CLI exports Markdown and HTML. PDF creation is an explicit guides API/tooling path, without a CLI PDF flag.
+Handoff export uses the accepted product and resolved-policy snapshot, even if the current editable policy has changed. Keep such a packet as historical evidence; it does not establish current readiness. The CLI exports handoff packets as Markdown and HTML. Generic product, operator, user and business guides are rendered from their Markdown sources with `pxv guides rebuild` into HTML plus A4 office and full-color print PDFs; those generic PDFs do not replace an accepted handoff record.
 
 A report describes stored readiness and is not a fresh device attestation. Read the finalization result. Physically confirm debugging toggles are off, remove temporary helpers and transfer custody only after recipient acceptance. Ready-for-handoff, completed-custody, subset and emulator outcomes remain distinct.
 

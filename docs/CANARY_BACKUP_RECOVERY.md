@@ -2,7 +2,7 @@
 
 Use this runbook for physical testing and recovery. For code development without a phone, use [developing and testing pxv](TESTING.md). The release evidence requirements are in [live acceptance](E2E_TESTING.md). This document describes procedures; it does not record a completed test or qualify a device.
 
-Here, **master device** covers both a protected reference phone and a primary phone containing real user data. Record which role applies before choosing a procedure. A reference phone that also contains real data must meet both sets of protections.
+Here, **master device** is a recorded role: a protected reference phone, a primary phone containing real owner data, or both. Keep the role explicit because a reference can seed reviewed fleet configuration while a primary backup is private to its owner. A phone with both roles receives the primary-data protections; its full backup is not a fleet seed.
 
 | Role                          | Purpose                                                          | Recovery approach                                                                                              |
 | ----------------------------- | ---------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
@@ -10,7 +10,7 @@ Here, **master device** covers both a protected reference phone and a primary ph
 | Primary/master with real data | Carry the recipient's accounts, files and daily work             | Preserve the original and its data; verify owner-controlled recovery on an approved replacement where possible |
 | Disposable canary             | Test a candidate with synthetic data and dedicated test accounts | May be reset or reinstalled only within the authorization for that exact phone and test                        |
 
-The reusable reference is the reviewed policy, assets, configurations and exact software identities. Do not clone a master's project database, approvals, credentials or device identities into a canary. Provision each target through fresh enrollment and review. Restoring selected user data is a separate, explicitly agreed operation.
+The reusable reference is the reviewed policy, assets, configurations and exact software identities. A phone-data backup is reusable as a reference seed only when its source scope has been checked and contains approved sanitized or synthetic template data. Do not clone a master's project database, approvals, credentials or device identities into a canary. Provision each target through fresh enrollment and review. Restoring selected user data is a separate, explicitly agreed operation.
 
 ## What each kind of recovery does
 
@@ -21,7 +21,22 @@ The reusable reference is the reviewed policy, assets, configurations and exact 
 | Phone data restore             | The selected OS backup service and each app's supported export/import or account recovery | Only the data and behavior actually restored and checked                                           |
 | Operator project/host recovery | Preserve current evidence and inspect a consistent private backup with a maintainer       | Historical state is available for reconciliation; old approvals do not establish current readiness |
 
-The typed `seedvault inspect|backup|restore` workflow and [personal recovery examples](../scripts/examples/README.md) supervise qualified exact-build Seedvault UI operations across profiles. No production adapter is currently qualified; read [adapter acceptance and recovery limits](SEEDVAULT_AUTOMATION.md). PXV has no general phone cloning or project-state import command. A policy's `backup` requirement measures whether backup is enabled and which transport is selected. The `backup_recovery` check records a witnessed representative restore. Neither observation proves that every app, profile or future backup is recoverable. A pinned setup recipe may support a specific app import.
+The typed `seedvault inspect|backup|restore` workflow and [personal recovery examples](../scripts/examples/README.md) supervise qualified exact-build Seedvault UI operations across profiles. No production adapter is currently qualified; read [adapter acceptance and recovery limits](SEEDVAULT_AUTOMATION.md). PXV has no general phone cloning or project-state import command. A policy's `backup` requirement measures whether backup is enabled and which transport is selected. The `backup_recovery` check records a witnessed representative restore. Neither observation proves that every app, profile or future backup is recoverable. Android apps may use separate backup APIs and exclusions; see [Android Auto Backup](https://developer.android.com/identity/data/autobackup) and verify the exact app and transport before making a coverage claim.
+
+For an identified master, use the existing CLI on one enrolled asset at a time. Keep the project, request, adapter evidence, backup destination and report in the access-controlled set for that role:
+
+```sh
+pxv seedvault inspect --project-root "$P" --asset "$ASSET" --transport usb
+pxv seedvault backup --project-root "$P" --asset "$ASSET" --transport usb \
+  --seedvault-adapter "$ADAPTER" --dry-run
+# Review the exact profiles, app/build identity, adapter and destination on the phone.
+pxv seedvault backup --project-root "$P" --asset "$ASSET" --transport usb \
+  --seedvault-adapter "$ADAPTER"
+pxv agent status --project-root "$P" --run "$RUN" --after 0
+pxv seedvault report --project-root "$P" --run "$RUN"
+```
+
+`--dry-run` prepares a plan and does not execute it. The approved backup command prepares and displays a fresh plan, then requires explicit confirmation; `--yes` is only for an already reviewed execution process. Record its plan, operator approval, resulting run and per-profile report together. Restore also requires explicit source selectors in `REQUEST.json`; approve it only for the recorded owner and target. Do not reuse the primary owner's request, source token or output permissions for another person. If one handset has both roles, treat its full Seedvault set as primary-private. Build the sanitized reusable reference on a separate device or from separately verified synthetic template data, then store it with distinct access and retention rules.
 
 ## Prepare a canary visit
 
@@ -133,14 +148,14 @@ Recreate the synthetic fixture from the reviewed policy and repeat the failed sc
 
 ### Protected reference/master
 
-Record the accepted reference's OS/app/policy identities and preserve its project evidence and supported backups before a planned visit. Reproduce the intended change and a rebuild from the baseline policy on a canary first. Compare profiles, measured settings, app identities and recipient-visible behavior; do not use the master's old approvals to approve the canary.
+Record the accepted reference's OS/app/policy identities and preserve its project evidence and supported backups before a planned visit. Identify which configuration and resources are the intended seed. Review the backup scope before marking any phone data reusable; remove private or real-owner content from the seed source or use a separate synthetic reference device. Reproduce the intended change and a rebuild from the baseline policy on a canary first. Compare profiles, measured settings, app identities and recipient-visible behavior; do not use the master's old approvals to approve the canary.
 
 If the reference itself needs recovery, start with evidence inspection and non-destructive diagnosis. A rebuild requires separate authorization for that phone and any data it holds. Retain the old baseline as history and make a new accepted reference record after recovery. Do not assume an older OS image can be installed: rollback protection constrains downgrades; use the current [GrapheneOS installation guidance](https://grapheneos.org/install/cli#verifying-installation).
 
 ### Primary/master containing real data
 
-1. Preserve the original phone and available backup generations. Agree the affected data, owner availability, private recovery material, account/MFA dependencies and acceptable loss before changing it. If suspected compromised, lost or stolen, coordinate the owner's account/session response and loss record before reconnecting or restoring; backup recovery alone does not contain an incident.
-2. Prefer an approved replacement for recovery where feasible. Create its own project/enrollment using its observed physical identity, provision the approved software and restore through the owner's supported methods. Keep the original untouched until the owner has verified the recovered data, essential functions and recovery access.
+1. Preserve the original phone and private backup generations. Label the set with the owner's identity and restrict it to the owner and named recovery operators. Agree the affected data, owner availability, private recovery material, account/MFA dependencies and acceptable loss before changing it. If suspected compromised, lost or stolen, coordinate the owner's account/session response and loss record before reconnecting or restoring; backup recovery alone does not contain an incident.
+2. Prefer an approved replacement for recovery where feasible. Create its own project/enrollment using its observed physical identity, provision the approved software and restore through the owner's supported methods. Use the exact restore request and source set for that owner only. Keep the original untouched until the owner has verified the recovered data, essential functions and recovery access.
 3. Restore real data only in the approved private environment with the owner. A disposable lab canary must not become a general repository of primary-phone backups. A synthetic drill validates the method; actual recovery still needs the owner's private content checks.
 4. If the only option is erasing the original, obtain explicit authorization for that device after explaining the known restore gaps. Verify an independently accessible backup and required keys first. If recovery cannot be demonstrated, preserve the phone and escalate rather than interpreting OS reinstall as data recovery.
 5. After restoration, make fresh policy observations, attestations and handoff evidence. Reconfirm credentials privately and review old sessions/ADB authorizations through their supported controls. Keep USB/Wireless debugging off at final custody. Retire or erase the previous device only through the agreed owner-authorized process; a pxv retirement record does not perform a wipe.
