@@ -32,6 +32,8 @@ Edit `"$P/policy.yaml"` for the intended deployment. Add an `os` object using th
 
 Use the current signing key from GrapheneOS' official [`allowed_signers`](https://releases.grapheneos.org/allowed_signers) source, omitting the principal from the `publicKey` value. Update the owner display name if needed so it matches the name selected during first-boot setup. Add reviewed app pins and other settings before claiming the phone is configured; do not invent hashes or reuse a key from an old guide.
 
+If the recipient wants the guided run to include optional duress setup, also add `"duress"` to the top-level `capabilities` array. The starter does not enable it by default. Validate and lock the policy after all edits.
+
 Validate and lock the reviewed policy:
 
 ```sh
@@ -60,7 +62,7 @@ Check the dry-run review for the exact phone, codename, release and USB serial. 
 
 ## 3. Create the five users
 
-After the phone boots, complete first-boot setup. Set the owner name to the reviewed policy name, keep the bootloader locked, and leave OEM unlocking off. Enable USB debugging only for provisioning and authorize the connected computer.
+After the phone boots, complete first-boot setup. Set the owner name to the reviewed policy name, keep the bootloader locked, and leave OEM unlocking off. The recipient should privately set the owner's initial screen lock during setup, or afterward at **Settings > Security & privacy > Device unlock > Screen lock**. Choose a random PIN of six or more digits, or a strong password the recipient can reliably enter. Do not record it in PXV notes, shell commands or the operator's records. Enable USB debugging only for provisioning and authorize the connected computer.
 
 Then run the policy-derived guided flow. Review first, then execute:
 
@@ -71,4 +73,22 @@ pxv device guided --project-root "$P" --asset phone-01 --operator 'Operator' --d
 pxv device guided --project-root "$P" --asset phone-01 --operator 'Operator'
 ```
 
-The guided run creates the missing secondary users and applies only the reviewed policy. Complete the named phone checkpoints and resume the same run when prompted. With the unchanged starter, the resulting users are empty profiles; the required network, backup, recipient and operator checks still need to be completed before handoff. Disable and physically verify USB debugging when provisioning is finished.
+The guided run creates the missing secondary users and applies only the reviewed policy. Complete the named phone checkpoints and resume the same run when prompted. When each secondary user is ready, switch into it and have the recipient set that profile's own PIN or password at **Settings > Security & privacy > Device unlock > Screen lock**. Use a separate credential for each profile, then lock and unlock each profile once with its normal credential. GrapheneOS profiles have separate encryption keys based on their lock methods; keep each credential private to the recipient and out of operator records. See the [GrapheneOS user-profile notes](https://grapheneos.org/features#improved-user-profiles) and [screen-lock instructions](https://support.google.com/pixelphone/answer/2819522).
+
+### Optional: set up a duress PIN and password
+
+Do this only after normal screen locks are set for all profiles and the final language setup is complete. PXV prompts for this final manual step only if `"duress"` was added to the policy capabilities before validation and locking.
+
+In the **owner** profile, open **Settings > Security & privacy > Device unlock > Duress Password** and follow the on-screen setup. GrapheneOS requires both a duress PIN and a duress password, even if the profiles currently use only one lock type. A duress PIN is used at PIN prompts; a duress password is used at password prompts. Keep both distinct from the normal credentials so they cannot be confused.
+
+This feature irreversibly erases the phone's data, all profiles and installed eSIMs as soon as a duress credential is entered at a device-credential prompt; the wipe cannot be interrupted. When Settings asks you to confirm access during setup, enter the current normal owner credential. Never test the duress PIN or password by entering it. Read the [official GrapheneOS duress documentation](https://grapheneos.org/features#duress) first and make sure the recipient accepts the loss of all local data and eSIMs.
+
+If the guided run pauses at the `duress` checkpoint, attest it only after the recipient has finished the setup, then resume the same run:
+
+```sh
+pxv device attest --project-root "$P" --asset phone-01 \
+  --check duress --operator 'Operator' --yes
+pxv agent resume --project-root "$P" --run RUN_ID --yes
+```
+
+With the unchanged starter, the resulting users are empty profiles; the required network, backup, recipient and operator checks still need to be completed before handoff. Disable and physically verify USB debugging when provisioning is finished.
