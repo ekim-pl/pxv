@@ -1,4 +1,9 @@
-import { NetworkProbeService, observeEmulatorProvenance, RecipeService } from '@pxv/adapters';
+import {
+  NetworkProbeService,
+  observeEmulatorProvenance,
+  RecipeService,
+  SeedvaultAdapter,
+} from '@pxv/adapters';
 import { validateArtifact, type SelectedTarget } from '@pxv/contracts';
 import { containedPath, type ExecutionContext, type WorkflowPort } from '@pxv/engine';
 import { relative } from 'node:path';
@@ -63,6 +68,10 @@ function recoveryPort(deps: ApplicationDependencies): Pick<WorkflowPort, 'inspec
       return current;
     },
     async cleanup(target, obligation, context) {
+      if (obligation.kind === 'seedvault-job' || obligation.kind === 'seedvault-foreground') {
+        await new SeedvaultAdapter(android).cleanup(target, obligation, context);
+        return;
+      }
       if (obligation.kind === 'restart-service') {
         if (!context.obligations) throw new Error('Durable recovery ownership is required');
         const artifact = validateArtifact(obligation.payload['helperArtifact']);

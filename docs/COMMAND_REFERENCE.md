@@ -16,6 +16,7 @@ Run `pxv --help` for the installed product's identity and `pxv version` for its 
 | Agent | `agent runs`; `agent status --run ID --after CURSOR`; `agent cancel --run ID`; `agent resume --run ID --yes`; `agent refresh --run ID` prepares a fresh review of remaining work; `agent execute --plan ID --review-file FILE --operator NAME`. |
 | Attest | `device attest --asset ID --check NAME --operator NAME [--note TEXT] --yes`. Emulator provenance also requires `--evidence FILE`. |
 | Recovery | `device recover --asset ID` inspects reservations; `--run ORIGINAL_RUN_ID --inspected --yes` performs explicit recovery. |
+| Seedvault | `seedvault inspect`; reviewed `backup|restore [--file REQUEST.json] [--seedvault-adapter FILE] [--dry-run]`; `report --run ID`; `connections`; verified TLS `connect --endpoint HOST:PORT [--pair-endpoint HOST:PORT]`; scoped `disconnect --endpoint HOST:PORT [--run CONNECTION_ID --inspected]`. Host execution, one enrolled asset and qualified exact-build UI evidence are required. See [personal Seedvault automation](SEEDVAULT_AUTOMATION.md). |
 | Handoff | `device finalize --asset ID --operator NAME --locale en|pl`; `handoff accept --asset ID --recipient NAME --debugging-off --yes`; `handoff export --asset ID --locale en|pl --output DIRECTORY`. |
 | Lifecycle | `lifecycle maintenance|policy-change|loss|retirement --asset ID --operator NAME --note TEXT [--erased] --yes`. |
 | Extensions | `extension install --file FILE.tgz` or `--package NAME --version EXACT --registry HTTPS`; `list`, `inspect --extension ID`, `update --extension ID` with a new explicit package source, `remove --extension ID`, `policy|guide|adapter --extension ID --contribution PATH`, `invoke --extension ID --command NAME [--input-file FILE] --asset ID`. |
@@ -24,7 +25,7 @@ Run `pxv --help` for the installed product's identity and `pxv version` for its 
 
 Docker execution adds `--execution docker --image EXPLICIT_IMAGE --docker-mode direct|host-adb`. Direct mode requires the independently started ADB sidecar; host-ADB mode uses a previously running host service. Installed extensions are mounted read-only into workers.
 
-An exact asset called `all` uses `--asset all`. `--all` is the fleet selector and cannot be combined with `--asset` or `--group`. First enrollment uses USB or a dedicated emulator; Wi-Fi transport data requires reviewed inventory configuration.
+An exact asset called `all` uses `--asset all`. `--all` is the fleet selector and cannot be combined with `--asset` or `--group`. First enrollment uses USB or a dedicated emulator. Seedvault's connection command verifies a TLS wireless endpoint against the enrolled physical identity before saving it alongside USB.
 
 Common exit outcomes: 0 means the requested command completed; 3 indicates a failed/inspection-required execution; 4 indicates pending work or an unmet readiness/tool check; 130 indicates cancellation. Unexpected input/errors return a nonzero launcher result. Inspect the JSON result and retained run status rather than inferring readiness from process exit alone.
 

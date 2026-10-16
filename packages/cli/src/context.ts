@@ -10,6 +10,7 @@ import { fileURLToPath } from 'node:url';
 import { createArtifactPort } from './artifact-port.js';
 import { createDependencies } from './dependencies.js';
 import { createWorkflowPort } from './workflow-port.js';
+import { createSeedvaultPort } from './seedvault-port.js';
 export async function resourceRoot(explicit?: string): Promise<string> {
   if (explicit) return resolve(explicit);
   const candidates = [
@@ -59,6 +60,7 @@ export async function application(
         project,
         store,
         port: createWorkflowPort(deps),
+        seedvault: createSeedvaultPort(deps),
         artifacts: createArtifactPort(deps),
         controlRoot: hostControlRoot(),
       }),

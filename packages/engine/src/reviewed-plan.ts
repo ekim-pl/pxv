@@ -20,6 +20,7 @@ export function summaryData(prepared: Omit<PreparedOperation, 'reviewSummary'>):
     deviceKind: target.device.kind,
     transport: target.transport,
     policyDigest: plan.policyDigest,
+    ...(prepared.lifecycleGeneration ? { lifecycleGeneration: prepared.lifecycleGeneration } : {}),
     users: baseline.profiles.map((value) => ({ profileId: value.profileId, user: value.user })),
     sharedEffects: prepared.sharedEffects,
     refreshedFrom: prepared.refreshedFrom

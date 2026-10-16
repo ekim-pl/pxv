@@ -121,6 +121,7 @@ export class ReviewService {
       actions,
       sharedEffects,
       refreshedFrom,
+      ...(previous.lifecycleGeneration ? { lifecycleGeneration: previous.lifecycleGeneration } : {}),
     });
     await this.commitRefreshedReview(run, prepared, cursor);
     return prepared;

@@ -10,6 +10,9 @@ import { ExecutionService } from './execution-service.js';
 import { RecoveryService } from './recovery-service.js';
 import { AttestationService } from './attestation-service.js';
 import { HandoffService } from './handoff-service.js';
+import { SeedvaultPlans } from './seedvault-plans.js';
+import { SeedvaultExecution } from './seedvault-execution.js';
+import { SeedvaultService } from './seedvault-service.js';
 type Dependencies = EngineOptions & { clock: () => Date };
 interface Collaborators {
   observations: ObservationService;
@@ -62,8 +65,21 @@ export function createWorkflowServices(options: EngineOptions) {
   const evidence = new EvidenceService(project, store, observations, devices, clock);
   const journal = new RunJournal(store, controlRoot, clock);
   const collaborators = { observations, plans, evidence, devices, projects, journal };
+  const seedvaultPlans = new SeedvaultPlans(project, store, deps.seedvault, observations, clock);
+  const seedvaultExecution = new SeedvaultExecution(store, seedvaultPlans, devices, journal);
+  const seedvault = new SeedvaultService(
+    project,
+    store,
+    seedvaultPlans,
+    seedvaultExecution,
+    projects,
+    devices,
+    journal,
+    clock,
+  );
   return {
     ...collaborators,
+    seedvault,
     ...operationServices(deps, collaborators),
     clock,
     attestation: new AttestationService(

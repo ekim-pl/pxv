@@ -56,6 +56,9 @@ const stringFlags = [
   'evidence',
   'output',
   'type',
+  'endpoint',
+  'pair-endpoint',
+  'seedvault-adapter',
 ] as const;
 const booleanFlags = [
   'help',
@@ -80,6 +83,9 @@ function help(product: ProductDescriptor, version: string): string {
     `device inspect | plan | guided | provision | create-users | deploy | install-os | report | attest | finalize | recover\n` +
     `  --project-root DIRECTORY --asset ID [--transport usb|wifi|emulator] [--dry-run] [--yes]\n` +
     `fleet provision --all|--group GROUP [--jobs 2] [--yes]\nagent runs | status --run ID [--after CURSOR] | cancel --run ID | resume --run ID --yes | refresh --run ID | execute --plan ID --review-file FILE --operator NAME\n` +
+    `seedvault inspect | backup | restore [--file REQUEST.json] [--seedvault-adapter FILE] [--dry-run]\n` +
+    `seedvault report --run ID | connections | connect --endpoint HOST:PORT [--pair-endpoint HOST:PORT]\n` +
+    `seedvault disconnect --endpoint HOST:PORT [--run CONNECTION_ID --inspected]\n` +
     `mcp serve [--allow-mutations]\nextension install|update --package NAME --version EXACT --registry HTTPS\nextension install --file PACKAGE.tgz | list | inspect | remove | invoke\nextension policy|guide|adapter --extension ID --contribution PATH\n` +
     `lifecycle maintenance|policy-change|loss|retirement --asset ID --operator NAME --note TEXT [--erased]\n` +
     `handoff accept --asset ID --recipient NAME --debugging-off --yes\nhandoff export --asset ID --output DIRECTORY [--locale en|pl]\nguide operator|recipient|project [--locale en|pl]\n` +

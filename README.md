@@ -21,6 +21,8 @@ The compiler is TypeScript 7.0.2. A separate TypeScript 6.0.2 package supplies t
 
 Use [development testing](docs/TESTING.md) for focused test/watch loops and coverage diagnosis. The separate [canary, backup and recovery runbook](docs/CANARY_BACKUP_RECOVERY.md) covers physical trials, protected reference/master phones, primary phones with real data, disposable rebuilds and operator-state backups.
 
+For one person's multi-profile phone, the [two personal recovery scripts](scripts/examples/README.md) assist GrapheneOS installation, supervised Seedvault backup and same-device/replacement restoration. Read the [adapter qualification and recovery limits](docs/SEEDVAULT_AUTOMATION.md) first; no production Seedvault UI adapter is currently qualified by the repository.
+
 ## Start a project
 
 Host execution needs supported Android platform tools, SDK Build Tools 35.0.0, Java 17 or newer, and OpenSSH signature verification. Portable and Debian distributions bundle Node and the supervisor. The Docker image also includes its Android and Java tools. See [host setup](docs/HOST_DEPENDENCIES.md).

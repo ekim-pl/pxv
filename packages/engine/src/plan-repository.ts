@@ -5,6 +5,7 @@ import type { ProjectContext } from './project.js';
 import type { PreparedOperation, Operation, OsSnapshot, ReviewLineage } from './workflow-types.js';
 import type { ObservationReader } from './observation-service.js';
 import { preparedDigest, summaryData, canonicalEffects } from './reviewed-plan.js';
+import { planGeneration, assertPlanGeneration } from './plan-generation.js';
 export interface PreparedDraft {
   id: string;
   target: SelectedTarget;
@@ -14,11 +15,13 @@ export interface PreparedDraft {
   sharedEffects: SharedApkEffect[];
   osSnapshot?: OsSnapshot;
   refreshedFrom?: ReviewLineage;
+  lifecycleGeneration?: string;
 }
 export interface PlanReader {
   read(id: string, summary?: string, allowExpired?: boolean): Promise<PreparedOperation>;
 }
 export interface PlanWriter extends PlanReader {
+  generation(assetId: string): Promise<string | undefined>;
   persist(input: PreparedDraft): Promise<PreparedOperation>;
 }
 export class PlanRepository implements PlanWriter {
@@ -28,7 +31,11 @@ export class PlanRepository implements PlanWriter {
     readonly observations: ObservationReader,
     readonly clock: () => Date,
   ) {}
+  generation(assetId: string): Promise<string | undefined> {
+    return planGeneration(this.store, assetId);
+  }
   async persist(input: PreparedDraft): Promise<PreparedOperation> {
+    await assertPlanGeneration(this.store, input.target.device.assetId, input.lifecycleGeneration);
     const body = {
       schemaVersion: 1 as const,
       id: input.id,
@@ -46,6 +53,7 @@ export class PlanRepository implements PlanWriter {
       baseline: input.baseline,
       sharedEffects: input.sharedEffects,
       expiresAt: new Date(this.clock().getTime() + 900_000).toISOString(),
+      ...(input.lifecycleGeneration ? { lifecycleGeneration: input.lifecycleGeneration } : {}),
       ...(input.osSnapshot ? { osSnapshot: input.osSnapshot } : {}),
       ...(input.refreshedFrom ? { refreshedFrom: input.refreshedFrom } : {}),
     };
@@ -62,6 +70,7 @@ export class PlanRepository implements PlanWriter {
     const value = await this.store.get<PreparedOperation>('plans', id);
     if (!value) throw new Error('Reviewed plan does not exist');
     this.validatePreparedEvidence(value);
+    await assertPlanGeneration(this.store, value.target.device.assetId, value.lifecycleGeneration);
     if (
       value.plan.projectId !== this.project.config.id ||
       value.plan.policyDigest !== this.project.resolved.digest

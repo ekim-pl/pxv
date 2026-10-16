@@ -17,6 +17,7 @@ import type { DeviceLease, Store } from '@pxv/runtime';
 import type { ProjectContext } from './project.js';
 import type { ResourceScope } from './recovery.js';
 import type { ExecutionControl } from './execution-control.js';
+import type { SeedvaultWorkflowPort } from './seedvault-types.js';
 export interface EmulatorImagePin {
   path: string;
   sha256: string;
@@ -210,6 +211,7 @@ export interface PreparedOperation {
   osSnapshot?: OsSnapshot;
   sharedEffects: SharedApkEffect[];
   refreshedFrom?: ReviewLineage;
+  lifecycleGeneration?: string;
 }
 
 export interface WorkflowState {
@@ -254,6 +256,7 @@ export interface EngineOptions {
   store: Store;
   port: WorkflowPort;
   artifacts: ArtifactPort;
+  seedvault?: SeedvaultWorkflowPort;
   controlRoot: string;
   clock?: () => Date;
 }

@@ -1,11 +1,5 @@
 import { resolveSelection, validateProject } from '@pxv/contracts';
-import {
-  containedPath,
-  recordLifecycle,
-  type PreparedOperation,
-  type RunRecord,
-  type WorkflowEngine,
-} from '@pxv/engine';
+import { containedPath, recordLifecycle, type RunRecord, type WorkflowEngine } from '@pxv/engine';
 import { ExtensionManager } from '@pxv/extensions';
 import type { AgentBackend } from '@pxv/mcp';
 import { commitProjectFile } from '@pxv/runtime';
@@ -49,7 +43,7 @@ function backendContext(engine: WorkflowEngine, allowMutations: boolean) {
     if (!lock) throw new Error('Extension is not pinned in this project');
     return lock;
   };
-  const review = (prepared: PreparedOperation) => ({
+  const review = (prepared: { plan: { id: string }; reviewSummary: string; expiresAt: string }) => ({
     planId: prepared.plan.id,
     reviewSummary: prepared.reviewSummary,
     expiresAt: prepared.expiresAt,

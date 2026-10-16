@@ -19,3 +19,5 @@ export * from './repository-values.js';
 export * from './network-address.js';
 export * from './ui-snapshot.js';
 export * from './zip-directory.js';
+export * from './seedvault.js';
+export * from './seedvault-connection.js';

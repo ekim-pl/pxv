@@ -21,7 +21,7 @@ The reusable reference is the reviewed policy, assets, configurations and exact 
 | Phone data restore             | The selected OS backup service and each app's supported export/import or account recovery | Only the data and behavior actually restored and checked                                           |
 | Operator project/host recovery | Preserve current evidence and inspect a consistent private backup with a maintainer       | Historical state is available for reconciliation; old approvals do not establish current readiness |
 
-pxv has no general phone backup, data-restore or project-state import command. A policy's `backup` requirement measures whether backup is enabled and which transport is selected. The `backup_recovery` check records a witnessed representative restore. Neither creates a backup nor proves that every app, profile or future backup is recoverable. A pinned setup recipe may support a specific app import; that is not a universal restore facility.
+The typed `seedvault inspect|backup|restore` workflow and [personal recovery examples](../scripts/examples/README.md) supervise qualified exact-build Seedvault UI operations across profiles. No production adapter is currently qualified; read [adapter acceptance and recovery limits](SEEDVAULT_AUTOMATION.md). PXV has no general phone cloning or project-state import command. A policy's `backup` requirement measures whether backup is enabled and which transport is selected. The `backup_recovery` check records a witnessed representative restore. Neither observation proves that every app, profile or future backup is recoverable. A pinned setup recipe may support a specific app import.
 
 ## Prepare a canary visit
 

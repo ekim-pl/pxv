@@ -8,6 +8,8 @@ For operators: [complete workflow](OPERATOR_GUIDE.md), [fleet work](FLEET.md), [
 
 Before testing a phone or rehearsing recovery, use [canary testing, backups and device recovery](CANARY_BACKUP_RECOVERY.md). It covers disposable test devices, protected reference/master phones, primary/master phones with real data, phone-data restoration and private operator-state backups.
 
+For personal multi-profile recovery, use the [example scripts](../scripts/examples/README.md) and [supervised Seedvault automation](SEEDVAULT_AUTOMATION.md). Exact-build live adapter qualification remains a prerequisite.
+
 For maintainers: [architecture](ARCHITECTURE.md), [development testing](TESTING.md), [live acceptance](E2E_TESTING.md), [verification](VERIFICATION.md), [publication gates](PUBLICATION_CHECKLIST.md), [release notes](RELEASE_NOTES.md) and [privacy](SECURITY_PRIVACY_GUIDE.md).
 
 The strict component gate is `pnpm quality` after the explicit `pnpm quality:setup` and native build. Its generated `.quality/` reports bind tests, complexity, complete worker/release coverage and dependency findings to the checked source. Read [testing](TESTING.md) for setup and [verification](VERIFICATION.md) for the boundary between current offline results and historical physical fixture evidence.

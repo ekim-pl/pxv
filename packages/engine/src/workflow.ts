@@ -1,4 +1,4 @@
-import type { Action, SelectedTarget } from '@pxv/contracts';
+import type { Action, SeedvaultRequest, SelectedTarget } from '@pxv/contracts';
 import { createWorkflowServices } from './composition.js';
 import { assertProjectFresh } from './project.js';
 import type { EngineOptions, EmulatorImagePin, Operation } from './workflow-types.js';
@@ -46,16 +46,29 @@ export class WorkflowEngine {
   prepareExtension(target: SelectedTarget, actions: Action[], signal?: AbortSignal) {
     return this.services.preparation.prepareExtension(target, actions, signal);
   }
-  submit(planId: string, reviewSummary: string, operator: string) {
+  async submit(planId: string, reviewSummary: string, operator: string) {
+    if (await this.services.seedvault.plans.has(planId))
+      return this.services.seedvault.submit(planId, reviewSummary, operator);
     return this.services.review.submit(planId, reviewSummary, operator);
+  }
+  inspectSeedvault(target: SelectedTarget, signal?: AbortSignal) {
+    return this.services.seedvault.inspect(target, signal);
+  }
+  prepareSeedvault(target: SelectedTarget, request: SeedvaultRequest, signal?: AbortSignal) {
+    return this.services.seedvault.prepare(target, request, signal);
+  }
+  seedvaultReport(runId: string) {
+    return this.services.seedvault.report(runId);
   }
   plan(id: string, summary?: string) {
     return this.services.plans.read(id, summary);
   }
-  refreshReview(runId: string, signal?: AbortSignal) {
+  async refreshReview(runId: string, signal?: AbortSignal) {
+    if (await this.services.seedvault.ownsRun(runId)) return this.services.seedvault.refresh(runId, signal);
     return this.services.review.refreshReview(runId, signal);
   }
-  execute(runId: string, signal?: AbortSignal) {
+  async execute(runId: string, signal?: AbortSignal) {
+    if (await this.services.seedvault.ownsRun(runId)) return this.services.seedvault.execute(runId, signal);
     return this.services.execution.execute(runId, signal);
   }
   executeFleet(runIds: string[], jobs = 2, signal?: AbortSignal) {

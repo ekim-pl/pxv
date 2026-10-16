@@ -11,7 +11,11 @@ const legacyFiles = execFileSync('git', ['ls-files', '--cached', '--others', '--
 if (legacyFiles.length) throw new Error(`Repository-owned Python leftovers: ${legacyFiles.join(', ')}`);
 const report = await writeMetrics(root);
 const shellcheck = await qualityExecutable('shellcheck');
-const shell = [...(await sourceFiles('bin', /./u)), 'guides/rebuild.sh'];
+const shell = [
+  ...(await sourceFiles('bin', /./u)),
+  'guides/rebuild.sh',
+  ...(await sourceFiles('scripts/examples', /\.sh$/u)),
+];
 execFileSync(shellcheck, shell, { stdio: 'inherit', timeout: 60_000 });
 for (const script of [shellLauncher(undefined), shellLauncher('quality-preview'), dockerEntrypoint()]) {
   execFileSync(shellcheck, ['--shell=sh', '-'], {

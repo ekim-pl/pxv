@@ -125,6 +125,7 @@ export class PreparationService implements Preparation {
     contributions?: Action[],
   ): Promise<PreparedOperation> {
     this.observations.assertTarget(target);
+    const lifecycleGeneration = await this.plans.generation(target.device.assetId);
     const baseline = await this.prepareBaseline(target, operation, signal);
     const id = randomUUID();
     let actions: Action[];
@@ -145,6 +146,7 @@ export class PreparationService implements Preparation {
       baseline,
       actions,
       sharedEffects,
+      ...(lifecycleGeneration ? { lifecycleGeneration } : {}),
       ...(osSnapshot ? { osSnapshot } : {}),
     });
   }

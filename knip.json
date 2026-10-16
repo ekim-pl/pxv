@@ -15,7 +15,8 @@
         "guides/source/rebuild.mjs!",
         "tests/**/*.test.ts",
         "tools/check-helpers.mjs",
-        "tools/check-deadcode.mjs"
+        "tools/check-deadcode.mjs",
+        "tools/personal-recovery.mjs"
       ],
       "project": [
         "tools/**/*.mjs",

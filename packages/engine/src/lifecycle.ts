@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { hostControlRoot, type Store } from '@pxv/runtime';
 import type { ProjectContext } from './project.js';
 import { NativeDeviceOwnership, NativeProjectOwnership, type DeviceOwnership } from './ownership.js';
+import { planGeneration } from './plan-generation.js';
 export interface LifecycleRecord {
   schemaVersion: 1;
   id: string;
@@ -26,6 +27,7 @@ function validateInput(project: ProjectContext, input: LifecycleInput) {
 }
 async function commitLifecycle(store: Store, record: LifecycleRecord): Promise<void> {
   const keys = ['workflow', 'handoff', 'attestations'];
+  const generation = await planGeneration(store, record.assetId);
   const values = await Promise.all(keys.map((collection) => store.get<unknown>(collection, record.assetId)));
   const expected = keys.map((collection, index) => ({
     collection,
@@ -39,11 +41,12 @@ async function commitLifecycle(store: Store, record: LifecycleRecord): Promise<v
     attestations: values[2] ?? [],
   };
   const committed = await store.transition({
-    expected,
+    expected: [...expected, { collection: 'plan-generations', key: record.assetId, value: generation }],
     changes: [
       { kind: 'set', collection: 'lifecycle-evidence', key: record.id, value: archive },
       ...keys.map((collection) => ({ kind: 'delete' as const, collection, key: record.assetId })),
       { kind: 'set', collection: 'lifecycle', key: record.id, value: record },
+      { kind: 'set', collection: 'plan-generations', key: record.assetId, value: record.id },
     ],
     events: [{ runId: `asset:${record.assetId}`, value: record }],
   });
