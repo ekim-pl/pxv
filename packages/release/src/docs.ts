@@ -328,7 +328,7 @@ function guideIndex(
     })
     .join('');
   const installation = policy
-    ? `<p>A5 booklets describe the intended configuration for policy ${escapeHtml(policy.id)} ${escapeHtml(policy.version)} (${policy.profiles.length} user accounts). This is document configuration, not device acceptance.</p>`
+    ? `<p>A5 booklets describe the intended configuration for policy ${escapeHtml(policy.id)} (${policy.profiles.length} user accounts). This is document configuration, not device acceptance.</p>`
     : '';
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(productName)} ${version} guides</title><style>body{font:16px/1.6 system-ui,sans-serif;max-width:900px;margin:3rem auto;padding:0 1rem;color:#17222d}h1{color:${brand.primary}}a{color:${brand.secondary}}li{margin:.8rem 0}small{color:#526374}</style></head><body><h1>${escapeHtml(productName)} ${version} guides</h1><p>Operator and device user guides, A5 recipient quick starts and blank private credential inserts in English and Polish. Use the accepted handoff report for the status of a specific phone.</p><p>PDFs and HTML are generated from the source checkout with <code>pxv guides rebuild</code>. Credential inserts are blank templates; completed copies contain private device information.</p>${installation}<ul>${rows}</ul></body></html>`;
 }

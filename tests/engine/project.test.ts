@@ -47,7 +47,7 @@ describe('isolated project data', () => {
     expect(await loadProduct('product.json')).toEqual({
       ...product,
       features: { extensions: false, seedvault: false },
-      defaultPolicy: 'policy-packs/reference-five/policy.v2.json',
+      defaultPolicy: 'policy-packs/reference-five/policy.json',
       assets: { logo: 'assets/logo.svg' },
       support: { name: 'pxv Community', email: 'support@example.org', url: 'https://example.org/pxv' },
     });
@@ -95,7 +95,7 @@ describe('isolated project data', () => {
     expect(await containedPath(root, 'new/deep/file', false)).toBe(join(root, 'new/deep/file'));
     await symlink('/tmp', join(root, 'escape'));
     await expect(containedPath(root, 'escape/file', false)).rejects.toThrow('symlinks');
-    await writeFile(join(root, context.config.policyFile), '{"schemaVersion":1,"unexpected":true}');
+    await writeFile(join(root, context.config.policyFile), '{"unexpected":true}');
     await expect(loadProject(root, product)).rejects.toThrow();
     await writeFile(join(root, 'pxv.project.json'), '{"id":"a","id":"b"}');
     await expect(loadProject(root, product)).rejects.toThrow('Invalid configuration');

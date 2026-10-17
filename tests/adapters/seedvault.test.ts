@@ -7,7 +7,7 @@ import {
   digest,
   sameAndroidUser,
   type AndroidUserIdentity,
-  type PolicyPack,
+  type ExecutionPolicy,
   type RecoveryObligation,
   type SeedvaultAdapterDefinition,
   type SeedvaultProfileIdentity,
@@ -653,11 +653,9 @@ describe('all persistent full Android users', () => {
   });
   it('reconciles every full user against policy rather than silently omitting it', async () => {
     const android = new FixtureAndroid();
-    const policy: PolicyPack = {
-      schemaVersion: 2,
+    const policy: ExecutionPolicy = {
       id: 'test',
       name: 'fixture',
-      version: '0.1.0',
       capabilities: [],
       repositories: [],
       requiredAttestations: [],
@@ -678,12 +676,10 @@ describe('all persistent full Android users', () => {
   });
 });
 
-function fixturePolicy(): PolicyPack {
+function fixturePolicy(): ExecutionPolicy {
   return {
-    schemaVersion: 2,
     id: 'fixture',
     name: 'Fixture',
-    version: '0.1.0',
     capabilities: [],
     repositories: [],
     requiredAttestations: [],

@@ -100,10 +100,10 @@ function parseStarter(value) {
 function starterLocale(value) {
   const preferred =
     value['defaultLocale'] === undefined ? undefined : canonicalLocale(value['defaultLocale']);
-  const legacy = value['language'] === undefined ? undefined : canonicalLocale(value['language']);
-  if (preferred && legacy && preferred !== legacy)
-    throw new Error('starter.defaultLocale conflicts with legacy language');
-  return preferred ?? legacy;
+  const alternate = value['language'] === undefined ? undefined : canonicalLocale(value['language']);
+  if (preferred && alternate && preferred !== alternate)
+    throw new Error('starter.defaultLocale conflicts with alternate language');
+  return preferred ?? alternate;
 }
 
 /** @param {unknown} value @returns {ScaffoldConfig} */
@@ -168,7 +168,7 @@ function generatedProfiles(basePolicy, starter) {
 /** @param {ConfigWithPath} config @returns {Promise<Prepared>} */
 async function prepare(config) {
   const template = config.starter.policyTemplate ?? 'simple';
-  const source = await readFile(join(sourceRoot, 'policy-packs', template, 'policy.v2.json'), 'utf8');
+  const source = await readFile(join(sourceRoot, 'policy-packs', template, 'policy.json'), 'utf8');
   const basePolicy = validatePolicyDocument(parseDocument(source));
   const policyPath = `policy-packs/${config.product.id}/policy.json`;
   const logoPath = await inputAsset(config.brand.logoPath, dirname(config.configPath), 'brand.logoPath', [
@@ -198,7 +198,6 @@ async function prepare(config) {
   const policy = validatePolicyDocument({
     ...basePolicy,
     id: config.product.id,
-    version: '0.1.0',
     name: `${product.name} starter policy`,
     profiles: generatedProfiles(basePolicy, config.starter),
   });

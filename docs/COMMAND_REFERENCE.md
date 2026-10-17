@@ -2,12 +2,12 @@
 
 Run `pxv --help` for the installed product's identity, `pxv COMMAND --help` for command-specific usage and `pxv version` for its build version. Commands reject unsupported flags and extra arguments before loading project state. Common options include `--project-root DIRECTORY`, `--resource-root DIRECTORY`, `--asset ID`, `--transport usb|wifi|emulator`, `--operator NAME` and `--yes`; use only those listed for the selected command. Read the exact plan before using non-interactive confirmation.
 
-Structured commands print readable summaries by default. Add `--json` for one JSON document on stdout on successful structured invocations; progress and diagnostics use stderr. Automation that previously parsed default output must add `--json`. Guide, help and version commands remain textual, and MCP stdout remains protocol-only. Preparation responses retain the exact decoded `reviewSummary`; do not add a newline when saving it for approval.
+Structured commands print readable summaries by default. Add `--json` for one JSON document on stdout on successful structured invocations; progress and diagnostics use stderr. Guide, help and version commands remain textual, and MCP stdout remains protocol-only. Preparation responses retain the exact decoded `reviewSummary`; do not add a newline when saving it for approval.
 
 | Area | Commands and purpose |
 | --- | --- |
 | Project | `project init --path NEW_DIRECTORY [--policy FILE]` creates distinct project state. |
-| Policy | `policy validate` checks a version 2 authoring policy; `policy lock --yes` writes the canonical lock. |
+| Policy | `policy validate` checks a authoring policy; `policy lock --yes` writes the canonical lock. |
 | Inventory | `inventory list`; `inventory enroll --asset ID --serial SERIAL --model MODEL --codename CODE [--kind pixel|emulator] [--mode adb|fastboot] --yes`; `inventory import --file FILE --yes`. |
 | Phone registry | Local encrypted `registry init`, `list`, `show --asset ID`, `history --asset ID`; `update --asset ID --file PRIVATE.json --record-revision N [--yes]`; `reveal --asset ID --output NEW_PRIVATE_FILE [--record-revision N]`; `rekey`; explicit stale-all restore `reconcile [--yes]`. Hidden local unlock or `--passphrase-file PRIVATE_FILE`; rekey also accepts `--new-passphrase-file`. See [private storage and retention](PHONE_REGISTRY.md). |
 | Host | `host doctor`; explicit `host adb-start --yes`; `host bootstrap --file APPROVED_ARCHIVE.json --license ID --path NEW_DIRECTORY --yes`; `host build-helper --type probe|setup|e2e --yes`. |
@@ -25,7 +25,7 @@ Structured commands print readable summaries by default. Add `--json` for one JS
 | Extensions | `extension install --file FILE.tgz` or `--package NAME --version EXACT --registry HTTPS`; `list`, `inspect --extension ID`, `update --extension ID` with a new explicit package source, `remove --extension ID`, `policy|guide --extension ID --contribution PATH`, `adapter --extension ID --contribution PATH --asset ID`, `invoke --extension ID --command NAME [--input-file FILE] --asset ID`. |
 | MCP | `mcp serve [--allow-mutations]` starts stdio transport; stdout is protocol-only. |
 | Guides | `guide operator|recipient --locale en|pl` prints installed Markdown; `guide project --locale en|pl --kind pixel|emulator` renders current policy requirements. |
-| Guide rebuild | `guides rebuild [--policy FILE] [--output-dir DIR] [--chromium PATH] [--html-only] [--no-render]` rebuilds guides from a source checkout before project loading; it runs `pnpm build` and uses the existing Chromium/Poppler pipeline. `--policy` validates a version 2 installation policy and adapts the A5 quick start and blank profile sheets. Policy builds require a separate output directory and describe intended configuration, not verified device status. |
+| Guide rebuild | `guides rebuild [--policy FILE] [--output-dir DIR] [--chromium PATH] [--html-only] [--no-render]` rebuilds guides from a source checkout before project loading; it runs `pnpm build` and uses the existing Chromium/Poppler pipeline. `--policy` validates a installation policy and adapts the A5 quick start and blank profile sheets. Policy builds require a separate output directory and describe intended configuration, not verified device status. |
 
 Docker execution adds `--execution docker --image EXPLICIT_IMAGE --docker-mode direct|host-adb`. Direct mode requires the independently started ADB sidecar; host-ADB mode uses a previously running host service. Installed extensions are mounted read-only into workers.
 

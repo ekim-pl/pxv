@@ -16,7 +16,7 @@ export function canonicalLocale(value: unknown): string {
   }
 }
 
-/** The legacy language field remains supported in existing policies. */
+/** Prefer the explicit default locale, then the alternate language field. */
 export function profileLocale(
   profile: Pick<ProfilePolicy, 'defaultLocale' | 'language'>,
 ): string | undefined {

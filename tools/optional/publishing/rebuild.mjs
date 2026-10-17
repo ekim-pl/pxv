@@ -323,7 +323,7 @@ const manifest = {
     ? {
         installation: {
           policyId: policy.id,
-          policyVersion: policy.version,
+
           profileCount: policy.profiles.length,
         },
       }

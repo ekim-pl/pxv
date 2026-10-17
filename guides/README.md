@@ -44,10 +44,10 @@ pxv guides rebuild [--policy FILE] [--output-dir DIR] [--chromium PATH] [--html-
 For an installation with five configured Android user profiles, use its policy directly:
 
 ```sh
-pxv guides rebuild --policy policy-packs/reference-five/policy.v2.json --output-dir output/pdf/reference-five --chromium /usr/bin/google-chrome
+pxv guides rebuild --policy policy-packs/reference-five/policy.json --output-dir output/pdf/reference-five --chromium /usr/bin/google-chrome
 ```
 
-`--policy` accepts only version 2 authoring policies and validates them through the same policy contracts used for installation. Use the installation's own policy path in place of this structural starter. Choose a separate `--output-dir` for every policy build; the builder refuses to replace authoritative guide sources. Relative policy and destination paths are resolved from the directory where you run the command. A policy build does not require project initialization, connect to the phone or alter the accepted handoff snapshot.
+`--policy` accepts authoring policies and validates them through the same policy contracts used for installation. Use the installation's own policy path in place of this structural starter. Choose a separate `--output-dir` for every policy build; the builder refuses to replace authoritative guide sources. Relative policy and destination paths are resolved from the directory where you run the command. A policy build does not require project initialization, connect to the phone or alter the accepted handoff snapshot.
 
 The A5 quick start gains a profile appendix with the policy's profile names, roles, language and declared configuration. The credential insert repeats its ordinary profile and account/recovery sheets automatically. For `N` configured profiles, the quick start has `8 + N` pages and the insert has `2N + 2` pages: an introduction, two sheets per profile, and a separate optional erasure sheet. A single Owner produces a nine-page guide and four-page insert; the five-profile example produces a thirteen-page guide and twelve-page insert. The generated files are installation instructions, not proof that those profiles or settings are present. The accepted handoff report and dated checks remain the record of the actual device.
 

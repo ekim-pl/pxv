@@ -28,11 +28,10 @@ function metrics. Distribution verification belongs in the separate
 `.quality/distribution.json` record so evidence does not become an input to its own
 candidate digest.
 
-The current documentation/registry/workflow changes have no new physical-device
-canary or exact-build GrapheneOS emulator acceptance record. No physical device was
-available for this documentation review. The registry's synthetic encryption and
-CLI tests establish local storage behavior, not that retained credentials still
-match a phone. New deployment claims need fresh live evidence.
+Physical-device and exact-build GrapheneOS emulator acceptance require a recorded
+canary for the tested configuration. The registry's synthetic encryption and CLI
+tests establish local storage behavior; credential validity requires checks on the
+phone. Deployment claims need matching live evidence.
 
 Before qualifying a deployment, retain the candidate/product/policy identities,
 artifact hashes, OS fingerprint, app versions/signers, host/transport, stable Android
@@ -41,21 +40,6 @@ persistence, isolation, required settings/permissions, actual-app network and
 failure behavior, supported restore scope, localized manual steps, helper cleanup,
 debugging shutdown and separate recipient custody where applicable. Keep missing
 items pending. Use the [canary and recovery runbook](CANARY_BACKUP_RECOVERY.md).
-
-## Historical evidence
-
-These sanitized records are preserved unchanged for their named October 2026
-candidates:
-
-- [Initial 0.1.0 verification record](verification-0.1.0.json).
-- [Final 0.1.0 fixture verification record](verification-0.1.0-final.json).
-
-They contain candidate-bound offline, distribution and physical Pixel fixture
-results, along with their limitations. Later source, policy, tooling or documentation
-changes do not inherit that acceptance. Historical fixture custody does not qualify
-an untested production app/VPN policy, restore method or extension. Preserve private
-raw evidence separately; publish no hardware serial, account identifier, credential,
-recovery value or wipe key.
 
 Follow the [publication checklist](PUBLICATION_CHECKLIST.md) before promoting any
 artifact. Ordinary builds do not publish or establish live acceptance.

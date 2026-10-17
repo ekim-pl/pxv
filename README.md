@@ -56,13 +56,12 @@ empty inventory; it does not contact or flash a phone:
 
 ```sh
 pnpm pxv project init --path /absolute/private/fleet \
-  --policy policy-packs/reference-five/policy.v2.json
+  --policy policy-packs/reference-five/policy.json
 pnpm pxv policy validate --project-root /absolute/private/fleet
 ```
 
-PXV accepts only `schemaVersion: 2` policies. They define each app once, share app
-IDs across profiles, separate global device settings and map exact GrapheneOS
-releases by Pixel codename. Version 1 policies and their locks are unsupported. Follow the
+Policies define each app once, share app IDs across profiles, separate global
+device settings and map exact GrapheneOS releases by Pixel codename. Follow the
 [policy reference](docs/POLICY_FORMAT.md) and operator guide to enroll observed
 physical identities, pin artifacts, lock the policy, review OS installation and
 provision profiles/apps. Plans identify automated and assisted steps, complete app
@@ -98,7 +97,7 @@ See [publication](docs/PUBLICATION_CHECKLIST.md).
 
 Community disables trusted extensions and experimental Seedvault recovery in its
 product descriptor. Explicitly enabled products retain those optional workflows;
-legacy records remain available for inspection and recovery. [Optional source
+retained records remain available for inspection and recovery. [Optional source
 tooling](tools/optional/README.md) covers branding and guide publishing.
 
 The [architecture](docs/ARCHITECTURE.md), [security boundaries](SECURITY.md) and

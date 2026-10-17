@@ -1,6 +1,5 @@
 {
   "id": "reference-five",
-  "version": "0.1.0",
   "name": "Five-profile structural starter",
   "capabilities": [
     "normal_credentials",
@@ -16,7 +15,6 @@
     "operator_signoff"
   ],
   "repositories": [],
-  "schemaVersion": 2,
   "apps": {},
   "profiles": [
     {

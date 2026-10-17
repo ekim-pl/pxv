@@ -2,7 +2,7 @@ import type {
   AndroidUserIdentity,
   ArtifactPolicy,
   DeviceObservation,
-  PolicyPack,
+  ExecutionPolicy,
   ProfilePolicy,
   SelectedTarget,
   SharedApkEffect,
@@ -10,7 +10,7 @@ import type {
 import type { ExecutionContext, WorkflowPort } from '@pxv/engine';
 import { observation, policy } from '../contracts/fixtures.js';
 
-export function basePolicy(): PolicyPack {
+export function basePolicy(): ExecutionPolicy {
   const result = structuredClone(policy);
   result.capabilities = [];
   result.requiredAttestations = ['operator_signoff', 'recipient_acceptance'];
@@ -44,7 +44,11 @@ export class MemoryPort implements WorkflowPort {
     if (!profile) throw new Error('Unknown stable user');
     return profile;
   }
-  inspect(_target: SelectedTarget, _policy: PolicyPack, signal?: AbortSignal): Promise<DeviceObservation> {
+  inspect(
+    _target: SelectedTarget,
+    _policy: ExecutionPolicy,
+    signal?: AbortSignal,
+  ): Promise<DeviceObservation> {
     signal?.throwIfAborted();
     return Promise.resolve(structuredClone(this.observation));
   }
@@ -144,7 +148,7 @@ export class MemoryPort implements WorkflowPort {
     this.profile(user).language = language;
     return Promise.resolve();
   }
-  flash(_target: SelectedTarget, _policy: PolicyPack, context: ExecutionContext): Promise<void> {
+  flash(_target: SelectedTarget, _policy: ExecutionPolicy, context: ExecutionContext): Promise<void> {
     this.mark('install-os', context);
     return Promise.resolve();
   }

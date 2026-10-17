@@ -1,6 +1,5 @@
 {
   "id": "simple",
-  "version": "0.1.0",
   "name": "Single-owner structural starter",
   "capabilities": [
     "normal_credentials"
@@ -10,7 +9,6 @@
     "operator_signoff"
   ],
   "repositories": [],
-  "schemaVersion": 2,
   "apps": {},
   "profiles": [
     {

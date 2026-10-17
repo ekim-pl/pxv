@@ -37,7 +37,6 @@ describe('public CLI and project isolation', () => {
   it('prints help and version without any project or device access', async () => {
     expect(await runCli(['--help'], io)).toBe(0);
     expect(output[0]).toContain('fleet provision');
-    expect(output[0]).not.toContain('policy convert');
     expect(await runCli(['version'], io)).toBe(0);
     expect(output[1]).toBe('0.1.0');
     expect(await readdir(root)).toEqual(['resources']);

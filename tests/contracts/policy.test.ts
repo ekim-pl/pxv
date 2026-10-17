@@ -14,7 +14,7 @@ import {
   resolveSelection,
   sameAndroidUser,
   validatePolicy,
-  validatePolicyPack,
+  validateExecutionPolicy,
   validateProduct,
   validateProject,
 } from '@pxv/contracts';
@@ -269,7 +269,7 @@ describe('capability-based readiness and private setup', () => {
   it('applies all normal defaults before the private gate and owner duress after language', () => {
     const owner = policy.profiles[0];
     if (!owner) throw new Error('Fixture owner missing');
-    const configured = validatePolicyPack({
+    const configured = validateExecutionPolicy({
       ...policy,
       capabilities: [],
       profiles: [
@@ -329,7 +329,7 @@ describe('capability-based readiness and private setup', () => {
     const cleanOwner = { ...owner };
     delete cleanOwner.language;
     const plain = { ...policy, capabilities: [], profiles: [cleanOwner] };
-    const credentials = validatePolicyPack({
+    const credentials = validateExecutionPolicy({
       ...plain,
       profiles: [{ ...cleanOwner, defaultCredential: { type: 'pin', secretRef: 'owner-pin' } }],
     });
@@ -339,7 +339,7 @@ describe('capability-based readiness and private setup', () => {
       'default-credential',
       'manual',
     ]);
-    const duress = validatePolicyPack({
+    const duress = validateExecutionPolicy({
       ...plain,
       profiles: [
         {
@@ -360,9 +360,7 @@ describe('capability-based readiness and private setup', () => {
 
   it('loads starter packs, the project template and the active Community product', () => {
     for (const name of ['reference-five', 'simple', 'custom']) {
-      const loaded = validatePolicy(
-        parseDocument(readFileSync(`policy-packs/${name}/policy.v2.json`, 'utf8')),
-      );
+      const loaded = validatePolicy(parseDocument(readFileSync(`policy-packs/${name}/policy.json`, 'utf8')));
       expect(loaded.profiles.filter((profile) => profile.kind === 'owner')).toHaveLength(1);
       expect(loaded.profiles.length).toBe(name === 'reference-five' ? 5 : name === 'simple' ? 1 : 3);
     }
@@ -375,7 +373,7 @@ describe('capability-based readiness and private setup', () => {
       name: 'pxv Community',
       engineApi: 1,
       features: { extensions: false, seedvault: false },
-      defaultPolicy: 'policy-packs/reference-five/policy.v2.json',
+      defaultPolicy: 'policy-packs/reference-five/policy.json',
     });
     const defaultPolicy = validatePolicy(parseDocument(readFileSync(activeProduct.defaultPolicy, 'utf8')));
     expect(defaultPolicy.profiles).toHaveLength(5);

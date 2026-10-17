@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { digest, observationDigest, requiredAttestations } from '@pxv/contracts';
-import type { PolicyPack, SelectedTarget } from '@pxv/contracts';
+import type { ExecutionPolicy, SelectedTarget } from '@pxv/contracts';
 import { createProject, loadProject, ResourceScope, saveInventory, WorkflowEngine } from '@pxv/engine';
 import type { ArtifactPort, PreparedOperation, ProjectContext, RunRecord } from '@pxv/engine';
 import { commitProjectFile, deviceLeaseKeys, SqliteStore } from '@pxv/runtime';
@@ -22,7 +22,7 @@ describe('reviewed workflows, operator and recipient gates', () => {
   let now: Date;
   let artifacts: ArtifactPort;
   const target: SelectedTarget = { device, transport: { kind: 'usb', serial: 'PIXEL1' } };
-  const configure = async (policy: PolicyPack): Promise<void> => {
+  const configure = async (policy: ExecutionPolicy): Promise<void> => {
     const created = await createProject(
       join(root, `project-${Math.random().toString(16).slice(2)}`),
       product,

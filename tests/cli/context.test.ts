@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type {
   ObligationWriter,
   ArtifactPolicy,
-  PolicyPack,
+  ExecutionPolicy,
   SelectedTarget,
   RecipePolicy,
   NetworkProbePolicy,
@@ -97,7 +97,7 @@ vi.mock('@pxv/adapters', () => ({
     }
   },
   CredentialDefaultsService: class {
-    constructor(android: unknown, projectRoot: string, policy: PolicyPack) {
+    constructor(android: unknown, projectRoot: string, policy: ExecutionPolicy) {
       mocks.credentialConstruct(android, projectRoot, policy);
     }
     preflight = mocks.credentialPreflight;
@@ -123,7 +123,7 @@ describe('production dependency wiring and evidence boundaries', () => {
   let root = '';
   let resources = '';
   let projectRoot = '';
-  let policy: PolicyPack;
+  let policy: ExecutionPolicy;
   let saved: NodeJS.ProcessEnv;
   const apps: Awaited<ReturnType<typeof application>>[] = [];
   const target: SelectedTarget = {

@@ -35,7 +35,7 @@ Wykonuj spójne kopie prywatnego stanu projektu i ewidencji urządzeń. Dane do 
 
 Sprawdź politykę przed rejestracją i wykonaniem operacji. Dołączony zestaw pięciu profili jest szkieletem: nie zapewnia zatwierdzonych aplikacji, działających kont VPN ani kwalifikacji wdrożenia.
 
-PXV przyjmuje wyłącznie polityki z `schemaVersion: 2`. Zdefiniuj katalog `apps` raz, a w listach `apps` profili wskazuj jego identyfikatory. Przypnij identyfikator pakietu, kod wersji, SHA-256 pliku APK, SHA-256 podpisującego i zatwierdzone źródło. Wersje pakietów Androida są wspólne dla użytkowników; profile nie mogą instalować sprzecznych wersji niezależnie.
+Zdefiniuj katalog `apps` raz, a w listach `apps` profili wskazuj jego identyfikatory. Przypnij identyfikator pakietu, kod wersji, SHA-256 pliku APK, SHA-256 podpisującego i zatwierdzone źródło. Wersje pakietów Androida są wspólne dla użytkowników; profile nie mogą instalować sprzecznych wersji niezależnie.
 
 Ustawienia Androida `global`, wspólne dla telefonu, umieść w `deviceSettings`. W `settings` profilu stosuj wpisy `secure` lub `system`. Świadomie ustal nazwy profili, uprawnienia, VPN i języki; nazwa właściciela musi odpowiadać zmierzonej nazwie. Wartości tajne nie należą do polityki ani tekstu receptur.
 
@@ -47,7 +47,7 @@ pxv policy lock --project-root "$P"
 pxv guide project --project-root "$P" --kind pixel --locale pl
 ```
 
-Zmiana polityki wymaga nowej blokady wersji i nowego przeglądu. Wybierz sprawdzoną politykę w wersji 2 w `pxv.project.json`, zweryfikuj i zablokuj ją przed przygotowaniem nowych planów. Polityki w wersji 1 i ich pliki blokady nie są obsługiwane; nie ma automatycznego konwertera.
+Zmiana polityki wymaga nowej blokady polityki i nowego przeglądu. Wybierz sprawdzoną politykę w `pxv.project.json`, zweryfikuj i zablokuj ją przed przygotowaniem nowych planów.
 
 ## 3. Zarejestruj dokładnie wskazany telefon
 

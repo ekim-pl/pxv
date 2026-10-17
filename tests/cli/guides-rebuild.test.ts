@@ -32,7 +32,7 @@ describe('guides rebuild command', () => {
         '--output-dir',
         '/tmp/guide-output',
         '--policy',
-        'policy-packs/simple/policy.v2.json',
+        'policy-packs/simple/policy.json',
         '--chromium',
         '/usr/bin/chromium',
         '--html-only',
@@ -56,7 +56,7 @@ describe('guides rebuild command', () => {
           '--output-dir',
           '/tmp/guide-output',
           '--policy',
-          `${process.cwd()}/policy-packs/simple/policy.v2.json`,
+          `${process.cwd()}/policy-packs/simple/policy.json`,
           '--chromium',
           '/usr/bin/chromium',
           '--html-only',
@@ -75,7 +75,7 @@ describe('guides rebuild command', () => {
         'guides',
         'rebuild',
         '--policy',
-        '../../policy-packs/simple/policy.v2.json',
+        '../../policy-packs/simple/policy.json',
         '--output-dir',
         '../../output/profile',
       ],
@@ -94,7 +94,7 @@ describe('guides rebuild command', () => {
         '--output-dir',
         resolve('output/profile'),
         '--policy',
-        resolve('policy-packs/simple/policy.v2.json'),
+        resolve('policy-packs/simple/policy.json'),
       ],
       cwd: process.cwd(),
     });
@@ -107,9 +107,9 @@ describe('guides rebuild command', () => {
       return Promise.resolve();
     };
     for (const args of [
-      ['--policy', 'policy-packs/simple/policy.v2.json'],
-      ['--policy', 'policy-packs/simple/policy.v2.json', '--output-dir', 'guides'],
-      ['--policy', 'policy-packs/simple/policy.v2.json', '--output-dir', 'guides/private'],
+      ['--policy', 'policy-packs/simple/policy.json'],
+      ['--policy', 'policy-packs/simple/policy.json', '--output-dir', 'guides'],
+      ['--policy', 'policy-packs/simple/policy.json', '--output-dir', 'guides/private'],
     ]) {
       const context = await parseCli(['guides', 'rebuild', ...args], io);
       await expect(guidesRebuildCommand(context, { execute })).rejects.toThrow(/Policy booklets require/u);
@@ -178,7 +178,7 @@ describe('guides rebuild command', () => {
           'guides',
           'rebuild',
           '--policy',
-          '../../policy-packs/simple/policy.v2.json',
+          '../../policy-packs/simple/policy.json',
           '--html-only',
           '--output-dir',
           outputRoot,
@@ -191,17 +191,16 @@ describe('guides rebuild command', () => {
       expect(await readFile(templateFile)).toEqual(template);
       const manifestText = await readFile(join(outputRoot, 'qa/manifest.json'), 'utf8');
       const manifest = JSON.parse(manifestText) as {
-        installation: { policyId: string; policyVersion: string; profileCount: number };
+        installation: { policyId: string; profileCount: number };
         editions: { name: string; sourceSha256: string; templateSha256: string }[];
       };
-      const policy = JSON.parse(await readFile('policy-packs/simple/policy.v2.json', 'utf8')) as {
+      const policy = JSON.parse(await readFile('policy-packs/simple/policy.json', 'utf8')) as {
         id: string;
-        version: string;
         profiles: unknown[];
       };
       expect(manifest.installation).toEqual({
         policyId: policy.id,
-        policyVersion: policy.version,
+
         profileCount: policy.profiles.length,
       });
       const record = manifest.editions.find(({ name }) => name === 'quickstart-en');
@@ -209,9 +208,9 @@ describe('guides rebuild command', () => {
       expect(record?.templateSha256).toBe(digest(template));
       expect(record?.sourceSha256).not.toBe(record?.templateSha256);
       expect(manifestText).not.toContain('policyFile');
-      expect(manifestText).not.toContain('policy.v2.json');
+      expect(manifestText).not.toContain('policy.json');
       await expect(access(join(outputRoot, 'policy.json'))).rejects.toThrow();
-      await expect(access(join(outputRoot, 'policy.v2.json'))).rejects.toThrow();
+      await expect(access(join(outputRoot, 'policy.json'))).rejects.toThrow();
     } finally {
       await rm(outputRoot, { recursive: true, force: true });
     }

@@ -13,9 +13,9 @@ For HTML only:
 For another destination:
   pxv guides rebuild --output-dir output/pdf --chromium /usr/bin/google-chrome
 For an installation-specific A5 booklet and blank credential insert:
-  pxv guides rebuild --policy policy-packs/reference-five/policy.v2.json --output-dir output/pdf/reference-five --chromium /usr/bin/google-chrome
+  pxv guides rebuild --policy policy-packs/reference-five/policy.json --output-dir output/pdf/reference-five --chromium /usr/bin/google-chrome
 
---policy validates a version 2 authoring policy. Version 1 is unsupported. Choose
+--policy validates a authoring policy. Choose
 a separate --output-dir; policy builds cannot overwrite authoritative sources.
 Relative paths resolve from the caller's directory. No project is required.
 Use the real installation policy in place of the reference-five starter example.

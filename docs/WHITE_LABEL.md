@@ -31,7 +31,7 @@ An omitted feature stays disabled in newly generated products. Existing product
 descriptors without `features` retain their compatibility behavior when read.
 
 `starter.policyTemplate` selects `simple` (one owner) or `reference-five` (five profile
-structures). Generated policies use the supported version 2 authoring format.
+structures). Generated policies use the supported authoring format.
 Neither template supplies deployment-specific OS trust, app pins, VPN accounts,
 backup coverage or acceptance. Customize the [policy](POLICY_FORMAT.md) before
 locking and reviewing it.
@@ -39,7 +39,7 @@ locking and reviewing it.
 `starter.defaultLocale` is a canonical BCP 47 tag applied to generated profiles,
 including the owner. Edit individual profiles afterward as needed. It controls
 profile language rather than time zone or the English/Polish documentation language.
-The legacy `starter.language` alias is accepted only when consistent with it.
+The `starter.language` field is accepted only when consistent with it.
 
 Keep `product.json.name` and `guides/assets/brand.json.brandName` aligned. Theme input
 uses three six-digit hex colors and a CSS-safe font family. Optional local `.ttf` or

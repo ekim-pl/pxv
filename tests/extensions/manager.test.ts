@@ -412,16 +412,16 @@ describe('extension distribution and isolation', () => {
     });
     const invalid = await manager.install({ tarball: await pathFor(root, malformed) });
     await expect(manager.readContribution(invalid, 'policyPacks', 'policy.json')).rejects.toThrow();
-    const legacy = bundle({
+    const unexpected = bundle({
       metadata: contributed,
       extra: [
-        { name: 'package/policy.json', content: JSON.stringify({ ...policyDocument, schemaVersion: 1 }) },
+        { name: 'package/policy.json', content: JSON.stringify({ ...policyDocument, unexpected: true }) },
         { name: 'package/adapter.mjs', content: 'export default {apiVersion:1,plan:()=>[]};' },
       ],
     });
-    const legacyLock = await manager.install({ tarball: await pathFor(root, legacy) });
-    await expect(manager.readContribution(legacyLock, 'policyPacks', 'policy.json')).rejects.toThrow(
-      'Unsupported policy schema version',
+    const unexpectedLock = await manager.install({ tarball: await pathFor(root, unexpected) });
+    await expect(manager.readContribution(unexpectedLock, 'policyPacks', 'policy.json')).rejects.toThrow(
+      'unexpected',
     );
   });
 });

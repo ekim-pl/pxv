@@ -23,7 +23,7 @@ import {
   evaluateObservation,
   observationDigest,
   type AndroidUserIdentity,
-  type PolicyPack,
+  type ExecutionPolicy,
   type RecoveryObligation,
   type SelectedTarget,
 } from '@pxv/contracts';
@@ -44,11 +44,9 @@ const target: SelectedTarget = {
   },
   transport: { kind: 'usb', serial: 'PIXEL123' },
 };
-const policy: PolicyPack = {
+const policy: ExecutionPolicy = {
   requiredAttestations: [],
-  schemaVersion: 2,
   id: 'test',
-  version: '1.0.0',
   name: 'Test',
   capabilities: [],
   repositories: [],
@@ -242,7 +240,7 @@ function adapter(runner: FakeRunner): AndroidAdapter {
   return new AndroidAdapter({ runner, artifacts, adbServer: endpoint });
 }
 describe('observation-scoped shared APK inspection', () => {
-  function sharedPolicy(): PolicyPack {
+  function sharedPolicy(): ExecutionPolicy {
     const configured = structuredClone(policy);
     const secondary = configured.profiles[0];
     const owner = configured.profiles[1];
@@ -389,7 +387,7 @@ describe('identity-bound Android adapter', () => {
     expect(() =>
       parseBackupObservation('Backup Manager currently enabled', 'User 10 is not running'),
     ).toThrow(/transports/);
-    const configured: PolicyPack = {
+    const configured: ExecutionPolicy = {
       ...policy,
       profiles: policy.profiles.map((profile) =>
         profile.id === 'work'
@@ -866,7 +864,7 @@ describe('fail-closed observation and mutation boundaries', () => {
     const runner = new FakeRunner();
     runner.localeValues.set(0, 'DE-de,pl-PL');
     runner.localeValues.set(10, 'sr-latn-rs,en-US');
-    const configured: PolicyPack = {
+    const configured: ExecutionPolicy = {
       ...policy,
       profiles: policy.profiles.map((profile) => ({
         ...profile,
@@ -919,7 +917,7 @@ describe('fail-closed observation and mutation boundaries', () => {
   it('keeps missing profiles, absent packages and language observations distinct', async () => {
     const runner = new FakeRunner();
     const android = adapter(runner);
-    const configured: PolicyPack = {
+    const configured: ExecutionPolicy = {
       ...policy,
       profiles: policy.profiles.map((profile) => ({
         ...profile,

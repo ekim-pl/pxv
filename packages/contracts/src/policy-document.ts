@@ -1,17 +1,16 @@
 import type { ArtifactPolicy, PolicyDocument, ExecutionPolicy, SettingPolicy } from './types.js';
-import { validatePolicyPack, validatePolicyDocument } from './schemas.js';
+import { validateExecutionPolicy, validatePolicyDocument } from './schemas.js';
 import { canonicalJson } from './policy.js';
 
 /** Serialize validated expanded engine data to the supported authoring format. */
 export function toPolicyDocument(value: ExecutionPolicy): PolicyDocument {
-  const policy = validatePolicyPack(value);
+  const policy = validateExecutionPolicy(value);
   const { profiles, osByCodename, ...base } = policy;
   const apps: Record<string, ArtifactPolicy> = {};
   const references = new Map<string, string>();
   const deviceSettings = new Map<string, SettingPolicy>();
   const document = {
     ...base,
-    schemaVersion: 2 as const,
     apps,
     deviceSettings: [] as SettingPolicy[],
     profiles: profiles.map(({ packages, settings, ...profile }) => ({

@@ -3,7 +3,7 @@ import { profileLocale } from './locales.js';
 import {
   validateInventory,
   validateObservation,
-  validatePolicyPack,
+  validateExecutionPolicy,
   validateProduct,
   validateProject,
   validateResolvedPolicy,
@@ -87,7 +87,7 @@ export function resolvePolicy(
     engineDigest,
     project: validatedProject,
     product: validatedProduct,
-    policy: validatePolicyPack(policy),
+    policy: validateExecutionPolicy(policy),
   };
   return { ...lock, digest: digest(lock) };
 }
@@ -227,7 +227,7 @@ export function evaluateObservation(
   input: ExecutionPolicy | ResolvedPolicy,
   observation: DeviceObservation,
 ): ObservationReport {
-  const policy = validatePolicyPack('policy' in input ? input.policy : input);
+  const policy = validateExecutionPolicy('policy' in input ? input.policy : input);
   const measured = validateObservation(observation);
   const checks: ObservationCheck[] = [];
   const check = (key: string, expected: unknown, actual: unknown): void => {

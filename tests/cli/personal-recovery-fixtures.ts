@@ -2,7 +2,12 @@ import { createHash } from 'node:crypto';
 import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { toPolicyDocument, digest, type PolicyPack, type SeedvaultAdapterDefinition } from '@pxv/contracts';
+import {
+  toPolicyDocument,
+  digest,
+  type ExecutionPolicy,
+  type SeedvaultAdapterDefinition,
+} from '@pxv/contracts';
 import type { SeedvaultReport } from '../../packages/engine/src/seedvault-types.js';
 import { device, policy, product, project } from '../contracts/fixtures.js';
 
@@ -24,7 +29,7 @@ export async function personalFixture() {
   const apk = Buffer.from('reviewed APK fixture'),
     probe = Buffer.from('reviewed probe fixture');
   const hash = (value: Buffer) => createHash('sha256').update(value).digest('hex');
-  const selected: PolicyPack = {
+  const selected: ExecutionPolicy = {
     ...structuredClone(policy),
     osByCodename: {
       akita: {

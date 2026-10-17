@@ -15,7 +15,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { inspect } from 'node:util';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { AndroidUserIdentity, PolicyPack, ProfilePolicy, SelectedTarget } from '@pxv/contracts';
+import type { AndroidUserIdentity, ExecutionPolicy, ProfilePolicy, SelectedTarget } from '@pxv/contracts';
 import {
   AdapterError,
   AndroidAdapter,
@@ -56,11 +56,9 @@ function profile(id: string, kind: 'owner' | 'secondary'): ProfilePolicy {
     vpn: { packageId: null, alwaysOn: false, lockdown: false },
   };
 }
-function configuredPolicy(): PolicyPack {
+function configuredPolicy(): ExecutionPolicy {
   return {
-    schemaVersion: 2,
     id: 'credentials',
-    version: '1.0.0',
     name: 'Credentials',
     capabilities: [],
     repositories: [],
@@ -121,7 +119,7 @@ describe('private credential defaults', () => {
   let outer: string;
   let root: string;
   let path: string;
-  let policy: PolicyPack;
+  let policy: ExecutionPolicy;
   let android: FakeAndroid;
   let service: CredentialDefaultsService;
   const lease = {};

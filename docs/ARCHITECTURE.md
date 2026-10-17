@@ -8,15 +8,15 @@ The façade's retained public port, plan, run/state and emulator-evidence type e
 
 ## Core data flow
 
-Only version 2 authoring policies are accepted. The engine expands the shared app
-catalog, owner-scoped device settings and per-codename OS pins into a version 2
-execution model consumed by the existing action contracts. Version 1 policies and
-their retained locks are unsupported. See [policy format](POLICY_FORMAT.md).
+The engine expands the authored policy's shared app catalog, owner-scoped device
+settings and per-codename OS pins into an execution model consumed by the action
+contracts. See [policy format](POLICY_FORMAT.md).
 
 `PolicyDocument` names authored input, while `ExecutionPolicy` names the expanded
-engine model. Their validators and serializers remain separate even though both
-use schema version 2. The former public `PolicyPack` type remains a deprecated
-alias for `ExecutionPolicy`; the wire format is unchanged.
+engine model. `validatePolicyDocument` validates authored input, `validatePolicy`
+expands it, `validateExecutionPolicy` validates engine data, and `toPolicyDocument`
+serializes engine data back to authored input. Policies carry no version fields;
+resolved locks bind their normalized content by digest.
 
 Project-local `state/artifacts` stores verified content by digest. Per-plan immutable
 paths retain shared bytes and repository evidence. Concurrent publication is atomic;

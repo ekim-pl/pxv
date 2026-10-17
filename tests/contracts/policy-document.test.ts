@@ -6,13 +6,12 @@ import {
   osPolicyForTarget,
   resolvePolicy,
   validatePolicy,
-  validatePolicyPack,
+  validateExecutionPolicy,
   validatePolicyDocument,
   validateProduct,
   verifyResolvedPolicy,
   type OsPolicy,
   type ExecutionPolicy,
-  type PolicyPack,
   type PolicyDocument,
 } from '@pxv/contracts';
 import { observation, policy, policyDocument, product, project } from './fixtures.js';
@@ -27,14 +26,12 @@ const image = (codename: string, release = '2026100600'): OsPolicy => ({
   publicKey: 'ssh-ed25519 AAAA',
 });
 
-describe('v2-only policy authoring and locks', () => {
-  it('keeps the deprecated public policy alias compatible with expanded engine data', () => {
-    expectTypeOf<PolicyPack>().toEqualTypeOf<ExecutionPolicy>();
+describe('policy authoring and locks', () => {
+  it('separates authored input from expanded engine data', () => {
     expectTypeOf(validatePolicy).returns.toEqualTypeOf<ExecutionPolicy>();
     expectTypeOf(toPolicyDocument).returns.toEqualTypeOf<PolicyDocument>();
     const execution: ExecutionPolicy = validatePolicy(policyDocument);
-    const legacyName: PolicyPack = execution;
-    expect(toPolicyDocument(legacyName)).toEqual(policyDocument);
+    expect(toPolicyDocument(execution)).toEqual(policyDocument);
   });
   it('defines a shared app once and normalizes device settings onto the owner exactly once', () => {
     const original = structuredClone(policy);
@@ -59,43 +56,35 @@ describe('v2-only policy authoring and locks', () => {
     expect(normalized.profiles[1]?.settings).not.toContainEqual(global);
     expect(normalized.profiles.map((profile) => profile.packages)).toEqual([owner.packages, owner.packages]);
     expect(original.profiles[1]?.settings).toContainEqual(global);
-    expect(normalized.schemaVersion).toBe(2);
-    expect(normalized).not.toHaveProperty('sourceSchemaVersion');
+    expect(normalized).not.toHaveProperty('schemaVersion');
+    expect(normalized).not.toHaveProperty('version');
   });
 
-  it('rejects v1 authoring, normalized policies and retained v1 locks', () => {
-    const legacy = { ...policy, schemaVersion: 1 };
-    for (const validate of [validatePolicy, validatePolicyDocument, validatePolicyPack])
-      expect(() => validate(legacy)).toThrow('Unsupported policy schema version');
-    expect(() => validatePolicy({ ...policyDocument, schemaVersion: 1 })).toThrow(
-      'Unsupported policy schema version',
-    );
+  it('rejects unknown fields in authored input, execution data and retained policies', () => {
+    const invalid = { ...policy, unexpected: true };
+    expect(() => validateExecutionPolicy(invalid)).toThrow();
+    expect(() => validatePolicy({ ...policyDocument, unexpected: true })).toThrow();
+    expect(() => validatePolicyDocument({ ...policyDocument, unexpected: true })).toThrow();
     const retained = resolvePolicy(policy, project, product);
-    expect(() => verifyResolvedPolicy({ ...retained, policy: legacy })).toThrow(
-      'Unsupported policy schema version',
-    );
-    expect(() => evaluateObservation(legacy as typeof policy, observation)).toThrow(
-      'Unsupported policy schema version',
-    );
-    expect(() => resolvePolicy(legacy as typeof policy, project, product)).toThrow(
-      'Unsupported policy schema version',
-    );
-    expect(() => toPolicyDocument(legacy as typeof policy)).toThrow('Unsupported policy schema version');
+    expect(() => verifyResolvedPolicy({ ...retained, policy: invalid })).toThrow();
+    expect(() => evaluateObservation(invalid as typeof policy, observation)).toThrow();
+    expect(() => resolvePolicy(invalid as typeof policy, project, product)).toThrow();
+    expect(() => toPolicyDocument(invalid as typeof policy)).toThrow();
   });
 
-  it('roundtrips supported normalized policies and locks without format markers', () => {
+  it('roundtrips authored policies and locks without policy version fields', () => {
     expect(validatePolicy(policyDocument)).toEqual(policy);
-    expect(validatePolicyPack(policy)).toEqual(policy);
+    expect(validateExecutionPolicy(policy)).toEqual(policy);
     expect(toPolicyDocument(policy)).toEqual(policyDocument);
     expect(() => validatePolicy(policy)).toThrow();
     expect(() => validatePolicyDocument(policy)).toThrow();
-    expect(() => validatePolicyPack(policyDocument)).toThrow();
-    expect(() => validatePolicyPack({ ...policy, sourceSchemaVersion: 2 })).toThrow();
+    expect(() => validateExecutionPolicy(policyDocument)).toThrow();
     const retained = resolvePolicy(policy, project, product);
     expect(verifyResolvedPolicy(JSON.parse(JSON.stringify(retained)))).toEqual(retained);
     expect(digest(validatePolicy(toPolicyDocument(policy)))).toBe(digest(policy));
     expect(retained.schemaVersion).toBe(1);
-    expect(retained.policy.schemaVersion).toBe(2);
+    expect(retained.policy).not.toHaveProperty('schemaVersion');
+    expect(retained.policy).not.toHaveProperty('version');
   });
 
   it.each([
@@ -162,7 +151,7 @@ describe('v2-only policy authoring and locks', () => {
     const owner = structuredClone(policy.profiles[0]!);
     owner.settings.push({ namespace: 'global', key: 'airplane_mode_on', value: '0' });
     expect(() =>
-      validatePolicyPack({
+      validateExecutionPolicy({
         ...policy,
         profiles: [
           owner,
@@ -243,14 +232,14 @@ describe('mixed-model image pins', () => {
     });
   });
 
-  it('rejects empty or mismatched model maps and legacy single image pins', () => {
+  it('rejects empty or mismatched model maps and non-map image pins', () => {
     const document = toPolicyDocument(policy);
     expect(() => validatePolicy({ ...document, os: {} })).toThrow('cannot be empty');
     expect(() => validatePolicy({ ...document, os: { akita: image('husky') } })).toThrow(
       'differs from codename',
     );
     expect(() => validatePolicy({ ...document, os: image('akita') })).toThrow();
-    expect(() => validatePolicyPack({ ...policy, os: image('akita') })).toThrow();
+    expect(() => validateExecutionPolicy({ ...policy, os: image('akita') })).toThrow();
     expect(osPolicyForTarget({}, 'akita')).toBeUndefined();
   });
 });

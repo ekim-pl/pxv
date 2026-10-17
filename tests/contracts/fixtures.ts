@@ -22,9 +22,7 @@ export const device: DeviceTarget = {
   groups: ['pilot'],
 };
 export const policy = validatePolicy({
-  schemaVersion: 2,
   id: 'fixture',
-  version: '0.1.0',
   name: 'Fixture policy',
   capabilities: ['normal_credentials', 'duress'],
   repositories: [],
@@ -95,7 +93,7 @@ export const product: ProductDescriptor = {
   upstreamVersion: '0.1.0',
   engineApi: 1,
   assets: { logo: 'assets/logo.svg' },
-  defaultPolicy: 'policy-packs/reference-five/policy.v2.json',
+  defaultPolicy: 'policy-packs/reference-five/policy.json',
   support: { name: 'Community', email: 'support@example.org', url: 'https://example.org/pxv' },
 };
 export const obligation: RecoveryObligation = {

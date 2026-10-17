@@ -12,7 +12,7 @@
   "assets": {
     "logo": "assets/logo.svg"
   },
-  "defaultPolicy": "policy-packs/reference-five/policy.v2.json",
+  "defaultPolicy": "policy-packs/reference-five/policy.json",
   "support": {
     "name": "pxv Community",
     "email": "support@example.org",

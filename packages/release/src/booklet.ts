@@ -1,4 +1,9 @@
-import { profileLocale, validatePolicyPack, type ExecutionPolicy, type ProfilePolicy } from '@pxv/contracts';
+import {
+  profileLocale,
+  validateExecutionPolicy,
+  type ExecutionPolicy,
+  type ProfilePolicy,
+} from '@pxv/contracts';
 
 type Locale = 'en' | 'pl';
 type Kind = 'quickstart' | 'credentials';
@@ -309,7 +314,7 @@ export function renderPolicyBooklet(
   policy: ExecutionPolicy,
   locale: Locale,
 ): string {
-  const selected = validatePolicyPack(policy);
+  const selected = validateExecutionPolicy(policy);
   const pages = canonicalPages(source, kind);
   const customized =
     kind === 'quickstart' ? quickstart(pages, selected, locale) : credentials(pages, selected, locale);

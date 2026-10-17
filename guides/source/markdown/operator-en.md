@@ -35,7 +35,7 @@ Back up private project state and inventory consistently. Keep unlock material s
 
 Review the authored policy before enrollment or execution. The bundled five-profile pack is a structural starter: it does not supply approved apps, working VPN accounts or a qualified deployment.
 
-PXV accepts only `schemaVersion: 2` policies. Define an `apps` catalog once and reference its IDs in each profile's `apps` list. Pin package ID, version code, APK SHA-256, signer SHA-256 and an approved source. Android package versions are shared across users; profiles cannot independently install conflicting versions.
+Define an `apps` catalog once and reference its IDs in each profile's `apps` list. Pin package ID, version code, APK SHA-256, signer SHA-256 and an approved source. Android package versions are shared across users; profiles cannot independently install conflicting versions.
 
 Place device-wide Android `global` settings in `deviceSettings`. Profile `settings` contain `secure` or `system` entries. Define profile names, permissions, VPN and language deliberately; the owner name must match the observed owner. Keep secrets out of policy values and recipe text.
 
@@ -47,7 +47,7 @@ pxv policy lock --project-root "$P"
 pxv guide project --project-root "$P" --kind pixel --locale en
 ```
 
-A policy change needs a new lock and fresh review. Select the reviewed version 2 policy in `pxv.project.json`, validate and lock it before preparing new plans. Version 1 policies and their locks are unsupported; there is no automated converter.
+A policy change needs a new lock and fresh review. Select the reviewed policy in `pxv.project.json`, validate and lock it before preparing new plans.
 
 ## 3. Enroll one exact physical device
 

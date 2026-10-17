@@ -57,11 +57,9 @@ beforeEach(async () => {
   await writeFile(
     join(resources, product.defaultPolicy),
     JSON.stringify({
-      schemaVersion: 2,
       apps: {},
       deviceSettings: [],
       id: 'fixture',
-      version: '0.1.0',
       name: 'Disposable acceptance',
       capabilities: [],
       requiredAttestations: [],

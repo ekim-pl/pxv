@@ -1,7 +1,12 @@
 import { readFileSync } from 'node:fs';
 import { marked } from 'marked';
 import { describe, expect, test } from 'vitest';
-import { toPolicyDocument, validatePolicy, validatePolicyPack, type PolicyPack } from '@pxv/contracts';
+import {
+  toPolicyDocument,
+  validatePolicy,
+  validateExecutionPolicy,
+  type ExecutionPolicy,
+} from '@pxv/contracts';
 import { policy as fixture } from '../contracts/fixtures.js';
 import { renderPolicyBooklet } from '../../packages/release/src/booklet.js';
 
@@ -17,9 +22,9 @@ const sources = Object.fromEntries(
   ]),
 ) as Record<(typeof locales)[number], Record<(typeof kinds)[number], string>>;
 
-function installation(count: number): PolicyPack {
+function installation(count: number): ExecutionPolicy {
   const template = fixture.profiles[0]!;
-  return validatePolicyPack({
+  return validateExecutionPolicy({
     ...fixture,
     name: 'Booklet test installation',
     profiles: Array.from({ length: count }, (_, index) => ({
@@ -197,7 +202,7 @@ describe('policy-specific recipient booklets', () => {
       failurePackages: [],
     };
     profile.backup = { enabled: true, transportPackage: 'org.example.backuptransportsentinel' };
-    const normalized = validatePolicyPack(policy);
+    const normalized = validateExecutionPolicy(policy);
     const sentinels = [
       'artifactpathsentinel',
       'artifacturlsentinel',

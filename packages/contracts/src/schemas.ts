@@ -330,7 +330,7 @@ const profileBaseSchema = z
   .strict();
 export const profilePolicySchema = profileBaseSchema.superRefine((value, context) => {
   if (value.defaultLocale && value.language && value.defaultLocale !== value.language)
-    context.addIssue({ code: 'custom', message: 'Profile defaultLocale conflicts with legacy language' });
+    context.addIssue({ code: 'custom', message: 'Profile defaultLocale conflicts with alternate language' });
   if (!distinct(value.packages, (artifact) => artifact.packageId))
     context.addIssue({ code: 'custom', message: 'Duplicate profile package' });
   if (!distinct(value.settings, (setting) => `${setting.namespace}:${setting.key}`))
@@ -420,9 +420,7 @@ function policyCredentialReferences(value: z.infer<typeof policyBaseSchema>, con
 
 const policyBaseSchema = z
   .object({
-    schemaVersion: z.literal(2, { error: 'Unsupported policy schema version; expected schemaVersion: 2' }),
     id,
-    version,
     name: nonempty,
     profiles: z.array(profilePolicySchema).min(1),
     capabilities: z.array(id).refine(uniqueStrings, 'Duplicate capability'),
@@ -434,7 +432,7 @@ const policyBaseSchema = z
     osByCodename: z.record(id, osPolicySchema).optional(),
   })
   .strict();
-export const policyPackSchema = policyBaseSchema.superRefine((value, context) => {
+export const executionPolicySchema = policyBaseSchema.superRefine((value, context) => {
   if (value.profiles.filter((profile) => profile.kind === 'owner').length !== 1)
     context.addIssue({ code: 'custom', message: 'Exactly one owner profile is required' });
   if (!distinct(value.profiles, (profile) => profile.id))
@@ -517,7 +515,7 @@ function normalizePolicy(document: PolicyDocument): ExecutionPolicy {
     })),
     ...(os ? { osByCodename: os } : {}),
   };
-  return parseContract(policyPackSchema, normalized);
+  return parseContract(executionPolicySchema, normalized);
 }
 
 export const extensionLockSchema = z
@@ -571,7 +569,7 @@ export const resolvedPolicySchema = z
     engineDigest: sha256,
     project: projectConfigSchema,
     product: productDescriptorSchema,
-    policy: policyPackSchema,
+    policy: executionPolicySchema,
     digest: sha256,
   })
   .strict();
@@ -762,7 +760,8 @@ export function validatePolicy(value: unknown): ExecutionPolicy {
   return normalizePolicy(validatePolicyDocument(value));
 }
 /** Validate expanded engine/lock data, never authored app-catalog documents. */
-export const validatePolicyPack = (value: unknown): ExecutionPolicy => parseContract(policyPackSchema, value);
+export const validateExecutionPolicy = (value: unknown): ExecutionPolicy =>
+  parseContract(executionPolicySchema, value);
 export const validateInventory = (value: unknown): Inventory => parseContract(inventorySchema, value);
 export const validateProject = (value: unknown): ProjectConfig => parseContract(projectConfigSchema, value);
 export const validateProduct = (value: unknown): ProductDescriptor =>

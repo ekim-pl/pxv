@@ -1,9 +1,7 @@
 # Policy format
 
-PXV accepts only `schemaVersion: 2` authoring policies. Version 1 policies and locks
-containing the previous version 1 normalized policy are unsupported. PXV provides
-no automated policy converter. Use a reviewed version 2 policy and a fresh lock and
-plan review for provisioning.
+A policy declares the intended device and profile configuration. Validate and lock
+it before preparing and approving provisioning work.
 
 Define an `apps` catalog once, reference catalog IDs from
 each profile's `apps` list, and place all `global` Android settings in the top-level
@@ -13,9 +11,7 @@ their existing meaning. Permissions and VPN fields still use Android package IDs
 
 ```json
 {
-  "schemaVersion": 2,
   "id": "personal",
-  "version": "0.1.0",
   "name": "Personal devices",
   "capabilities": [],
   "requiredAttestations": ["recipient_acceptance", "operator_signoff"],
@@ -46,16 +42,15 @@ existing OS pin (`codename`, `release`, official `url` and `signatureUrl`,
 codename. Selection never falls back to another model's image. An enrolled model
 without a pin cannot be flashed or pass pinned OS verification.
 
-The engine uses its stable version 1 action and observation contracts. It expands app
-references, assigns device settings to the owner once, and retains model-specific
-image pins internally in a version 2 execution model. `project init --policy FILE`
-validates and copies the version 2 authoring policy into the new project. After a
-policy change, run `pxv policy validate` and `pxv policy lock`, then prepare and
-approve a fresh plan before execution.
+The engine expands app references, assigns device settings to the owner once, and
+retains model-specific image pins internally. `project init --policy FILE` validates
+and copies the authored policy into the new project. After a policy change, run
+`pxv policy validate` and `pxv policy lock`, then prepare and approve a fresh plan
+before execution.
 
 Authored input uses the public `PolicyDocument` interface; the expanded engine
-model uses `ExecutionPolicy`. `PolicyPack` remains a deprecated compatibility type
-alias for that execution model. Each form has its own validator and serializer.
+model uses `ExecutionPolicy`. Each form has its own validator and serializer.
+Policies have no version fields; their content identifies the reviewed configuration.
 The resolved digest covers normalized execution semantics: an unused catalog app
 does not affect it, while a change to referenced apps or other normalized fields
 does. Review actual changes instead of treating every authoring byte as a new
@@ -144,7 +139,7 @@ its retained current values require explicit confirmation. Follow the
 
 ## Optional backup tools
 
-The optional personal backup/recovery tools accept version 2 policies and compare
+The optional personal backup/recovery tools validate policies and compare
 the normalized policy with its current lock. For a new setup using multiple model
 pins, supply `--codename CODE`; a single model pin remains the default. Backup-only
 work and retained masters bind the model to the enrolled device's canonical serial

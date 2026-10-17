@@ -3,7 +3,7 @@ import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import {
   validateHandoff,
-  validatePolicyPack,
+  validateExecutionPolicy,
   validateProduct,
   verifyResolvedPolicy,
   digest,
@@ -88,7 +88,7 @@ function validateDisplay(snapshot: HandoffSnapshot, record: HandoffRecord, local
 }
 function validatedHandoff(snapshot: HandoffSnapshot, locale: 'en' | 'pl') {
   const product = validateProduct(snapshot.product);
-  const policy = validatePolicyPack(snapshot.policy);
+  const policy = validateExecutionPolicy(snapshot.policy);
   const record = validateHandoff(snapshot.record);
   const resolved = verifyResolvedPolicy(snapshot.resolvedPolicy);
   if (
@@ -114,7 +114,7 @@ export function renderHandoff(
   const text = labels[locale];
   const rows: [[string, string], ...[string, string][]] = [
     [text.asset, snapshot.assetId],
-    [text.policy, `${policy.name} (${policy.version})`],
+    [text.policy, policy.name],
     [text.status, record.outcome],
     [text.date, record.acceptedAt ?? record.createdAt],
   ];

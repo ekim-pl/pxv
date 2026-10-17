@@ -84,7 +84,7 @@ export interface ProfilePolicy {
   defaultCredential?: DefaultCredentialPolicy;
   defaultDuress?: DefaultDuressPolicy;
   defaultLocale?: string;
-  /** Legacy alias for defaultLocale. */
+  /** Alternate locale field; must agree with defaultLocale when both are set. */
   language?: string;
   recipes?: RecipePolicy[];
   networkProbe?: NetworkProbePolicy;
@@ -146,9 +146,7 @@ export interface OsPolicy {
 
 /** Expanded policy used by planning and execution; authored input is PolicyDocument. */
 export interface ExecutionPolicy {
-  schemaVersion: 2;
   id: string;
-  version: string;
   name: string;
   profiles: ProfilePolicy[];
   capabilities: string[];
@@ -158,27 +156,17 @@ export interface ExecutionPolicy {
   osByCodename?: Record<string, OsPolicy>;
 }
 
-/** @deprecated Use ExecutionPolicy for engine data or PolicyDocument for authored input. */
-export type PolicyPack = ExecutionPolicy;
-
 export interface ProfileDocument extends Omit<ProfilePolicy, 'packages'> {
   apps: string[];
 }
 
-/** @deprecated Use ProfileDocument; only v2 authoring is supported. */
-export type ProfileDocumentV2 = ProfileDocument;
-
 /** Authoring format; normalized to ExecutionPolicy before planning or execution. */
 export interface PolicyDocument extends Omit<ExecutionPolicy, 'profiles' | 'osByCodename'> {
-  schemaVersion: 2;
   apps: Record<string, ArtifactPolicy>;
   profiles: ProfileDocument[];
   deviceSettings: SettingPolicy[];
   os?: Record<string, OsPolicy>;
 }
-
-/** @deprecated Use PolicyDocument; only v2 authoring is supported. */
-export type PolicyDocumentV2 = PolicyDocument;
 
 export interface ExtensionLock {
   id: string;

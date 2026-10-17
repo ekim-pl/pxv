@@ -7,7 +7,7 @@ import {
   requiredAttestations,
   validateAction,
   validateObservation,
-  validatePolicyPack,
+  validateExecutionPolicy,
 } from '@pxv/contracts';
 import type { DeviceObservation, ProfilePolicy } from '@pxv/contracts';
 import { observation, policy } from './fixtures.js';
@@ -20,7 +20,7 @@ function unconfiguredProfile(): ProfilePolicy {
 
 function localePolicy() {
   const owner = { ...unconfiguredProfile(), defaultLocale: 'de-DE' };
-  return validatePolicyPack({
+  return validateExecutionPolicy({
     ...policy,
     capabilities: [],
     profiles: [
@@ -76,15 +76,19 @@ describe('explicit Android profile locales', () => {
     if (input !== undefined)
       for (const field of ['defaultLocale', 'language'])
         expect(() =>
-          validatePolicyPack({ ...policy, profiles: [{ ...unconfiguredProfile(), [field]: input }] }),
+          validateExecutionPolicy({ ...policy, profiles: [{ ...unconfiguredProfile(), [field]: input }] }),
         ).toThrow();
   });
 
-  it('resolves the default, legacy alias, or absence without introducing a locale', () => {
+  it('resolves the default, alternate field, or absence without introducing a locale', () => {
     expect(profileLocale({ defaultLocale: 'de-DE', language: 'pl-PL' })).toBe('de-DE');
     expect(profileLocale({ language: 'pl-PL' })).toBe('pl-PL');
     expect(profileLocale({})).toBeUndefined();
-    const selected = validatePolicyPack({ ...policy, profiles: [unconfiguredProfile()], capabilities: [] });
+    const selected = validateExecutionPolicy({
+      ...policy,
+      profiles: [unconfiguredProfile()],
+      capabilities: [],
+    });
     expect(selected.profiles[0]).not.toHaveProperty('defaultLocale');
     expect(selected.profiles[0]).not.toHaveProperty('language');
     expect(finalSetupActions(selected)).toEqual([]);
@@ -92,18 +96,18 @@ describe('explicit Android profile locales', () => {
   });
 
   it('normalizes both aliases and rejects conflicting canonical values', () => {
-    const selected = validatePolicyPack({
+    const selected = validateExecutionPolicy({
       ...policy,
       profiles: [{ ...unconfiguredProfile(), defaultLocale: 'iw-il', language: 'he-IL' }],
     });
     expect(selected.profiles[0]).toMatchObject({ defaultLocale: 'he-IL', language: 'he-IL' });
     expect(() =>
-      validatePolicyPack({
+      validateExecutionPolicy({
         ...policy,
         profiles: [{ ...unconfiguredProfile(), defaultLocale: 'de-DE', language: 'pl-PL' }],
       }),
-    ).toThrow('conflicts with legacy language');
-    expect(validatePolicyPack(policy).profiles[0]?.language).toBe('pl-PL');
+    ).toThrow('conflicts with alternate language');
+    expect(validateExecutionPolicy(policy).profiles[0]?.language).toBe('pl-PL');
   });
 
   it('canonicalizes arbitrary locale observations and durable language actions', () => {
@@ -132,7 +136,7 @@ describe('explicit Android profile locales', () => {
       pinRef: 'duress-pin',
       passwordRef: 'duress-password',
     };
-    expect(finalSetupActions(validatePolicyPack(selected))).toEqual([
+    expect(finalSetupActions(validateExecutionPolicy(selected))).toEqual([
       { kind: 'default-credential', profileId: 'admin', credential: owner.defaultCredential },
       {
         kind: 'default-credential',

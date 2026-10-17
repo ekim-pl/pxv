@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { digest, requiredAttestations } from '@pxv/contracts';
-import type { RecipePolicy, NetworkProbePolicy, PolicyPack, SelectedTarget } from '@pxv/contracts';
+import type { RecipePolicy, NetworkProbePolicy, ExecutionPolicy, SelectedTarget } from '@pxv/contracts';
 import { createProject, loadProject, ResourceScope, saveInventory, WorkflowEngine } from '@pxv/engine';
 import { CommandRunner, recoveryReservations, SqliteStore, withDeviceLease } from '@pxv/runtime';
 import { device, hashA, hashB, product, policy as setupPolicy } from '../contracts/fixtures.js';
@@ -42,7 +42,7 @@ describe('scoped recipe, network and recovery evidence', () => {
   let store: SqliteStore;
   let port: MemoryPort;
   let now = new Date('2026-10-16T09:00:00Z');
-  const configure = async (policy: PolicyPack): Promise<WorkflowEngine> => {
+  const configure = async (policy: ExecutionPolicy): Promise<WorkflowEngine> => {
     const created = await createProject(
       join(root, `project-${Math.random().toString(16).slice(2)}`),
       product,

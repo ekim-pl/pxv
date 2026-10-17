@@ -11,7 +11,6 @@ export type {
   DeviceTarget,
   ExtensionDefinition,
   IntegrationAdapterDefinition,
-  PolicyPack,
   ExecutionPolicy,
   ProductDescriptor,
 } from '@pxv/contracts';

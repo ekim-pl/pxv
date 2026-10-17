@@ -110,7 +110,7 @@ it.each([
   await expect(readFile(join(output, 'product.json'))).rejects.toThrow();
 });
 
-it('accepts a legacy Polish locale override and optional brand assets', async () => {
+it('accepts a Polish language override and optional brand assets', async () => {
   const root = await scratch();
   const config = await json<Record<string, unknown>>(join(repo, 'config/templates/white-label.example.json'));
   const product = config['product'] as Record<string, unknown>;
@@ -158,7 +158,7 @@ it('canonicalizes a language-script-region default for every generated profile, 
   expect(policy.profiles.every((profile) => !('language' in profile))).toBe(true);
 });
 
-it('accepts equivalent canonical and legacy locale aliases', async () => {
+it('accepts equivalent canonical and alternate locale fields', async () => {
   const root = await scratch();
   const config = await json<Record<string, unknown>>(join(repo, 'config/templates/white-label.example.json'));
   const starter = config['starter'] as Record<string, unknown>;
@@ -174,7 +174,7 @@ it('accepts equivalent canonical and legacy locale aliases', async () => {
 });
 
 it.each([
-  [{ defaultLocale: 'de-DE', language: 'pl-PL' }, 'conflicts with legacy language'],
+  [{ defaultLocale: 'de-DE', language: 'pl-PL' }, 'conflicts with alternate language'],
   [{ defaultLocale: 'en-US,pl-PL' }, 'Expected one explicit BCP 47 locale tag'],
   [{ defaultLocale: 'pl_PL' }, 'Expected one explicit BCP 47 locale tag'],
   [{ defaultLocale: 'und' }, 'Expected one explicit BCP 47 locale tag'],

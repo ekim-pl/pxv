@@ -8,8 +8,8 @@ directory for native installations, forks and containers that can reach a phone.
 CLI summaries are human-readable by default. Add `--json` whenever a script parses
 stdout; successful structured commands emit one JSON document, with progress and
 diagnostics on stderr. On a nonzero exit, stdout may be empty or contain partial
-results; check the exit outcome before treating any returned preparation as complete. Help, version and guide output remain textual. This is an
-intentional change from the previous default JSON output.
+results; check the exit outcome before treating any returned preparation as complete.
+Help, version and guide output remain textual.
 
 ## Prepare, review and execute
 
@@ -114,8 +114,7 @@ non-null `nextCursor` as CLI `--cursor` or MCP `cursor`, retaining the same page
 limit, until it is null. The default limit is 100 and the maximum is 1,000. Pages
 follow retained record keys and do not provide a transactional snapshot across
 concurrent submissions. Do not reuse event sequence numbers as run-list cursors.
-Existing integrations must update their array parsing and traverse pages to read
-the complete history. Status and history share engine queries across CLI and MCP;
+Integrations must traverse pages to read the complete history. Status and history share engine queries across CLI and MCP;
 their stored evidence does not establish the current physical phone state. A
 `current` review status means its stored metadata matches the loaded project,
 policy, enrollment and lifecycle generation and has not expired. It does not
