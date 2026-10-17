@@ -200,8 +200,8 @@ const commands: readonly CommandDefinition[] = [
     ['asset', 'output', 'locale'],
     ['asset', 'output'],
   ),
-  ...['init', 'list', 'show', 'history', 'update', 'reveal', 'rekey', 'reconcile'].map((name) =>
-    registryCommand(name),
+  ...['init', 'list', 'show', 'history', 'update', 'reveal', 'print-insert', 'rekey', 'reconcile'].map(
+    (name) => registryCommand(name),
   ),
   ...['install', 'update', 'list', 'inspect', 'remove', 'invoke', 'policy', 'guide', 'adapter'].map((name) =>
     extensionCommand(name),
@@ -229,6 +229,7 @@ function registryCommand(name: string): CommandDefinition {
     history: ['asset'],
     update: ['asset', 'file', 'record-revision', 'yes'],
     reveal: ['asset', 'output', 'record-revision'],
+    'print-insert': ['asset', 'output', 'locale', 'chromium'],
     rekey: ['new-passphrase-file'],
     reconcile: ['yes'],
   };
@@ -237,10 +238,13 @@ function registryCommand(name: string): CommandDefinition {
     history: ['asset'],
     update: ['asset', 'file', 'record-revision'],
     reveal: ['asset', 'output'],
+    'print-insert': ['asset', 'output', 'chromium'],
   };
   return command(
     `registry ${name}`,
-    'Access the encrypted local phone registry.',
+    name === 'print-insert'
+      ? 'Export all saved credentials to a private A5 PDF (EN/PL).'
+      : 'Access the encrypted local phone registry.',
     ['passphrase-file', ...(flags[name] ?? [])],
     required[name],
   );

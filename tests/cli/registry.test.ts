@@ -1,7 +1,8 @@
 import { toPolicyDocument } from '@pxv/contracts';
 import { chmod, mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import * as guides from '@pxv/guides';
 import {
   createProject,
   invalidateRegistryBindings,
@@ -93,9 +94,89 @@ describe('local encrypted registry operator commands', () => {
     };
   });
   afterEach(async () => {
+    vi.restoreAllMocks();
     if (previousControl === undefined) delete process.env['PXV_CONTROL_ROOT'];
     else process.env['PXV_CONTROL_ROOT'] = previousControl;
     await rm(root, { recursive: true, force: true });
+  });
+
+  it('prints only the latest effectively bound record and returns no secrets', async () => {
+    expect(await run('init')).toBe(0);
+    expect(await update()).toBe(0);
+    await writeFile(inputFile, JSON.stringify(input(`${secret}-latest`)));
+    expect(await update('1')).toBe(0);
+    const writer = vi.spyOn(guides, 'writeCredentialInsert').mockResolvedValue();
+    const destination = join(project.root, 'secrets', 'insert.pdf');
+    expect(
+      await run(
+        'print-insert',
+        '--asset',
+        device.assetId,
+        '--output',
+        destination,
+        '--chromium',
+        '/local/chromium',
+      ),
+    ).toBe(0);
+    expect(writer).toHaveBeenCalledOnce();
+    expect(writer.mock.calls[0]![0].revision).toBe(2);
+    expect(writer.mock.calls[0]![0].profiles[0]!.fields.password?.value).toBe(`${secret}-latest`);
+    expect(writer.mock.calls[0]![2].locale).toBe('en');
+    const store = await SqliteStore.open(join(project.root, 'state/pxv.sqlite3'));
+    try {
+      await invalidateRegistryBindings(store, device, undefined, '2026-10-18T12:00:00.000Z');
+    } finally {
+      await store.close();
+    }
+    expect(
+      await run(
+        'print-insert',
+        '--asset',
+        device.assetId,
+        '--output',
+        destination,
+        '--chromium',
+        '/local/chromium',
+        '--locale',
+        'pl',
+      ),
+    ).toBe(0);
+    expect(writer.mock.calls[1]![0].profiles[0]!.fields.password?.state).toBe('stale');
+    expect(writer.mock.calls[1]![2].locale).toBe('pl');
+    expect(output.join()).not.toContain(secret);
+    expect(output.join()).not.toContain('11112222');
+    expect(output.join()).not.toContain(device.canonicalSerial);
+    for (const invalid of [join(project.root, 'public.pdf'), join(resources, 'insert.pdf')]) {
+      await expect(
+        run('print-insert', '--asset', device.assetId, '--output', invalid, '--chromium', '/local/chromium'),
+      ).rejects.toThrow();
+    }
+    await expect(
+      run(
+        'print-insert',
+        '--asset',
+        device.assetId,
+        '--output',
+        destination,
+        '--chromium',
+        '/local/chromium',
+        '--record-revision',
+        '1',
+      ),
+    ).rejects.toThrow();
+    await expect(
+      run(
+        'print-insert',
+        '--asset',
+        device.assetId,
+        '--output',
+        destination,
+        '--chromium',
+        '/local/chromium',
+        '--locale',
+        'de',
+      ),
+    ).rejects.toThrow();
   });
 
   it('retains current and initial revisions encrypted; exposes only metadata unless privately revealed', async () => {

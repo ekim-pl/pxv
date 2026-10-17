@@ -181,3 +181,5 @@ export async function writeHandoff(
     await rm(temporary, { recursive: true, force: true });
   }
 }
+
+export { writeCredentialInsert } from './credential-insert.js';

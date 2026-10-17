@@ -30,6 +30,7 @@ import {
   writeRegistryPrivateFile,
   type Store,
 } from '@pxv/runtime';
+import { writeCredentialInsert } from '@pxv/guides';
 import { access } from 'node:fs/promises';
 import type { ProjectCliContext } from './arguments.js';
 import { confirmation } from './arguments.js';
@@ -164,6 +165,33 @@ async function revealRecord(
   context.output({ exported: true, assetId, recordRevision: record.revision, output });
 }
 
+async function printInsert(
+  context: ProjectCliContext,
+  store: Store,
+  document: PhoneRegistryDocument,
+): Promise<void> {
+  const device = selectedAsset(context);
+  const locale = context.value('locale', 'en');
+  if (locale !== 'en' && locale !== 'pl') throw new Error('Invalid locale');
+  const output = registryOutputPath(context);
+  if (!output.toLowerCase().endsWith('.pdf')) throw new Error('Insert output must be a PDF file');
+  const saved = currentRecord(document, device.assetId);
+  const record = inspectRegistryBinding(
+    saved,
+    await readRegistryGeneration(store, saved),
+    context.project.inventory,
+  );
+  const support = context.project.product.support;
+  await writeCredentialInsert(record, output, {
+    locale,
+    model: device.model,
+    exportedAt: new Date().toISOString(),
+    support: `${support.name}: ${support.email} · ${support.url}`,
+    chromiumExecutable: context.value('chromium'),
+  });
+  context.output({ exported: true, assetId: device.assetId, recordRevision: record.revision, output });
+}
+
 async function readCommand(
   context: ProjectCliContext,
   store: Store,
@@ -259,13 +287,14 @@ async function unlockedCommand(
   }
   if (context.command === 'update')
     await updateRecord(context, store, path, password, document, revision, anchor);
+  else if (context.command === 'print-insert') await printInsert(context, store, document);
   else if (context.command === 'reveal') await revealRecord(context, store, document);
   else await readCommand(context, store, document);
 }
 
 export async function registryCommand(context: ProjectCliContext): Promise<number> {
   if (
-    !['init', 'list', 'show', 'history', 'update', 'reveal', 'rekey', 'reconcile'].includes(
+    !['init', 'list', 'show', 'history', 'update', 'reveal', 'print-insert', 'rekey', 'reconcile'].includes(
       context.command ?? '',
     )
   )
@@ -276,7 +305,7 @@ export async function registryCommand(context: ProjectCliContext): Promise<numbe
     const database = await containedPath(context.project.root, 'state/pxv.sqlite3');
     await access(database);
     const store = await SqliteStore.open(database, {
-      readOnly: ['list', 'show', 'history', 'reveal'].includes(context.command ?? ''),
+      readOnly: ['list', 'show', 'history', 'reveal', 'print-insert'].includes(context.command ?? ''),
     });
     try {
       await unlockedCommand(context, password, path, store);

@@ -119,6 +119,42 @@ the encrypted database and its entire project state are rolled back together, th
 offline system cannot detect that rollback; compare with separately retained backup
 revision records and reconcile the restored copy before using it.
 
+## Prefilled private A5 insert
+
+Export the latest saved record for one enrolled phone as a recipient PDF:
+
+```sh
+pxv registry print-insert --project-root DIRECTORY --asset PHONE \
+  --output PRIVATE_DIRECTORY/insert.pdf --locale en --chromium /absolute/path/to/chromium
+```
+
+Use `--locale pl` for Polish; English is the default. Unlock uses the same hidden
+prompt or `--passphrase-file` as other registry commands. A local Chromium executable
+is required; nothing is downloaded. The command works offline during preparation
+and does not require an accepted handoff report or connect to a phone.
+
+The PDF includes **all saved values in the latest record**, including ordinary
+unlocks, phone numbers, Session IDs, Proton VPN accounts, device duress credentials
+and per-profile Oblivion keys. Historical revisions are not supported. Each value
+carries its effective state and update/confirmation dates; stale and unknown values
+are prominently flagged. Current means last operator-confirmed, not measured from
+the phone. Missing fields say “not recorded”, which does not mean unconfigured.
+Recipient and recovery-store details remain blank for private completion.
+
+The output must be a new `.pdf` under project `secrets` or outside the project and
+product resources, in a private `0700` directory. Files are `0600`; existing files
+and symlinks are refused. Only the PDF is retained. Temporary HTML and the isolated
+browser profile are removed after success or failure. Console output contains only
+export metadata. The plaintext PDF remains sensitive: protect it and remove it when
+finished, accounting for backups and printer queues.
+
+Print at actual size on A5, **single-sided**. Every continuation page identifies the
+asset and profile. Keep destructive credential sheets detached and sealed separately
+from ordinary credentials. Never test duress or send an Oblivion key as a test. Match
+the asset to the phone and report, privately verify ordinary unlocks, and seal for
+the recipient. Store the completed insert securely apart from the phone. The insert
+is an operator record and does not certify readiness or erasure capability.
+
 ## Identity and security boundaries
 
 Before an attempted flash, the engine durably invalidates the phone's registry
@@ -157,4 +193,5 @@ Oblivion whole-phone notification wipe is user-described and still needs exact-a
 qualification before any configuration automation can claim support. Registry
 operations and acceptance tests must not send real wipe keys or activate erasure.
 Registry values are excluded
-from MCP, normal plans, logs and handoff exports.
+from MCP, normal plans, logs and ordinary handoff exports. Only explicit private
+registry retrieval and insert commands export saved values.
