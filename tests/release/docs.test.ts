@@ -1,9 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { access, link, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { PDFDocument } from 'pdf-lib';
 import { buildDocumentation } from '../../packages/release/src/docs.js';
+import { parseDocument, validatePolicy } from '@pxv/contracts';
 type Launch = NonNullable<NonNullable<Parameters<typeof buildDocumentation>[2]>['browser']>['launch'];
 type Browser = Awaited<ReturnType<Launch>>;
 type BrowserContext = Awaited<ReturnType<Browser['newContext']>>;
@@ -64,6 +65,7 @@ function browserFixture(destination: string, pdfFailure = false, wrongPrintSize 
       async (options: {
         path: string;
         width?: string;
+        height?: string;
         preferCSSPageSize?: boolean;
         displayHeaderFooter?: boolean;
         headerTemplate?: string;
@@ -73,9 +75,13 @@ function browserFixture(destination: string, pdfFailure = false, wrongPrintSize 
         if (pdfFailure) throw new Error('Browser PDF failure');
         const document = await PDFDocument.create();
         const points = (millimeters: number) => (millimeters * 72) / 25.4;
-        document.addPage(
-          options.width && !wrongPrintSize ? [points(216), points(303)] : [points(210), points(297)],
-        );
+        const a5 = /\/(?:quickstart|credentials)-(?:en|pl)-/u.test(options.path);
+        const trim = a5 ? [148, 210] : [210, 297];
+        const media =
+          options.width && !wrongPrintSize
+            ? [Number.parseFloat(options.width), Number.parseFloat(options.height ?? '')]
+            : trim;
+        document.addPage([points(media[0] ?? 0), points(media[1] ?? 0)]);
         await writeFile(options.path, await document.save());
       },
     ),
@@ -241,6 +247,8 @@ describe('public documentation generation', () => {
     expect(polish).toContain('<title>pxv Community - pxv Community</title>');
     expect(polish).toContain('class="cover-logo" src="assets/logo.svg"');
     expect(polish).toContain("@font-face{font-family:'Pxv Display'");
+    expect(polish).toContain("src:url('assets/font.ttf');font-style:normal;font-weight:400}");
+    expect(polish).not.toContain('font-weight:100 900');
     expect(polish).toContain('<h2>Codzienne użytkowanie</h2>');
     expect(polish).not.toContain('print-opener');
     const index = await readFile(join(directory, 'output/index.html'), 'utf8');
@@ -258,6 +266,176 @@ describe('public documentation generation', () => {
     ).rejects.toThrow('Print renderer did not produce a 216 x 303 mm page');
     expect(fixture.browser.close).toHaveBeenCalledOnce();
     await expect(readFile(join(destination, 'guide.en-print.pdf'))).rejects.toThrow();
+  });
+
+  it('renders A5 recipient and credential editions with compact covers and real A5 PDF page boxes while retaining A4', async () => {
+    await editionSources();
+    const a5Editions = ['quickstart-en', 'quickstart-pl', 'credentials-en', 'credentials-pl'];
+    for (const name of a5Editions)
+      await writeFile(
+        join(directory, 'guides/source/markdown', `${name}.md`),
+        '# Compact guide\n\n## 1. Begin\n\nReadable first page.\n\n<div class="page-break"></div>\n\n## 2. Keep safe\n\n<div class="write-line">Device identifier</div>\n\n<div class="credential-warning">Keep private</div>',
+      );
+    const destination = join(directory, 'output');
+    const fixture = browserFixture(destination);
+    await buildDocumentation(directory, destination, { pdf: true, browser: { launch: fixture.launch } });
+    const points = (millimeters: number) => (millimeters * 72) / 25.4;
+    for (const name of [...a5Editions, 'operator-en', 'user-en']) {
+      const a5 = a5Editions.includes(name);
+      const [width, height] = a5 ? [148, 210] : [210, 297];
+      const html = await readFile(join(destination, `${name}.html`), 'utf8');
+      if (a5) {
+        expect(html).toContain('class="guide-a5"');
+        expect(html).toContain('<section class="guide-cover compact-cover">');
+        expect(html).not.toContain('<img class="cover-photo"');
+        expect(html).toContain('@page pxva5office{size:148mm 210mm;');
+        expect(html).toContain('@page pxva5print{size:154mm 216mm;');
+        expect(html).toContain('font-size:10pt;line-height:1.34;color:#111');
+        expect(html).toContain('.guide-a5 .page-break{break-before:page}');
+        expect(html).toContain('.guide-a5 ol{list-style:none;counter-reset:a5-step}');
+        expect(html).toContain('.guide-a5 ol>li{position:relative;counter-increment:a5-step}');
+        expect(html).toContain('content:counter(a5-step) ".";position:absolute;left:-5mm;');
+        expect(html).toContain('border-bottom:0.3mm dotted #555');
+        expect(html).toContain('<div class="credential-warning">Keep private</div>');
+      } else
+        expect(html).toContain(
+          `<img class="cover-photo" src="assets/photos/cover-${name.split('-')[0]}.png"`,
+        );
+      const office = await PDFDocument.load(await readFile(join(destination, `${name}-office.pdf`)));
+      expect(office.getPage(0).getSize().width).toBeCloseTo(points(width ?? 0), 4);
+      expect(office.getPage(0).getSize().height).toBeCloseTo(points(height ?? 0), 4);
+      const print = await PDFDocument.load(await readFile(join(destination, `${name}-print.pdf`)));
+      const page = print.getPage(0);
+      expect(page.getMediaBox().width).toBeCloseTo(points((width ?? 0) + 6), 4);
+      expect(page.getMediaBox().height).toBeCloseTo(points((height ?? 0) + 6), 4);
+      for (const box of [page.getTrimBox(), page.getArtBox()]) {
+        expect(box.x).toBeCloseTo(points(3), 4);
+        expect(box.y).toBeCloseTo(points(3), 4);
+        expect(box.width).toBeCloseTo(points(width ?? 0), 4);
+        expect(box.height).toBeCloseTo(points(height ?? 0), 4);
+      }
+      expect(page.getBleedBox()).toEqual(page.getMediaBox());
+      expect(page.getCropBox()).toEqual(page.getMediaBox());
+    }
+    const index = await readFile(join(destination, 'index.html'), 'utf8');
+    expect(index).toContain('A5 recipient quick start (EN)');
+    expect(index).toContain('A5 private credential insert (PL)');
+    expect(index).toContain('A5 office PDF');
+    expect(index).toContain('A4 print PDF + 3 mm bleed');
+    const a5Print = fixture.page.pdf.mock.calls.filter(([options]) => options.width === '154mm');
+    expect(a5Print).toHaveLength(4);
+    expect(a5Print.every(([options]) => options.height === '216mm')).toBe(true);
+  });
+
+  it('removes an A5 print PDF with the wrong media dimensions', async () => {
+    await mkdir(join(directory, 'guides/source/markdown'), { recursive: true });
+    await writeFile(join(directory, 'guides/source/markdown/quickstart-en.md'), '# Quick start');
+    const destination = join(directory, 'output');
+    const fixture = browserFixture(destination, false, true);
+    await expect(
+      buildDocumentation(directory, destination, { pdf: true, browser: { launch: fixture.launch } }),
+    ).rejects.toThrow('Print renderer did not produce a 154 x 216 mm page');
+    await expect(readFile(join(destination, 'quickstart-en-print.pdf'))).rejects.toThrow();
+    expect(fixture.browser.close).toHaveBeenCalledOnce();
+  });
+
+  it('normalizes v1 and v2 policy inputs into generated A5 Markdown while preserving A4 and canonical templates', async () => {
+    await editionSources();
+    const names = ['quickstart-en', 'quickstart-pl', 'credentials-en', 'credentials-pl'];
+    const templates = new Map<string, string>();
+    for (const name of names) {
+      const template = await readFile(`guides/source/markdown/${name}.md`, 'utf8');
+      templates.set(name, template);
+      await writeFile(join(directory, 'guides/source/markdown', `${name}.md`), template);
+    }
+    const operator = await readFile(join(directory, 'guides/source/markdown/operator-en.md'), 'utf8');
+    for (const file of ['policy.json', 'policy.v2.json']) {
+      const policy = parseDocument(await readFile(`policy-packs/simple/${file}`, 'utf8'));
+      const normalized = validatePolicy(policy);
+      const destination = join(directory, file);
+      await buildDocumentation(directory, destination, { policy });
+      for (const name of names) {
+        const markdown = await readFile(join(destination, 'source/markdown', `${name}.md`), 'utf8');
+        const html = await readFile(join(destination, `${name}.html`), 'utf8');
+        expect(markdown).not.toBe(templates.get(name));
+        expect(markdown).toContain(normalized.profiles[0]?.name);
+        expect(html).toContain(normalized.profiles[0]?.name);
+        expect(await readFile(join(directory, 'guides/source/markdown', `${name}.md`), 'utf8')).toBe(
+          templates.get(name),
+        );
+      }
+      expect(await readFile(join(destination, 'source/markdown/operator-en.md'), 'utf8')).toBe(operator);
+      expect(await readFile(join(destination, 'index.html'), 'utf8')).toContain(
+        'document configuration, not device acceptance',
+      );
+      await expect(access(join(destination, file))).rejects.toThrow();
+    }
+  });
+
+  it('validates policy before creating or changing output files', async () => {
+    await sources();
+    const destination = join(directory, 'invalid-policy');
+    await expect(buildDocumentation(directory, destination, { policy: {} })).rejects.toThrow();
+    await expect(access(destination)).rejects.toThrow();
+    await mkdir(destination);
+    await writeFile(join(destination, 'index.html'), 'Existing guide');
+    await expect(buildDocumentation(directory, destination, { policy: null })).rejects.toThrow();
+    expect(await readFile(join(destination, 'index.html'), 'utf8')).toBe('Existing guide');
+  });
+
+  it('rejects policy output within authoritative guides and through symlink aliases before writes', async () => {
+    await sources();
+    const policy = parseDocument(await readFile('policy-packs/simple/policy.json', 'utf8'));
+    const canonical = await readFile(join(directory, 'guides/source/markdown/guide.en.md'), 'utf8');
+    const alias = join(directory, 'guide-alias');
+    await symlink(join(directory, 'guides'), alias);
+    for (const destination of [
+      join(directory, 'guides'),
+      join(directory, 'guides/private'),
+      alias,
+      join(alias, 'private'),
+    ])
+      await expect(buildDocumentation(directory, destination, { policy })).rejects.toThrow(
+        'outside the authoritative guides directory',
+      );
+    expect(await readFile(join(directory, 'guides/source/markdown/guide.en.md'), 'utf8')).toBe(canonical);
+    await expect(access(join(directory, 'guides/private'))).rejects.toThrow();
+    await expect(access(join(directory, 'guides/index.html'))).rejects.toThrow();
+  });
+
+  it('rejects existing nested output symlinks before they can overwrite canonical source files', async () => {
+    await sources();
+    const policy = parseDocument(await readFile('policy-packs/simple/policy.json', 'utf8'));
+    const canonicalPath = join(directory, 'guides/source/markdown/guide.en.md');
+    const canonical = await readFile(canonicalPath, 'utf8');
+    const fileOutput = join(directory, 'file-link-output');
+    await mkdir(join(fileOutput, 'source/markdown'), { recursive: true });
+    await symlink(canonicalPath, join(fileOutput, 'source/markdown/guide.pl.md'));
+    const directoryOutput = join(directory, 'directory-link-output');
+    await mkdir(directoryOutput);
+    await symlink(join(directory, 'guides/source'), join(directoryOutput, 'source'));
+    for (const destination of [fileOutput, directoryOutput])
+      await expect(buildDocumentation(directory, destination, { policy })).rejects.toThrow(
+        'must not contain symbolic links',
+      );
+    expect(await readFile(canonicalPath, 'utf8')).toBe(canonical);
+    await expect(access(join(directoryOutput, 'assets'))).rejects.toThrow();
+    await expect(access(join(fileOutput, 'assets'))).rejects.toThrow();
+  });
+
+  it('rejects output hardlinks before cross-file copies can overwrite canonical source files', async () => {
+    await sources();
+    const policy = parseDocument(await readFile('policy-packs/simple/policy.json', 'utf8'));
+    const canonicalPath = join(directory, 'guides/source/markdown/guide.en.md');
+    const canonical = await readFile(canonicalPath, 'utf8');
+    const destination = join(directory, 'hardlink-output');
+    await mkdir(join(destination, 'source/markdown'), { recursive: true });
+    await link(canonicalPath, join(destination, 'source/markdown/guide.pl.md'));
+    await expect(buildDocumentation(directory, destination, { policy })).rejects.toThrow(
+      'must not contain hardlinked files',
+    );
+    expect(await readFile(canonicalPath, 'utf8')).toBe(canonical);
+    await expect(access(join(destination, 'assets'))).rejects.toThrow();
   });
 });
 

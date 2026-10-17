@@ -1,10 +1,33 @@
 {
-  "schemaVersion": 3,
+  "schemaVersion": 4,
   "kind": "guide-build-configuration",
-  "editions": ["operator-en", "operator-pl", "user-en", "user-pl"],
+  "editions": [
+    "operator-en",
+    "operator-pl",
+    "user-en",
+    "user-pl",
+    "quickstart-en",
+    "quickstart-pl",
+    "credentials-en",
+    "credentials-pl"
+  ],
   "source": "source/markdown",
+  "policyBuild": {
+    "input": "validated version 1 or version 2 installation policy via --policy",
+    "destination": "separate --output-dir; authoritative sources remain unchanged",
+    "quickstart": "variable profile instructions and one appendix page per configured GrapheneOS user profile",
+    "credentials": "paired blank ordinary credential and account/recovery sheets per configured profile; secrets are completed privately",
+    "pageCounts": "N configured profiles: 8 + N quickstart pages and 2N + 2 credential-insert pages; generic builds without policy retain 8 and 4 pages",
+    "status": "intended configuration, not device verification"
+  },
   "brandTheme": "assets/brand.json",
-  "formats": ["HTML", "A4 office PDF", "216 x 303 mm print PDF with A4 trim and 3 mm bleed"],
+  "formats": [
+    "HTML",
+    "A4 office PDF for operator and user editions",
+    "216 x 303 mm print PDF with A4 trim and 3 mm bleed",
+    "A5 office PDF for quickstart and credentials editions",
+    "154 x 216 mm print PDF with A5 trim and 3 mm bleed"
+  ],
   "renderer": "@pxv/release buildDocumentation",
   "qa": "qa/manifest.json",
   "pdfX": false,

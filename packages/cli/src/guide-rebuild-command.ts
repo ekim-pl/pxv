@@ -1,6 +1,6 @@
 import { execFile } from 'node:child_process';
 import { access } from 'node:fs/promises';
-import { dirname, join, resolve } from 'node:path';
+import { dirname, join, resolve, sep } from 'node:path';
 import { promisify } from 'node:util';
 import type { CliContext } from './arguments.js';
 
@@ -58,9 +58,23 @@ async function buildRenderer(root: string, context: CliContext, execute: Command
   }
 }
 
-function rebuildArguments(context: CliContext): string[] {
+function outputDirectory(context: CliContext, callerDirectory: string, root: string): string | undefined {
+  const policy = context.values['policy'];
+  const output = context.values['output-dir'];
+  if (policy && !output) throw new Error('Policy booklets require an explicit --output-dir');
+  if (!output) return undefined;
+  const destination = resolve(callerDirectory, context.value('output-dir'));
+  const guides = join(root, 'guides');
+  if (policy && (destination === guides || destination.startsWith(`${guides}${sep}`)))
+    throw new Error('Policy booklets require an output directory outside the authoritative guides directory');
+  return destination;
+}
+
+function rebuildArguments(context: CliContext, callerDirectory: string, root: string): string[] {
   const args: string[] = [];
-  if (context.values['output-dir']) args.push('--output-dir', context.value('output-dir'));
+  const output = outputDirectory(context, callerDirectory, root);
+  if (output) args.push('--output-dir', output);
+  if (context.values['policy']) args.push('--policy', resolve(callerDirectory, context.value('policy')));
   if (context.values['chromium']) args.push('--chromium', context.value('chromium'));
   if (context.flag('html-only')) args.push('--html-only');
   if (context.flag('no-render')) args.push('--no-render');
@@ -73,17 +87,19 @@ export async function guidesRebuildCommand(
 ): Promise<number | undefined> {
   if (context.section !== 'guides') return undefined;
   if (context.command !== 'rebuild') throw new Error('Choose guides rebuild');
-  const root = await checkoutRoot(dependencies.currentDirectory ?? process.cwd());
+  const callerDirectory = dependencies.currentDirectory ?? process.cwd();
+  const root = await checkoutRoot(callerDirectory);
   if (!root)
     throw new Error(
       'The guides renderer requires a pxv source checkout with its development toolchain. Run this command from the repository checkout; installed builds do not include it.',
     );
+  const args = rebuildArguments(context, callerDirectory, root);
   context.io.out(`Building guide renderer in ${root}`);
   const execute = dependencies.execute ?? run;
   await buildRenderer(root, context, execute);
   await execute(
     process.execPath,
-    [join(root, 'tools/optional/publishing/rebuild.mjs'), ...rebuildArguments(context)],
+    [join(root, 'tools/optional/publishing/rebuild.mjs'), ...args],
     root,
     context,
   );

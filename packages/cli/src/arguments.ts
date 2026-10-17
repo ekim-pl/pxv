@@ -100,7 +100,7 @@ function help(product: ProductDescriptor, version: string): string {
       : `extension install|update --package NAME --version EXACT --registry HTTPS\nextension install --file PACKAGE.tgz | list | inspect | remove | invoke\nextension policy|guide|adapter --extension ID --contribution PATH\n`) +
     `lifecycle maintenance|policy-change|loss|retirement --asset ID --operator NAME --note TEXT [--erased]\n` +
     `handoff accept --asset ID --recipient NAME --debugging-off --yes\nhandoff export --asset ID --output DIRECTORY [--locale en|pl]\nguide operator|recipient|project [--locale en|pl]\n` +
-    `guides rebuild [--output-dir DIR] [--chromium PATH] [--html-only] [--no-render]\n` +
+    `guides rebuild [--policy FILE --output-dir DIR] [--output-dir DIR] [--chromium PATH] [--html-only] [--no-render]\n` +
     `Use --execution docker --image EXPLICIT_IMAGE --docker-mode direct|host-adb for container execution.\n` +
     `Device mutations require an enrolled target and explicit review. Physical confirmations remain on the phone.`
   );

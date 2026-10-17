@@ -162,6 +162,8 @@ pxv handoff export --project-root "$P" --asset "$ASSET" \
 
 The handoff packet is Markdown/HTML from its retained policy snapshot. Review it before sharing. Generic guide PDFs are instructions, not device acceptance evidence.
 
+Attach the [A5 quick start](quickstart-en.md) to every phone, together with its accepted handoff report and a sealed [private credential insert](credentials-en.md). Match all asset labels. Complete the insert privately outside guide sources and release assets, copying the profile/account pages as needed. Verify ordinary locks privately; mark unused fields and initial or last-confirmed values clearly. Keep optional destructive credentials on the separately sealed erasure page. Fill real support and recovery routes and agree any support retention. Ask the recipient to store the completed insert apart from the phone after receipt. See [packing and printing](../../../guides/README.md#pack-every-device).
+
 ## 8. Run a fleet without hiding individual outcomes
 
 Enroll each physical phone separately. Confirm each codename has its own OS pin and review every device's plan. Start with one target, then increase concurrency deliberately; `--jobs` accepts 1–8.

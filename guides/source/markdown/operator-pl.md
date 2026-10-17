@@ -162,6 +162,8 @@ pxv handoff export --project-root "$P" --asset "$ASSET" \
 
 Pakiet przekazania zawiera Markdown/HTML na podstawie zachowanego obrazu polityki. Sprawdź go przed udostępnieniem. Ogólne przewodniki PDF są instrukcją, a nie dowodem akceptacji telefonu.
 
+Do każdego telefonu dołącz [instrukcję A5](quickstart-pl.md), przyjęty raport przekazania i zamkniętą [prywatną wkładkę z danymi dostępu](credentials-pl.md). Sprawdź zgodność identyfikatorów urządzenia. Wkładkę wypełniaj prywatnie poza źródłami instrukcji i zasobami wydania; w razie potrzeby skopiuj strony profili i kont. Prywatnie sprawdź zwykłe blokady, oznacz nieużywane pola oraz wartości początkowe lub ostatnio potwierdzone. Opcjonalne kody destrukcyjne umieść na osobno zamkniętej stronie. Wpisz rzeczywiste kontakty wsparcia i sposoby odzyskiwania oraz uzgodnij przechowywanie danych przez wsparcie. Po odbiorze użytkownik powinien przechowywać wkładkę oddzielnie od telefonu. Zobacz [pakowanie i drukowanie](../../../guides/README.md#pack-every-device).
+
 ## 8. Obsługuj flotę z osobnymi wynikami telefonów
 
 Zarejestruj każdy fizyczny telefon oddzielnie. Sprawdź przypięty obraz każdego codename i plan każdego urządzenia. Zacznij od jednego telefonu, a równoległość zwiększaj świadomie; `--jobs` przyjmuje 1–8.

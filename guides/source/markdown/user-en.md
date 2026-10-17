@@ -4,6 +4,8 @@ This guide explains how to receive and use a Pixel prepared with GrapheneOS and 
 
 **Before daily use:** confirm the phone's label, learn which profile serves each purpose, verify your ordinary locks, complete private app setup, and receive the support and recovery instructions. Never try a destructive code or notification key to check that it works.
 
+The separate [A5 quick start](quickstart-en.md) is designed to accompany every phone. Your preparer supplies a sealed, privately completed [credential insert](credentials-en.md) with a matching asset label. After receipt, keep that insert securely apart from the phone; its optional erasure page is separate from ordinary unlock details.
+
 ## 1. Check what you are receiving
 
 With the operator, confirm the following:

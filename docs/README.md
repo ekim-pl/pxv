@@ -6,10 +6,16 @@ The canonical workflows are the English and Polish guides:
 | --- | --- | --- |
 | Operator: one Pixel or a local fleet | [Operator guide](../guides/source/markdown/operator-en.md) | [Instrukcja operatora](../guides/source/markdown/operator-pl.md) |
 | Recipient: setup, acceptance and daily use | [User guide](../guides/source/markdown/user-en.md) | [Instrukcja użytkownika](../guides/source/markdown/user-pl.md) |
+| A5 device quick start and configuration | [Quick start](../guides/source/markdown/quickstart-en.md) | [Szybki start](../guides/source/markdown/quickstart-pl.md) |
+| Private A5 credential insert template | [Credential insert](../guides/source/markdown/credentials-en.md) | [Wkładka z danymi dostępu](../guides/source/markdown/credentials-pl.md) |
 
 Use `pxv guide operator|recipient --locale en|pl` to read the installed guide.
 `pxv guide project` renders requirements from the selected project's policy.
 See [guide sources and rebuilding](../guides/README.md) for generated editions.
+Use `pxv guides rebuild --policy FILE --output-dir DIRECTORY --chromium PATH`
+to generate variable A5 editions for an installation's GrapheneOS user profiles.
+They include paired blank ordinary credential and recovery sheets per profile; the accepted
+handoff report remains the record of the actual device.
 
 ## Operation and configuration
 

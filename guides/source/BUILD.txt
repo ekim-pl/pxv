@@ -1,7 +1,9 @@
 pxv guide build
 
-Authoritative sources: operator-en.md, operator-pl.md, user-en.md and user-pl.md
-under source/markdown. The edition list is configured once in build-manifest.json.
+Authoritative sources: operator-en/pl.md, user-en/pl.md, quickstart-en/pl.md and
+credentials-en/pl.md under source/markdown. The edition list is configured once
+in build-manifest.json. Quickstart is the A5 guide supplied with every device;
+credentials is a blank private insert template, never a populated public export.
 Theme: assets/brand.json with the same brandName as product.json.
 
 From the matching source checkout, with pinned dependencies installed:
@@ -10,21 +12,52 @@ For HTML only:
   pxv guides rebuild --html-only
 For another destination:
   pxv guides rebuild --output-dir output/pdf --chromium /usr/bin/google-chrome
+For an installation-specific A5 booklet and blank credential insert:
+  pxv guides rebuild --policy policy-packs/reference-five/policy.v2.json --output-dir output/pdf/reference-five --chromium /usr/bin/google-chrome
+
+--policy validates an existing version 1 or version 2 installation policy. Choose
+a separate --output-dir; policy builds cannot overwrite authoritative sources.
+Relative paths resolve from the caller's directory. No project is required.
+Use the real installation policy in place of the reference-five starter example.
+
+Policy builds adapt single-Owner instructions, add one quickstart appendix page
+per configured GrapheneOS profile and include paired ordinary credential and
+account/recovery sheets per profile. For N profiles, quickstart has 8 + N pages
+and the insert has 2N + 2 pages. A single Owner produces 9/4 pages; five profiles
+produce 13/12 pages. Names, roles, language and declared configuration are
+intended settings, not device verification. Secrets remain blank; the input
+policy and private registry are not copied into public guide outputs. Generated
+Markdown in the destination records the rendered source without personalizing
+the shared source files. Without --policy, the generic quickstart has eight pages
+and the credential insert has four pages.
 
 The command builds the workspace, then calls tools/optional/publishing/rebuild.mjs.
 Installed packages contain guide sources and build configuration, not the renderer.
 No browser download, dependency installation, device access or publication occurs.
 
-Each edition creates HTML, an A4 office PDF and a color print PDF with 216 x 303 mm
-media, an A4 TrimBox and 3 mm bleed. The print output is not PDF/X and has no
+Each edition creates HTML, an office PDF and a print PDF. Operator/user editions
+use A4 office pages and 216 x 303 mm print media with A4 trim and 3 mm bleed.
+Quickstart/credentials editions use 148 x 210 mm A5 office pages and 154 x 216 mm
+print media with A5 trim and 3 mm bleed. Print output is not PDF/X and has no
 commercial printer profile. Office PDFs use less ink and include page numbers.
 
+Print A5 office files at actual size on A5 paper. Use a PDF reader's booklet mode
+for folded A4 sheets; files are reading order, not imposed spreads. Keep credential
+pages single-sided; repeat account sheets as needed and seal the erasure sheet apart.
+Generic inserts need an ordinary profile sheet copied for each actual profile;
+policy builds generate those sheets automatically. Check the generated page count.
+Mark the optional erasure sheet not configured unless the feature was actually
+configured and agreed; keep any destructive values separately sealed.
+Complete inserts privately by hand, seal for the recipient and match asset labels.
+See guides/README.md for the full pack-every-device procedure.
+
 PDF builds require an explicitly selected Chromium and Poppler tools pdfinfo,
-pdftotext, pdffonts and pdftoppm. Hashes, extracted text, page counts, font checks,
+pdftotext, pdffonts and pdftoppm. Rendered-source/output hashes, extracted text, page counts, font checks,
 page boxes and one PNG per page are recorded in qa/manifest.json. --no-render
 skips PNG generation; --html-only does not run Chromium or Poppler.
 
 Review every rendered page before distribution. QA records describe only the
 actual document build. Device status belongs to the project handoff report.
+Keep policy-build source provenance with the reviewed output and accepted report.
 Generated guide files and qa/ are local build outputs; keep reviewed copies with
 the matching release. Never put credentials or device-specific records in guides.

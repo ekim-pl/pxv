@@ -6,22 +6,32 @@ import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { parseArgs } from 'node:util';
 import { buildDocumentation } from '../../../packages/release/dist/docs.js';
+import { parseDocument, validatePolicy } from '../../../packages/contracts/dist/index.js';
 
-/** @typedef {{destination:string,htmlOnly:boolean,render:boolean,chrome?:string}} BuildOptions */
+/** @typedef {{destination:string,htmlOnly:boolean,render:boolean,chrome?:string,policyFile?:string}} BuildOptions */
 /** @typedef {{x0:number,y0:number,x1:number,y1:number}} PageBox */
+/** @typedef {{size:'A4'|'A5',width:number,height:number}} GuideFormat */
 /** @typedef {{pdfSha256:string,pages:number,pageSize:string,trimBox?:PageBox,bleedBox?:PageBox,embeddedFonts:string,polishGlyphs:string,pageRasters:string[]}} PdfRecord */
-/** @typedef {{name:string,sourceSha256:string,htmlSha256:string,locale:string,office?:PdfRecord,print?:PdfRecord}} Edition */
+/** @typedef {{name:string,sourceSha256:string,templateSha256:string,htmlSha256:string,locale:string,paperSize:'A4'|'A5',office?:PdfRecord,print?:PdfRecord}} Edition */
 
 /** @type {('office'|'print')[]} */
 const modes = ['office', 'print'];
 /** @param {number} millimeters */
 const mmToPoints = (millimeters) => (millimeters * 72) / 25.4;
 
+/** @param {string} name @returns {GuideFormat} */
+function guideFormat(name) {
+  return /^(?:quickstart|credentials)-/u.test(name)
+    ? { size: 'A5', width: 148, height: 210 }
+    : { size: 'A4', width: 210, height: 297 };
+}
+
 /** @param {string} root @returns {BuildOptions} */
 function buildOptions(root) {
   const { values } = parseArgs({
     options: {
       'output-dir': { type: 'string' },
+      policy: { type: 'string' },
       chromium: { type: 'string' },
       'html-only': { type: 'boolean' },
       'no-render': { type: 'boolean' },
@@ -29,12 +39,14 @@ function buildOptions(root) {
   });
   const chrome = values.chromium ?? process.env['PXV_CHROMIUM'];
   const htmlOnly = values['html-only'] ?? false;
+  if (values.policy && !values['output-dir']) throw Error('Policy booklets require an explicit --output-dir');
   if (!htmlOnly && !chrome) throw Error('Select Chromium explicitly with PXV_CHROMIUM or --chromium');
   return {
     destination: resolve(values['output-dir'] ?? join(root, 'guides')),
     htmlOnly,
     render: !values['no-render'],
     ...(chrome ? { chrome } : {}),
+    ...(values.policy ? { policyFile: resolve(values.policy) } : {}),
   };
 }
 
@@ -52,13 +64,44 @@ function pageCount(name, info) {
   return count;
 }
 
-/** @param {string} name @param {string} pdf @param {number} pages */
-function assertPageText(name, pdf, pages) {
+/** @param {string} text */
+function normalizedText(text) {
+  return text.normalize('NFKC').replaceAll('\u00ad', '').replace(/\s+/gu, ' ').trim();
+}
+
+/** @param {string} html @param {GuideFormat} format */
+function expectedSections(html, format) {
+  if (format.size !== 'A5') return [];
+  const entities = /** @type {Record<string,string>} */ ({
+    '&amp;': '&',
+    '&lt;': '<',
+    '&gt;': '>',
+    '&quot;': '"',
+    '&#39;': "'",
+  });
+  return [...html.matchAll(/<h2(?:\s[^>]*)?>(.*?)<\/h2>/gisu)]
+    .map((match) =>
+      normalizedText(
+        (match[1] ?? '')
+          .replace(/<[^>]*>/gu, '')
+          .replace(/&(?:amp|lt|gt|quot|#39);/gu, (entity) => entities[entity] ?? entity),
+      ),
+    )
+    .filter((heading) => /^\d+[.)]?\s/u.test(heading));
+}
+
+/** @param {string} name @param {string} pdf @param {number} pages @param {string[]} sections */
+function assertPageText(name, pdf, pages, sections) {
+  if (sections.length && pages !== sections.length)
+    throw Error(`Expected ${sections.length} A5 section pages; received ${pages}: ${name}`);
   for (let page = 1; page <= pages; page++) {
     const text = execFileSync('pdftotext', ['-f', String(page), '-l', String(page), pdf, '-'], {
       encoding: 'utf8',
     });
     if (text.trim().length < 12) throw Error(`Expected readable text on page ${page} of ${name}`);
+    const heading = sections[page - 1];
+    if (heading && !normalizedText(text).includes(heading))
+      throw Error(`Expected A5 section "${heading}" on page ${page}: ${name}`);
   }
 }
 
@@ -90,20 +133,28 @@ function assertBox(actual, expected, name) {
   }
 }
 
-/** @param {string} name @param {string} pdfInfo @param {number} width @param {number} height */
-function printBoxes(name, pdfInfo, width, height) {
-  if (Math.abs(width - mmToPoints(216)) > 2 || Math.abs(height - mmToPoints(303)) > 2)
-    throw Error(`Print media size must be 216 x 303 mm: ${name}`);
+/** @param {string} name @param {string} pdfInfo @param {number} width @param {number} height @param {GuideFormat} format */
+function printBoxes(name, pdfInfo, width, height, format) {
+  const mediaWidth = format.width + 6;
+  const mediaHeight = format.height + 6;
+  if (Math.abs(width - mmToPoints(mediaWidth)) > 2 || Math.abs(height - mmToPoints(mediaHeight)) > 2)
+    throw Error(`Print media size must be ${mediaWidth} x ${mediaHeight} mm: ${name}`);
   const trim = box(name, pdfInfo, /^TrimBox:\s+([-\d.]+)\s+([-\d.]+)\s+([-\d.]+)\s+([-\d.]+)/mu);
   const bleed = box(name, pdfInfo, /^BleedBox:\s+([-\d.]+)\s+([-\d.]+)\s+([-\d.]+)\s+([-\d.]+)/mu);
   const media = box(name, pdfInfo, /^MediaBox:\s+([-\d.]+)\s+([-\d.]+)\s+([-\d.]+)\s+([-\d.]+)/mu);
   assertBox(
     trim,
-    { x0: mmToPoints(3), y0: mmToPoints(3), x1: mmToPoints(213), y1: mmToPoints(300) },
-    `${name} A4 TrimBox`,
+    {
+      x0: mmToPoints(3),
+      y0: mmToPoints(3),
+      x1: mmToPoints(format.width + 3),
+      y1: mmToPoints(format.height + 3),
+    },
+    `${name} ${format.size} TrimBox`,
   );
-  assertBox(bleed, { x0: 0, y0: 0, x1: mmToPoints(216), y1: mmToPoints(303) }, `${name} BleedBox`);
-  assertBox(media, { x0: 0, y0: 0, x1: mmToPoints(216), y1: mmToPoints(303) }, `${name} MediaBox`);
+  const expectedMedia = { x0: 0, y0: 0, x1: mmToPoints(mediaWidth), y1: mmToPoints(mediaHeight) };
+  assertBox(bleed, expectedMedia, `${name} BleedBox`);
+  assertBox(media, expectedMedia, `${name} MediaBox`);
   return { trim, bleed };
 }
 
@@ -128,17 +179,17 @@ function embeddedFontNames(name, pdf, family) {
   ].join(', ');
 }
 
-/** @param {string} name @param {string} pdf @param {'office'|'print'} mode @param {string} locale @param {string} family */
-function inspectPdf(name, pdf, mode, locale, family) {
+/** @param {string} name @param {string} pdf @param {'office'|'print'} mode @param {string} locale @param {string} family @param {GuideFormat} format @param {string[]} sections */
+function inspectPdf(name, pdf, mode, locale, family, format, sections) {
   const info = execFileSync('pdfinfo', ['-box', pdf], { encoding: 'utf8' });
   const pages = pageCount(name, info);
-  assertPageText(name, pdf, pages);
+  assertPageText(name, pdf, pages, sections);
   const { width, height } = pageDimensions(name, info);
   let boxes;
   if (mode === 'office') {
-    if (Math.abs(width - mmToPoints(210)) > 2 || Math.abs(height - mmToPoints(297)) > 2)
-      throw Error(`Office PDF is not A4: ${name}`);
-  } else boxes = printBoxes(name, info, width, height);
+    if (Math.abs(width - mmToPoints(format.width)) > 2 || Math.abs(height - mmToPoints(format.height)) > 2)
+      throw Error(`Office PDF is not ${format.size}: ${name}`);
+  } else boxes = printBoxes(name, info, width, height, format);
   const text = extractedText(name, pdf, locale);
   const fonts = embeddedFontNames(name, pdf, family);
   return {
@@ -165,19 +216,32 @@ function assertRasterCount(render, rasters, pages, name) {
   if (render && rasters.length !== pages) throw Error(`Expected one page raster for each ${name} PDF page`);
 }
 
+/** @param {string} name @param {string} locale @param {GuideFormat} format @param {string} html */
+function assertEditionHtml(name, locale, format, html) {
+  const cover =
+    format.size === 'A5' ? '<section class="guide-cover compact-cover">' : '<section class="guide-cover">';
+  if (!html.includes(`<html lang="${locale}">`) || !html.includes(cover))
+    throw Error(`HTML locale or cover missing: ${name}`);
+  if (format.size === 'A5' && html.includes('<img class="cover-photo"'))
+    throw Error(`A5 insert must use a compact cover: ${name}`);
+}
+
 /** @param {string} root @param {string} html @param {string} qa @param {BuildOptions} options @returns {Promise<Edition>} */
 async function verifyEdition(root, html, qa, options) {
   const name = html.slice(html.lastIndexOf('/') + 1, -5);
   const locale = name.endsWith('-pl') ? 'pl' : 'en';
+  const format = guideFormat(name);
   const htmlSource = await readFile(html, 'utf8');
-  if (!htmlSource.includes(`<html lang="${locale}">`) || !htmlSource.includes('cover-photo'))
-    throw Error(`HTML locale or cover missing: ${name}`);
+  assertEditionHtml(name, locale, format, htmlSource);
+  const sections = expectedSections(htmlSource, format);
   /** @type {Edition} */
   const record = {
     name,
-    sourceSha256: await hash(join(root, 'guides/source/markdown', `${name}.md`)),
+    sourceSha256: await hash(join(options.destination, 'source/markdown', `${name}.md`)),
+    templateSha256: await hash(join(root, 'guides/source/markdown', `${name}.md`)),
     htmlSha256: await hash(html),
     locale,
+    paperSize: format.size,
   };
   if (options.htmlOnly) return record;
   const theme = /** @type {{fontFamily:string}} */ (
@@ -186,7 +250,7 @@ async function verifyEdition(root, html, qa, options) {
   const family = theme.fontFamily;
   for (const mode of modes) {
     const pdf = html.slice(0, -5) + `-${mode}.pdf`;
-    const inspection = inspectPdf(`${name}-${mode}`, pdf, mode, locale, family);
+    const inspection = inspectPdf(`${name}-${mode}`, pdf, mode, locale, family, format, sections);
     await writeFile(join(qa, `${name}-${mode}.txt`), inspection.text);
     const rasters = await pageRasters(qa, name, mode, pdf, options.render);
     assertRasterCount(options.render, rasters, inspection.pages, `${name}-${mode}`);
@@ -219,6 +283,9 @@ async function verifyIndex(destination, productName) {
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 const options = buildOptions(root);
+const policy = options.policyFile
+  ? validatePolicy(parseDocument(await readFile(options.policyFile, 'utf8')))
+  : undefined;
 const configuration = /** @type {{editions:string[]}} */ (
   JSON.parse(await readFile(join(root, 'guides/source/build-manifest.json'), 'utf8'))
 );
@@ -234,6 +301,7 @@ editionNames.sort();
 const outputs = await buildDocumentation(root, options.destination, {
   pdf: !options.htmlOnly,
   ...(options.chrome ? { chromiumExecutable: options.chrome } : {}),
+  ...(policy ? { policy } : {}),
 });
 if (outputs.length !== editionNames.length)
   throw Error(`Expected ${editionNames.length} configured guide editions; received ${outputs.length}`);
@@ -254,10 +322,27 @@ const manifest = {
   engineVersion: product.upstreamVersion,
   kind: 'document QA; not device acceptance',
   renderer: 'Node Markdown/HTML + explicit Chromium + pdf-lib page boxes + Poppler',
+  ...(policy
+    ? {
+        installation: {
+          policyId: policy.id,
+          policyVersion: policy.version,
+          profileCount: policy.profiles.length,
+        },
+      }
+    : {}),
   outputCount: outputs.length * (options.htmlOnly ? 1 : 3),
   formats: options.htmlOnly
     ? ['HTML']
-    : ['HTML', 'A4 office PDF', 'color print PDF with A4 TrimBox and 3 mm bleed'],
+    : [
+        'HTML',
+        ...new Set(
+          editions.flatMap(({ paperSize }) => [
+            `${paperSize} office PDF`,
+            `${paperSize} print PDF with ${paperSize} TrimBox and 3 mm bleed`,
+          ]),
+        ),
+      ],
   editions,
 };
 await writeFile(join(qa, 'manifest.json'), JSON.stringify(manifest, null, 2) + '\n');
