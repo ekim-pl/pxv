@@ -1,4 +1,4 @@
-import { profileLocale, validatePolicy, type PolicyPack, type ProfilePolicy } from '@pxv/contracts';
+import { profileLocale, validatePolicyPack, type ExecutionPolicy, type ProfilePolicy } from '@pxv/contracts';
 
 type Locale = 'en' | 'pl';
 type Kind = 'quickstart' | 'credentials';
@@ -208,7 +208,7 @@ function replaceIntroduction(source: string, introduction: string): string {
   return paragraphs.join('\n\n');
 }
 
-function installation(policy: PolicyPack, locale: Locale): string {
+function installation(policy: ExecutionPolicy, locale: Locale): string {
   const text = copy[locale];
   return `**${text.installation}:** ${label(policy.name, 100, text.policyShortened)}. ${text.profileCount}: **${policy.profiles.length}**. ${text.planned}`;
 }
@@ -242,7 +242,7 @@ function configurationPage(profile: ProfilePolicy, locale: Locale): string {
   return `## 1 ${text.configuration}\n\n${identity(profile, locale)}\n\n${text.requirements}\n\n<div class="profile-requirements">\n${rows}\n</div>\n\n${text.setup}\n\n${text.noLocale}\n\n${text.noSecrets}`;
 }
 
-function quickstart(pages: string[], policy: PolicyPack, locale: Locale): string[] {
+function quickstart(pages: string[], policy: ExecutionPolicy, locale: Locale): string[] {
   const text = copy[locale];
   const owner = policy.profiles.find((profile) => profile.kind === 'owner')!;
   const multiple = policy.profiles.length > 1;
@@ -286,7 +286,7 @@ function accountSheet(source: string, profile: ProfilePolicy, locale: Locale): s
   return page;
 }
 
-function credentials(pages: string[], policy: PolicyPack, locale: Locale): string[] {
+function credentials(pages: string[], policy: ExecutionPolicy, locale: Locale): string[] {
   const text = copy[locale];
   const owner = policy.profiles.find((profile) => profile.kind === 'owner')!;
   let intro = replaceIntroduction(
@@ -303,8 +303,13 @@ function credentials(pages: string[], policy: PolicyPack, locale: Locale): strin
 }
 
 /** Derive public A5 content from policy requirements, never from private device inputs. */
-export function renderPolicyBooklet(source: string, kind: Kind, policy: PolicyPack, locale: Locale): string {
-  const selected = validatePolicy(policy);
+export function renderPolicyBooklet(
+  source: string,
+  kind: Kind,
+  policy: ExecutionPolicy,
+  locale: Locale,
+): string {
+  const selected = validatePolicyPack(policy);
   const pages = canonicalPages(source, kind);
   const customized =
     kind === 'quickstart' ? quickstart(pages, selected, locale) : credentials(pages, selected, locale);

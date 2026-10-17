@@ -79,7 +79,9 @@ async function helperHost(context: CliContext): Promise<number | undefined> {
       ],
       { env, timeoutMs: 120_000 },
     );
-    io.out(built.stdout.trim());
+    if (built.stdout.trim()) io.out(built.stdout.trim());
+    if (built.stderr.trim()) io.error(built.stderr.trim());
+    context.output({ built: true, helper: component });
     return 0;
   }
   return undefined;

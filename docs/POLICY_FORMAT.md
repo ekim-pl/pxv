@@ -1,10 +1,11 @@
-# Policy format and migration
+# Policy format
 
-Existing `schemaVersion: 1` policies and retained policy locks remain readable. Their
-normalized content and digest are unchanged. Conflicting `global` values in legacy
-profiles are rejected because Android applies them to the whole phone.
+PXV accepts only `schemaVersion: 2` authoring policies. Version 1 policies and locks
+containing the previous version 1 normalized policy are unsupported. PXV provides
+no automated policy converter. Use a reviewed version 2 policy and a fresh lock and
+plan review for provisioning.
 
-Use `schemaVersion: 2` to define an `apps` catalog once, reference catalog IDs from
+Define an `apps` catalog once, reference catalog IDs from
 each profile's `apps` list, and place all `global` Android settings in the top-level
 `deviceSettings` list. Profile `settings` accept only `secure` and `system` entries.
 Other profile fields, including permissions, VPN settings and pinned recipes, keep
@@ -39,29 +40,26 @@ Catalog values are the existing pinned artifact objects: `packageId`, `versionCo
 `sha256`, `signerSha256`, and an approved path, URL or repository source. App versions
 remain shared between Android users; conflicting catalog versions are rejected.
 
-For mixed Pixel models, v2 `os` is a map keyed by codename. Each value is a complete
+For mixed Pixel models, `os` is a map keyed by codename. Each value is a complete
 existing OS pin (`codename`, `release`, official `url` and `signatureUrl`,
 `signerPrincipal`, `namespace`, and `publicKey`). The map key must equal that pin's
 codename. Selection never falls back to another model's image. An enrolled model
 without a pin cannot be flashed or pass pinned OS verification.
 
-Convert explicitly, keeping the original policy and historical lock untouched:
-
-```sh
-pxv policy convert --project-root /path/to/project --output /path/to/project/policy.v2.json
-```
-
-The output must be a new file; conversion refuses existing files and symlinks. Review
-the output, update `policyFile` in `pxv.project.json` to `policy.v2.json`, and run
-`pxv policy validate` and `pxv policy lock`. Prepare and approve a fresh plan before
-execution. Conversion does not activate the file or migrate approved runs. Normalized
-v2 policies retain a format marker in their digest, so v1 approvals cannot authorize
-the converted policy.
-
-The engine still uses its stable v1 action and observation contracts. It expands app
+The engine uses its stable version 1 action and observation contracts. It expands app
 references, assigns device settings to the owner once, and retains model-specific
-image pins internally. `project init --policy FILE` preserves the chosen authoring
-format in the new project.
+image pins internally in a version 2 execution model. `project init --policy FILE`
+validates and copies the version 2 authoring policy into the new project. After a
+policy change, run `pxv policy validate` and `pxv policy lock`, then prepare and
+approve a fresh plan before execution.
+
+Authored input uses the public `PolicyDocument` interface; the expanded engine
+model uses `ExecutionPolicy`. `PolicyPack` remains a deprecated compatibility type
+alias for that execution model. Each form has its own validator and serializer.
+The resolved digest covers normalized execution semantics: an unused catalog app
+does not affect it, while a change to referenced apps or other normalized fields
+does. Review actual changes instead of treating every authoring byte as a new
+execution identity.
 
 ## Profiles, apps and configuration
 
@@ -78,8 +76,8 @@ affect every user where it is installed; review the cross-profile effects shown 
 the plan. Do not invent hashes or trust a download solely because it uses HTTPS.
 
 Per-profile settings, permission grants and VPN policy remain explicit. Configure
-device-wide `global` settings only in `deviceSettings`; conflicting legacy global
-values fail validation. See [network policy](NETWORK_POLICIES.md) for always-on VPN,
+device-wide `global` settings only in `deviceSettings`; profile settings cannot use
+that namespace. See [network policy](NETWORK_POLICIES.md) for always-on VPN,
 lockdown and helper-based egress checks.
 
 Recipes bind the exact app version, signer and OS fingerprint, with explicit
@@ -146,7 +144,7 @@ its retained current values require explicit confirmation. Follow the
 
 ## Optional backup tools
 
-The optional personal backup/recovery tools accept both policy formats and compare
+The optional personal backup/recovery tools accept version 2 policies and compare
 the normalized policy with its current lock. For a new setup using multiple model
 pins, supply `--codename CODE`; a single model pin remains the default. Backup-only
 work and retained masters bind the model to the enrolled device's canonical serial

@@ -1,3 +1,4 @@
+import { toPolicyDocument } from '@pxv/contracts';
 import { recordObligation } from './obligations.js';
 import { DatabaseSync } from 'node:sqlite';
 import { lstat, mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises';
@@ -29,7 +30,7 @@ describe('isolated project data', () => {
   });
 
   it('initializes explicit private state and loads from unrelated working directories', async () => {
-    const context = await createProject(join(root, 'project'), product, basePolicy());
+    const context = await createProject(join(root, 'project'), product, toPolicyDocument(basePolicy()));
     expect(context.config.format).toBe('pxv-ts');
     expect(context.inventory.devices).toEqual([]);
     expect((await lstat(join(context.root, 'pxv.project.json'))).mode & 0o777).toBe(0o600);
@@ -50,12 +51,14 @@ describe('isolated project data', () => {
       assets: { logo: 'assets/logo.svg' },
       support: { name: 'pxv Community', email: 'support@example.org', url: 'https://example.org/pxv' },
     });
-    await expect(createProject(context.root, product, basePolicy())).rejects.toThrow('existing');
+    await expect(createProject(context.root, product, toPolicyDocument(basePolicy()))).rejects.toThrow(
+      'existing',
+    );
     await expect(loadProject(context.root, { ...product, id: 'fork' })).rejects.toThrow('different product');
   });
 
   it('rejects stale inventory and policy-lock source revisions without overwriting external edits', async () => {
-    const project = await createProject(root, product, basePolicy());
+    const project = await createProject(root, product, toPolicyDocument(basePolicy()));
     const edited = { schemaVersion: 1, devices: [device] };
     await writeFile(join(root, project.config.inventoryFile), JSON.stringify(edited));
     await expect(saveInventory(project, { schemaVersion: 1, devices: [] })).rejects.toThrow('file changed');
@@ -78,12 +81,14 @@ describe('isolated project data', () => {
     const legacy = join(root, 'config/manifest.yaml');
     await writeFile(legacy, 'legacy-state-sentinel');
     await expect(loadProject(root, product)).rejects.toThrow('Python pxv');
-    await expect(createProject(root, product, basePolicy())).rejects.toThrow('Python state');
+    await expect(createProject(root, product, toPolicyDocument(basePolicy()))).rejects.toThrow(
+      'Python state',
+    );
     expect(await readFile(legacy, 'utf8')).toBe('legacy-state-sentinel');
   });
 
   it('rejects traversal, symlinks, malformed policy and duplicate-key project markers', async () => {
-    const context = await createProject(root, product, basePolicy());
+    const context = await createProject(root, product, toPolicyDocument(basePolicy()));
     for (const name of ['/tmp/outside', '../outside', '.', 'nested//file'])
       await expect(containedPath(root, name)).rejects.toThrow();
     await expect(containedPath(root, 'missing')).rejects.toMatchObject({ code: 'ENOENT' });
@@ -241,7 +246,7 @@ describe('durable resource ownership and local lifecycle', () => {
   });
 
   it('records explicit maintenance/loss/retirement and archives evidence before invalidating it', async () => {
-    const created = await createProject(join(root, 'project'), product, basePolicy());
+    const created = await createProject(join(root, 'project'), product, toPolicyDocument(basePolicy()));
     await saveInventory(created, { schemaVersion: 1, devices: [device] });
     const context = await loadProject(created.root, product);
     await store.set('workflow', 'all', { proof: hashA });
@@ -329,7 +334,7 @@ describe('durable resource ownership and local lifecycle', () => {
   });
 
   it('rolls back a lifecycle archive, invalidation and record when its audit event cannot persist', async () => {
-    const created = await createProject(join(root, 'project'), product, basePolicy());
+    const created = await createProject(join(root, 'project'), product, toPolicyDocument(basePolicy()));
     await saveInventory(created, { schemaVersion: 1, devices: [device] });
     const project = await loadProject(created.root, product);
     const previous = { proof: 'accepted-generation' };
@@ -373,7 +378,7 @@ describe('durable resource ownership and local lifecycle', () => {
     }
   });
   it('refuses stale lifecycle context before archiving or deleting current asset evidence', async () => {
-    const created = await createProject(join(root, 'project'), product, basePolicy());
+    const created = await createProject(join(root, 'project'), product, toPolicyDocument(basePolicy()));
     await saveInventory(created, { schemaVersion: 1, devices: [device] });
     const project = await loadProject(created.root, product);
     await store.set('workflow', 'all', { generation: 'newer-accepted-state' });

@@ -11,11 +11,31 @@ export interface StoreTransition {
   changes: RecordChange[];
   events: { runId: string; value: unknown }[];
 }
+export interface EntryPageOptions {
+  cursor?: string;
+  limit?: number;
+}
+export interface EntryPage<T> {
+  items: { key: string; value: T }[];
+  nextCursor: string | null;
+}
+function validEntryCursor(cursor: string): boolean {
+  return typeof cursor === 'string' && cursor.length > 0 && cursor.length <= 1024 && !cursor.includes('\0');
+}
+/** Cursors are retained record keys, ordered by SQLite's binary collation. */
+export function entryPageOptions(options: EntryPageOptions = {}): { cursor?: string; limit: number } {
+  const { cursor, limit = 100 } = options;
+  if (!Number.isSafeInteger(limit) || limit < 1 || limit > 1000)
+    throw new Error('Invalid entry page limit; expected an integer from 1 to 1000');
+  if (cursor !== undefined && !validEntryCursor(cursor)) throw new Error('Invalid entry page cursor');
+  return { ...(cursor !== undefined ? { cursor } : {}), limit };
+}
 /** Application services borrow storage; composition owns its lifetime. */
 export interface Store {
   get<T>(collection: string, key: string): Promise<T | undefined>;
   set(collection: string, key: string, value: unknown): Promise<void>;
   entries<T = unknown>(collection: string, limit?: number): Promise<{ key: string; value: T }[]>;
+  entriesPage<T = unknown>(collection: string, options?: EntryPageOptions): Promise<EntryPage<T>>;
   delete(collection: string, key: string): Promise<boolean>;
   appendEvent(runId: string, event: unknown): Promise<number>;
   events<T = unknown>(

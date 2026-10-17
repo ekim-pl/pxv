@@ -15,9 +15,10 @@ import {
 import { basename, dirname, extname, join, resolve, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { parseDocument, validatePolicy, validateProduct } from '@pxv/contracts';
-import type { PolicyPack } from '@pxv/contracts';
+import type { ExecutionPolicy } from '@pxv/contracts';
 import { walkPublic } from './candidate.js';
 import { renderPolicyBooklet } from './booklet.js';
+import { guideNavigation, type GuideEdition } from './guide-navigation.js';
 
 interface DocumentationOptions {
   pdf?: boolean;
@@ -315,7 +316,7 @@ function guideIndex(
   brand: GuideBrand,
   editions: string[],
   pdfOutput: boolean,
-  policy?: PolicyPack,
+  policy?: ExecutionPolicy,
 ): string {
   const rows = editions
     .map((name) => {
@@ -474,6 +475,8 @@ export async function buildDocumentation(
     product.name,
     product.upstreamVersion,
     brand,
+    assets,
+    options.pdf ?? false,
     policy,
   );
   const editions = outputs.map((path) => path.slice(path.lastIndexOf('/') + 1, -5));
@@ -538,9 +541,11 @@ async function renderGuideHtmlSources(
   productName: string,
   version: string,
   brand: GuideBrand,
-  policy?: PolicyPack,
+  assets: string[],
+  pdfOutput: boolean,
+  policy?: ExecutionPolicy,
 ): Promise<string[]> {
-  const outputs: string[] = [];
+  const editions: GuideEdition[] = [];
   for (const path of paths) {
     let source = await readFile(join(root, path), 'utf8');
     const locale = /(?:^|[._/-])pl(?:[._/-]|$)/u.test(path) ? 'pl' : 'en';
@@ -549,13 +554,24 @@ async function renderGuideHtmlSources(
       source = renderPolicyBooklet(source, kind, policy, locale);
       await writeFile(join(destination, path.slice('guides/'.length)), source);
     }
-    const rendered = (await marked.parse(source, { async: true }))
-      .replaceAll('src="../../assets/', 'src="assets/')
-      .replace(/(<a\b[^>]*?)\s+href="(?!https?:|mailto:|#)[^"]*"([^>]*>)/gu, '$1$2');
+    const rendered = (await marked.parse(source, { async: true })).replaceAll(
+      'src="../../assets/',
+      'src="assets/',
+    );
     const html = guideHtml(productName, version, locale, rendered, brand, path);
-    const output = join(destination, path.slice('guides/source/markdown/'.length).replace(/\.md$/u, '.html'));
+    const outputPath = path.slice('guides/source/markdown/'.length).replace(/\.md$/u, '.html');
+    editions.push({ sourcePath: path, outputPath, html });
+  }
+  const publicFiles = [...assets, ...paths].map((path) => path.slice('guides/'.length));
+  publicFiles.push('index.html');
+  if (pdfOutput)
+    for (const edition of editions)
+      for (const mode of printModes) publicFiles.push(edition.outputPath.replace(/\.html$/u, `-${mode}.pdf`));
+  const outputs: string[] = [];
+  for (const edition of guideNavigation(editions, publicFiles)) {
+    const output = join(destination, edition.outputPath);
     await mkdir(dirname(output), { recursive: true });
-    await writeFile(output, html);
+    await writeFile(output, edition.html);
     outputs.push(output);
   }
   return outputs;

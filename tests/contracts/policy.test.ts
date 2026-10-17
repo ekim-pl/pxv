@@ -14,6 +14,7 @@ import {
   resolveSelection,
   sameAndroidUser,
   validatePolicy,
+  validatePolicyPack,
   validateProduct,
   validateProject,
 } from '@pxv/contracts';
@@ -158,7 +159,7 @@ describe('shared measured evidence', () => {
       namespace: 'factory images',
       publicKey: 'ssh-ed25519 AAAA',
     };
-    expect(evaluateObservation({ ...policy, os }, observation).passed).toBe(false);
+    expect(evaluateObservation({ ...policy, osByCodename: { akita: os } }, observation).passed).toBe(false);
     expect(
       evaluateObservation(policy, { ...observation, os: { ...observation.os, bootVerified: false } }).passed,
     ).toBe(false);
@@ -268,7 +269,7 @@ describe('capability-based readiness and private setup', () => {
   it('applies all normal defaults before the private gate and owner duress after language', () => {
     const owner = policy.profiles[0];
     if (!owner) throw new Error('Fixture owner missing');
-    const configured = validatePolicy({
+    const configured = validatePolicyPack({
       ...policy,
       capabilities: [],
       profiles: [
@@ -328,7 +329,7 @@ describe('capability-based readiness and private setup', () => {
     const cleanOwner = { ...owner };
     delete cleanOwner.language;
     const plain = { ...policy, capabilities: [], profiles: [cleanOwner] };
-    const credentials = validatePolicy({
+    const credentials = validatePolicyPack({
       ...plain,
       profiles: [{ ...cleanOwner, defaultCredential: { type: 'pin', secretRef: 'owner-pin' } }],
     });
@@ -338,7 +339,7 @@ describe('capability-based readiness and private setup', () => {
       'default-credential',
       'manual',
     ]);
-    const duress = validatePolicy({
+    const duress = validatePolicyPack({
       ...plain,
       profiles: [
         {
@@ -359,7 +360,9 @@ describe('capability-based readiness and private setup', () => {
 
   it('loads starter packs, the project template and the active Community product', () => {
     for (const name of ['reference-five', 'simple', 'custom']) {
-      const loaded = validatePolicy(parseDocument(readFileSync(`policy-packs/${name}/policy.json`, 'utf8')));
+      const loaded = validatePolicy(
+        parseDocument(readFileSync(`policy-packs/${name}/policy.v2.json`, 'utf8')),
+      );
       expect(loaded.profiles.filter((profile) => profile.kind === 'owner')).toHaveLength(1);
       expect(loaded.profiles.length).toBe(name === 'reference-five' ? 5 : name === 'simple' ? 1 : 3);
     }

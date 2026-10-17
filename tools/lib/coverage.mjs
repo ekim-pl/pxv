@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url';
 import { join, relative } from 'node:path';
 import libCoverage from 'istanbul-lib-coverage';
 import v8ToIstanbul from 'v8-to-istanbul';
+import { readCoverageTrace } from './coverage-traces.mjs';
 
 /** @param {string} root @param {string} url */
 function compiledModule(root, url) {
@@ -54,33 +55,50 @@ function mergeExecutableCounters(base, child) {
   for (const [id, fn] of Object.entries(base.fnMap))
     base.f[id] = Math.max(base.f[id] ?? 0, functions.get(rangeKey(fn.loc)) ?? 0);
 }
+/** @param {string} root @param {import('node:inspector').Profiler.ScriptCoverage} script */
+async function mappedCoverage(root, script) {
+  const path = compiledModule(root, script.url);
+  if (!path) return {};
+  const converter = v8ToIstanbul(path);
+  try {
+    await converter.load();
+    converter.applyCoverage(script.functions);
+    return converter.toIstanbul();
+  } finally {
+    converter.destroy();
+  }
+}
+/** @param {string} root @param {import('istanbul-lib-coverage').CoverageMap} map
+ * @param {Record<string,import('istanbul-lib-coverage').FileCoverageData>} mapped
+ * @param {Set<string>} seen @param {Set<string>} unmapped */
+function mergeMappedCoverage(root, map, mapped, seen, unmapped) {
+  for (const [file, coverage] of Object.entries(mapped)) {
+    if (!/^packages\/[^/]+\/src\/.*\.ts$/u.test(relative(root, file))) continue;
+    seen.add(relative(root, file));
+    if (map.files().includes(file)) mergeExecutableCounters(map.fileCoverageFor(file), coverage);
+    else unmapped.add(relative(root, file));
+  }
+}
 /** @param {string} root @param {string} directory @param {import('istanbul-lib-coverage').CoverageMap} map */
 async function mergeChildCoverage(root, directory, map) {
   const seen = new Set(),
-    unmapped = new Set();
-  for (const name of await readdir(directory)) {
+    unmapped = new Set(),
+    failures = [];
+  for (const name of (await readdir(directory)).sort()) {
     if (!name.endsWith('.json')) continue;
-    /** @type {{result:import('node:inspector').Profiler.ScriptCoverage[]}} */
-    const data = JSON.parse(await readFile(join(directory, name), 'utf8'));
-    for (const script of data.result) {
-      const path = compiledModule(root, script.url);
-      if (!path) continue;
-      const converter = v8ToIstanbul(path);
-      await converter.load();
-      converter.applyCoverage(script.functions);
-      const mapped = converter.toIstanbul();
-      converter.destroy();
-      for (const [file, coverage] of Object.entries(mapped)) {
-        if (!/^packages\/[^/]+\/src\/.*\.ts$/u.test(relative(root, file))) continue;
-        seen.add(relative(root, file));
-        if (map.files().includes(file)) mergeExecutableCounters(map.fileCoverageFor(file), coverage);
-        else unmapped.add(relative(root, file));
+    try {
+      for (const script of await readCoverageTrace(join(directory, name))) {
+        mergeMappedCoverage(root, map, await mappedCoverage(root, script), seen, unmapped);
       }
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      failures.push(`Coverage trace ${relative(root, join(directory, name))}: ${detail}`);
     }
   }
   return {
     files: [...seen].sort(),
     unmapped: [...unmapped].sort(),
+    failures,
     branchPolicy: 'Exact source ranges only; unmatched child ranges do not imply coverage.',
   };
 }
@@ -135,6 +153,7 @@ export async function completeCoverage(root, directory) {
   const map = libCoverage.createCoverageMap(JSON.parse(await readFile(filename, 'utf8')));
   const children = await mergeChildCoverage(root, directory, map);
   const result = { ...coverageResults(root, map), children };
+  result.failures.push(...children.failures);
   result.failures.push(...children.unmapped.map((file) => `Missing executable coverage map: ${file}`));
   result.failures.push(...(await omittedModules(root, map)));
   await writeFile(filename, JSON.stringify(map.toJSON()));

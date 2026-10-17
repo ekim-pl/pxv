@@ -1,3 +1,4 @@
+import { toPolicyDocument } from '@pxv/contracts';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { afterEach, beforeEach, expect, it } from 'vitest';
@@ -15,7 +16,7 @@ beforeEach(async () => {
   const resources = join(root, 'resources');
   await mkdir(resources);
   await writeFile(join(resources, 'product.json'), JSON.stringify(product));
-  const project = await createProject(join(root, 'project'), product, policy, resources);
+  const project = await createProject(join(root, 'project'), product, toPolicyDocument(policy), resources);
   context = { project } as ProjectCliContext;
   store = await SqliteStore.open(join(root, 'state.sqlite3'));
 });

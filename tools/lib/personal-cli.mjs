@@ -22,7 +22,7 @@ export function terminal() {
 }
 /** @param {Session} session @param {string[]} args @returns {Promise<{code:number,stdout:string,stderr:string}>} */
 export async function invoke(session, args) {
-  const full = [...args, '--resource-root', session.root, '--project-root', session.project];
+  const full = [...args, '--json', '--resource-root', session.root, '--project-root', session.project];
   return new Promise((resolveResult, reject) => {
     const child = spawn(session.bin, full, {
       env: {
@@ -135,7 +135,8 @@ async function resumeCheckpoint(session, run) {
     ]);
   const result = await invoke(session, ['agent', 'resume', '--run', run.id, '--yes']);
   if (result.code && /Reviewed plan expired/u.test(result.stderr)) return refresh(session, run.id);
-  if (result.code) throw new Error(result.stderr.trim() || 'Resume failed; inspect the retained run');
+  if (result.code !== 0 && result.code !== 4)
+    throw new Error(result.stderr.trim() || 'Resume failed; inspect the retained run');
   const updated = JSON.parse(result.stdout);
   if (['failed', 'needs-inspection', 'cancelled'].includes(updated.status))
     throw new Error('Run ' + run.id + ' requires inspection: ' + updated.status);

@@ -1,3 +1,4 @@
+import { toPolicyDocument } from '@pxv/contracts';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { mkdtemp, readFile, rm, writeFile, mkdir, readdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -17,18 +18,26 @@ beforeEach(async () => {
   output = [];
   await mkdir(join(resources, 'policy-packs/reference-five'), { recursive: true });
   await writeFile(join(resources, 'product.json'), JSON.stringify(product));
-  await writeFile(join(resources, product.defaultPolicy), JSON.stringify(policy));
+  await writeFile(join(resources, product.defaultPolicy), JSON.stringify(toPolicyDocument(policy)));
   io = { out: (value) => output.push(value), error: (value) => output.push(value) };
 });
 afterEach(async () => {
   await rm(root, { recursive: true, force: true });
 });
-const args = (values: string[]) => [...values, '--resource-root', resources, '--project-root', project];
+const args = (values: string[]) => [
+  ...values,
+  '--json',
+  '--resource-root',
+  resources,
+  '--project-root',
+  project,
+];
 
 describe('public CLI and project isolation', () => {
   it('prints help and version without any project or device access', async () => {
     expect(await runCli(['--help'], io)).toBe(0);
     expect(output[0]).toContain('fleet provision');
+    expect(output[0]).not.toContain('policy convert');
     expect(await runCli(['version'], io)).toBe(0);
     expect(output[1]).toBe('0.1.0');
     expect(await readdir(root)).toEqual(['resources']);
@@ -50,7 +59,7 @@ describe('public CLI and project isolation', () => {
   });
   it('takes an explicit policy and rejects malformed project boundaries', async () => {
     const custom = join(root, 'custom.yaml');
-    await writeFile(custom, JSON.stringify({ ...policy, id: 'custom' }));
+    await writeFile(custom, JSON.stringify(toPolicyDocument({ ...policy, id: 'custom' })));
     await runCli(args(['project', 'init', '--path', project, '--policy', custom]), io);
     expect(JSON.parse(await readFile(join(project, 'policy.yaml'), 'utf8'))).toMatchObject({ id: 'custom' });
     await expect(runCli(args(['policy', 'unknown']), io)).rejects.toThrow('Unknown policy');
@@ -96,8 +105,11 @@ describe('public CLI and project isolation', () => {
   it('serves only fixed public guides in selected supported languages', async () => {
     await mkdir(join(resources, 'guides/source/markdown'), { recursive: true });
     await writeFile(join(resources, 'guides/source/markdown/user-pl.md'), '# Telefon');
+    await writeFile(join(resources, 'guides/source/markdown/operator-en.md'), '# Operator');
     expect(await runCli(args(['guide', 'recipient', '--locale', 'pl']), io)).toBe(0);
     expect(output.at(-1)).toBe('# Telefon');
+    expect(await runCli(args(['guide', 'operator', '--locale', 'en']), io)).toBe(0);
+    expect(output.at(-1)).toBe('# Operator');
     await expect(runCli(args(['guide', '../../secret']), io)).rejects.toThrow('Choose');
     await expect(runCli(args(['guide', 'operator', '--locale', 'fr']), io)).rejects.toThrow('locale');
   });
@@ -146,9 +158,24 @@ describe('public CLI and project isolation', () => {
     process.chdir(resolve('/tmp'));
     try {
       expect(await runCli(args(['agent', 'runs']), io)).toBe(0);
-      expect(output.at(-1)).toBe('[]');
+      expect(JSON.parse(output.at(-1) ?? '{}')).toEqual({ items: [], nextCursor: null });
     } finally {
       process.chdir(previous);
     }
   });
+});
+
+it('defaults to readable output and makes structured automation explicit', async () => {
+  const human: string[] = [],
+    machine: string[] = [];
+  await runCli(
+    args(['project', 'init', '--path', project]).filter((value) => value !== '--json'),
+    { out: (text) => human.push(text), error: () => undefined },
+  );
+  expect(human).toHaveLength(1);
+  expect(human[0]).toContain('project id:');
+  expect(() => JSON.parse(human[0]!) as unknown).toThrow();
+  await runCli(args(['inventory', 'list']), { out: (text) => machine.push(text), error: () => undefined });
+  expect(machine).toHaveLength(1);
+  expect(JSON.parse(machine[0]!)).toEqual({ schemaVersion: 1, devices: [] });
 });

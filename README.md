@@ -60,9 +60,9 @@ pnpm pxv project init --path /absolute/private/fleet \
 pnpm pxv policy validate --project-root /absolute/private/fleet
 ```
 
-Version 2 policies define each app once, share app IDs across profiles, separate
-global device settings and map exact GrapheneOS releases by Pixel codename. Version
-1 remains readable; explicit conversion needs a fresh lock and review. Follow the
+PXV accepts only `schemaVersion: 2` policies. They define each app once, share app
+IDs across profiles, separate global device settings and map exact GrapheneOS
+releases by Pixel codename. Version 1 policies and their locks are unsupported. Follow the
 [policy reference](docs/POLICY_FORMAT.md) and operator guide to enroll observed
 physical identities, pin artifacts, lock the policy, review OS installation and
 provision profiles/apps. Plans identify automated and assisted steps, complete app
@@ -80,6 +80,11 @@ live credentials or configure accounts.
 physical-device ownership and durable recovery checks. Fleet selectors are explicit;
 attestation, finalization and recovery require one exact asset. [Docker](docs/DOCKER.md)
 supports direct USB and an existing host ADB server; host-ADB mode cannot flash.
+
+CLI commands show readable summaries by default. Use `--json` for structured
+automation output; progress and diagnostics go to stderr. Run `pxv COMMAND --help`
+for a command's supported flags. Run history is paginated, so follow `nextCursor`
+when reading `agent runs --json` or MCP `list_runs` results.
 
 ```sh
 pnpm build:preview

@@ -1,3 +1,4 @@
+import { toPolicyDocument } from '@pxv/contracts';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
@@ -12,7 +13,12 @@ describe('workflow service composition', () => {
     const codeRoot = join(root, 'code');
     await mkdir(join(codeRoot, 'packages/core'), { recursive: true });
     await writeFile(join(codeRoot, 'packages/core/index.js'), 'export const build=1;');
-    const created = await createProject(join(root, 'project'), product, basePolicy(), codeRoot);
+    const created = await createProject(
+      join(root, 'project'),
+      product,
+      toPolicyDocument(basePolicy()),
+      codeRoot,
+    );
     await saveInventory(created, { schemaVersion: 1, devices: [device] });
     const project = await loadProject(created.root, product, codeRoot);
     const store = await SqliteStore.open(join(root, 'state.sqlite'));
@@ -36,6 +42,11 @@ describe('workflow service composition', () => {
       expect((await store.events<{ type: string }>(run.id)).at(-1)?.event.type).toBe('composition-note');
       expect(close).not.toHaveBeenCalled();
       expect((await engine.state('all')).planDigest).toBe(prepared.plan.digest);
+      expect(await engine.deviceStatus(target)).toMatchObject({
+        currentStateVerified: false,
+        evidenceSource: 'stored',
+        run: { id: run.id, evidenceSource: 'stored', reviewStatus: 'current' },
+      });
     } finally {
       await store.close();
       await rm(root, { recursive: true, force: true });

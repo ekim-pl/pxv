@@ -1,4 +1,5 @@
 import { parentPort, workerData } from 'node:worker_threads';
+import { takeCoverage } from 'node:v8';
 import {
   openDatabase,
   StorageHandler,
@@ -16,9 +17,16 @@ try {
   port.on('message', ({ id, method, args }: StorageRequest) => {
     try {
       port.postMessage({ id, result: handler.dispatch(method, args) });
-      if (method === 'close') port.close();
     } catch (error) {
       port.postMessage({ id, error: message(error) });
+    } finally {
+      if (method === 'close') {
+        try {
+          if (process.env['NODE_V8_COVERAGE']) takeCoverage();
+        } finally {
+          port.close();
+        }
+      }
     }
   });
 } catch (error) {

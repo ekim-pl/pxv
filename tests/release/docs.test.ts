@@ -5,6 +5,7 @@ import { pathToFileURL } from 'node:url';
 import { PDFDocument } from 'pdf-lib';
 import { buildDocumentation } from '../../packages/release/src/docs.js';
 import { parseDocument, validatePolicy } from '@pxv/contracts';
+import { verifyGuideLinks } from '../../tools/optional/publishing/links.mjs';
 type Launch = NonNullable<NonNullable<Parameters<typeof buildDocumentation>[2]>['browser']>['launch'];
 type Browser = Awaited<ReturnType<Launch>>;
 type BrowserContext = Awaited<ReturnType<Browser['newContext']>>;
@@ -126,6 +127,120 @@ describe('public documentation generation', () => {
     expect(html).toContain('@page pxvprint');
     expect(await readFile(outputs[1] ?? '', 'utf8')).toContain('Instrukcja ogólna.');
     expect(await readFile(join(directory, 'output/assets/logo.svg'), 'utf8')).toBe('<svg/>');
+  });
+  it('rewrites emitted guide links and retains only public files and existing fragments', async () => {
+    await sources();
+    await writeFile(
+      join(directory, 'guides/source/markdown/guide.en.md'),
+      [
+        '# Operator',
+        '## Daily use',
+        '## Daily use',
+        '<h2 id="custom">Custom</h2>',
+        '[edition](guide.pl.md#codzienne-użytkowanie)',
+        '[output edition](guide.pl.html)',
+        '[source path](source/markdown/guide.pl.md)',
+        '[asset](../../assets/logo.svg)',
+        '[output asset](assets/logo.svg)',
+        '[index](index.html)',
+        '[fragment](#daily-use-1)',
+        '[cover](#operator)',
+        '[custom](#custom)',
+        '[top](#)',
+        '[missing fragment](guide.pl.md#missing)',
+        '[missing asset fragment](../../assets/logo.svg#missing)',
+        '[outside](../../../docs/POLICY_FORMAT.md)',
+        '[missing](missing.html)',
+        '[stale](stale.html)',
+        '[absolute](/etc/passwd)',
+        '[file](file:///private/secret)',
+        '[query](guide.pl.md?private)',
+        '[invalid escape](%invalid)',
+        '[invalid fragment](#%invalid)',
+        '[encoded escape](%2fetc/passwd)',
+        '[backslash](guide%5c.pl.md)',
+        '[public](https://example.org/)',
+        '[mail](mailto:help@example.org)',
+        '<a href=" javascript:alert(1)">spaced</a>',
+        '<a href="">empty</a>',
+        "<a href='guide.pl.md'>single quoted</a>",
+        '<a href="guide.pl.md" title="translated">attribute</a>',
+      ].join('\n\n'),
+    );
+    await writeFile(
+      join(directory, 'guides/source/markdown/guide.pl.md'),
+      '# Odbiorca\n\n## Codzienne użytkowanie',
+    );
+    const destination = join(directory, 'output');
+    await mkdir(destination);
+    await writeFile(join(destination, 'stale.html'), 'not from this build');
+    const outputs = await buildDocumentation(directory, destination);
+    const html = await readFile(join(destination, 'guide.en.html'), 'utf8');
+    for (const href of [
+      'guide.pl.html#codzienne-u%C5%BCytkowanie',
+      'guide.pl.html',
+      'assets/logo.svg',
+      'index.html',
+      '#daily-use-1',
+      '#operator',
+      '#custom',
+      '#',
+      'https://example.org/',
+      'mailto:help@example.org',
+    ])
+      expect(html).toContain(`href="${href}"`);
+    for (const text of [
+      'missing fragment',
+      'missing asset fragment',
+      'outside',
+      'missing',
+      'stale',
+      'absolute',
+      'file',
+      'query',
+      'invalid escape',
+      'invalid fragment',
+      'encoded escape',
+      'backslash',
+      'spaced',
+      'empty',
+    ])
+      expect(html).toMatch(new RegExp(`<a>${text}</a>`, 'u'));
+    expect(html).toContain('<h2 id="daily-use">');
+    await verifyGuideLinks(destination, [join(destination, 'index.html'), ...outputs]);
+  });
+  it('checks unsafe, missing and escaped local navigation throughout generated editions', async () => {
+    await sources();
+    const destination = join(directory, 'output');
+    const outputs = await buildDocumentation(directory, destination);
+    const edition = outputs[0] ?? '';
+    for (const [href, error] of [
+      ['missing.html', /ENOENT/u],
+      ['#missing', /Missing guide link fragment/u],
+      ['../product.json', /outside the public output/u],
+      ['assets', /not a file/u],
+      ['javascript:alert(1)', /Unsafe guide link/u],
+      ['', /Unsafe guide link/u],
+    ] as const) {
+      await writeFile(edition, `<a href="${href}">invalid</a>`);
+      await expect(verifyGuideLinks(destination, [edition])).rejects.toThrow(error);
+    }
+  });
+  it('renders owner-only recipient guidance in both languages', async () => {
+    await sources();
+    for (const locale of ['en', 'pl'])
+      await writeFile(
+        join(directory, `guides/source/markdown/user-${locale}.md`),
+        await readFile(`guides/source/markdown/user-${locale}.md`, 'utf8'),
+      );
+    const destination = join(directory, 'output');
+    await buildDocumentation(directory, destination);
+    expect(await readFile(join(destination, 'user-en.html'), 'utf8')).toContain(
+      'only the Owner profile, use that profile; no user switching is needed',
+    );
+    expect(await readFile(join(destination, 'user-pl.html'), 'utf8')).toContain(
+      'tylko profil właściciela (Owner), korzystaj z niego; przełączanie użytkowników nie jest potrzebne',
+    );
   });
   it('uses a local browser with JavaScript disabled and blocks network or outside-directory resources', async () => {
     await sources();
@@ -249,7 +364,7 @@ describe('public documentation generation', () => {
     expect(polish).toContain("@font-face{font-family:'Pxv Display'");
     expect(polish).toContain("src:url('assets/font.ttf');font-style:normal;font-weight:400}");
     expect(polish).not.toContain('font-weight:100 900');
-    expect(polish).toContain('<h2>Codzienne użytkowanie</h2>');
+    expect(polish).toContain('<h2 id="codzienne-użytkowanie">Codzienne użytkowanie</h2>');
     expect(polish).not.toContain('print-opener');
     const index = await readFile(join(directory, 'output/index.html'), 'utf8');
     expect(index).toContain('Operator (EN)');
@@ -339,7 +454,7 @@ describe('public documentation generation', () => {
     expect(fixture.browser.close).toHaveBeenCalledOnce();
   });
 
-  it('normalizes v1 and v2 policy inputs into generated A5 Markdown while preserving A4 and canonical templates', async () => {
+  it('normalizes v2 policy inputs into generated A5 Markdown while preserving A4 and canonical templates', async () => {
     await editionSources();
     const names = ['quickstart-en', 'quickstart-pl', 'credentials-en', 'credentials-pl'];
     const templates = new Map<string, string>();
@@ -349,7 +464,7 @@ describe('public documentation generation', () => {
       await writeFile(join(directory, 'guides/source/markdown', `${name}.md`), template);
     }
     const operator = await readFile(join(directory, 'guides/source/markdown/operator-en.md'), 'utf8');
-    for (const file of ['policy.json', 'policy.v2.json']) {
+    for (const file of ['policy.v2.json']) {
       const policy = parseDocument(await readFile(`policy-packs/simple/${file}`, 'utf8'));
       const normalized = validatePolicy(policy);
       const destination = join(directory, file);
@@ -377,6 +492,14 @@ describe('public documentation generation', () => {
     const destination = join(directory, 'invalid-policy');
     await expect(buildDocumentation(directory, destination, { policy: {} })).rejects.toThrow();
     await expect(access(destination)).rejects.toThrow();
+    const legacyPolicy = {
+      ...(parseDocument(await readFile('policy-packs/simple/policy.v2.json', 'utf8')) as object),
+      schemaVersion: 1,
+    };
+    await expect(buildDocumentation(directory, destination, { policy: legacyPolicy })).rejects.toThrow(
+      'Unsupported policy schema version',
+    );
+    await expect(access(destination)).rejects.toThrow();
     await mkdir(destination);
     await writeFile(join(destination, 'index.html'), 'Existing guide');
     await expect(buildDocumentation(directory, destination, { policy: null })).rejects.toThrow();
@@ -385,7 +508,7 @@ describe('public documentation generation', () => {
 
   it('rejects policy output within authoritative guides and through symlink aliases before writes', async () => {
     await sources();
-    const policy = parseDocument(await readFile('policy-packs/simple/policy.json', 'utf8'));
+    const policy = parseDocument(await readFile('policy-packs/simple/policy.v2.json', 'utf8'));
     const canonical = await readFile(join(directory, 'guides/source/markdown/guide.en.md'), 'utf8');
     const alias = join(directory, 'guide-alias');
     await symlink(join(directory, 'guides'), alias);
@@ -405,7 +528,7 @@ describe('public documentation generation', () => {
 
   it('rejects existing nested output symlinks before they can overwrite canonical source files', async () => {
     await sources();
-    const policy = parseDocument(await readFile('policy-packs/simple/policy.json', 'utf8'));
+    const policy = parseDocument(await readFile('policy-packs/simple/policy.v2.json', 'utf8'));
     const canonicalPath = join(directory, 'guides/source/markdown/guide.en.md');
     const canonical = await readFile(canonicalPath, 'utf8');
     const fileOutput = join(directory, 'file-link-output');
@@ -425,7 +548,7 @@ describe('public documentation generation', () => {
 
   it('rejects output hardlinks before cross-file copies can overwrite canonical source files', async () => {
     await sources();
-    const policy = parseDocument(await readFile('policy-packs/simple/policy.json', 'utf8'));
+    const policy = parseDocument(await readFile('policy-packs/simple/policy.v2.json', 'utf8'));
     const canonicalPath = join(directory, 'guides/source/markdown/guide.en.md');
     const canonical = await readFile(canonicalPath, 'utf8');
     const destination = join(directory, 'hardlink-output');

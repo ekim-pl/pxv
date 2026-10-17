@@ -10,7 +10,7 @@ import {
   validateProduct,
   validateProject,
   type Inventory,
-  type PolicyPack,
+  type ExecutionPolicy,
   type PolicyDocument,
   type ProductDescriptor,
   type ProjectConfig,
@@ -25,7 +25,7 @@ export interface ProjectContext {
   readonly codeRoot?: string;
   readonly config: ProjectConfig;
   readonly product: ProductDescriptor;
-  readonly policy: PolicyPack;
+  readonly policy: ExecutionPolicy;
   readonly inventory: Inventory;
   readonly resolved: ResolvedPolicy;
   readonly revisions: { config: string; policy: string; inventory: string };

@@ -12,6 +12,7 @@ import { AttestationService } from './attestation-service.js';
 import { HandoffService } from './handoff-service.js';
 import type { SeedvaultService } from './experimental/seedvault/seedvault-service.js';
 import { CredentialDefaultHistory } from './credential-default-history.js';
+import { RunQueryService } from './run-query-service.js';
 type Dependencies = EngineOptions & { clock: () => Date };
 interface Collaborators {
   observations: ObservationService;
@@ -82,6 +83,7 @@ export function createWorkflowServices(options: EngineOptions) {
         module.createSeedvaultServices(deps, collaborators),
       )),
     ...operationServices(deps, collaborators),
+    runs: new RunQueryService(project, store, clock, observations),
     clock,
     attestation: new AttestationService(
       project,

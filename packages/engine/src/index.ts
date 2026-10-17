@@ -4,6 +4,7 @@ export * from './workflow.js';
 export * from './lifecycle.js';
 export * from './integrity.js';
 export * from './run-state.js';
+export type { RunListOptions } from './run-query-service.js';
 export type { RunPauseReason } from './workflow-types.js';
 export * from './seedvault-connection.js';
 export { seedvaultConnections } from './seedvault-sessions.js';

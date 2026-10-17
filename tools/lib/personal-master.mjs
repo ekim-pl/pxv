@@ -103,11 +103,7 @@ export async function projectSnapshot(project, deviceSerial) {
   const source = await readJson(contained(project, config.policyFile));
   const policy = await normalizedPolicy(source);
   const lock = await readJson(join(project, 'policy.lock.json'));
-  if (
-    (source.schemaVersion === 1 && canonical(source) !== canonical(lock.policy)) ||
-    canonical(policy) !== canonical(lock.policy) ||
-    canonical(config) !== canonical(lock.project)
-  )
+  if (canonical(policy) !== canonical(lock.policy) || canonical(config) !== canonical(lock.project))
     throw new Error('Review and write a current policy lock before making a master');
   const inventory = await readJson(contained(project, config.inventoryFile));
   const devices = inventory.devices.filter(
@@ -176,7 +172,8 @@ export async function createMaster(options) {
 async function finishMaster(options, snapshot, profiles, pending) {
   await copyTree(join(options.usb, seedvaultDirectory), join(pending, 'seedvault', seedvaultDirectory));
   await mkdir(join(pending, 'project'), { mode: 0o700 });
-  await privateJson(join(pending, 'project/policy.json'), snapshot.policy);
+  const { toPolicyDocument } = await import('../../packages/contracts/dist/index.js');
+  await privateJson(join(pending, 'project/policy.json'), toPolicyDocument(snapshot.policy));
   await copyArtifacts(snapshot.policy, options.project, join(pending, 'project'));
   await copyQualification(options.adapter, pending);
   const files = [];

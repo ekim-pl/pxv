@@ -1,3 +1,4 @@
+import { toPolicyDocument } from '@pxv/contracts';
 import { DatabaseSync } from 'node:sqlite';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -35,16 +36,18 @@ beforeEach(async () => {
   await mkdir(join(codeRoot, 'packages/core'), { recursive: true });
   await writeFile(join(codeRoot, 'packages/core/build.js'), 'export const version=1;');
   const policy = basePolicy();
-  policy.os = {
-    codename: 'akita',
-    release: '2026100600',
-    url: 'https://example.org/os.zip',
-    signatureUrl: 'https://example.org/os.zip.sig',
-    publicKey: 'ssh-ed25519 AAAA',
-    signerPrincipal: 'release@example.org',
-    namespace: 'factory images',
+  policy.osByCodename = {
+    akita: {
+      codename: 'akita',
+      release: '2026100600',
+      url: 'https://example.org/os.zip',
+      signatureUrl: 'https://example.org/os.zip.sig',
+      publicKey: 'ssh-ed25519 AAAA',
+      signerPrincipal: 'release@example.org',
+      namespace: 'factory images',
+    },
   };
-  const created = await createProject(join(root, 'project'), product, policy, codeRoot);
+  const created = await createProject(join(root, 'project'), product, toPolicyDocument(policy), codeRoot);
   await saveInventory(created, { schemaVersion: 1, devices: [device, other] });
   project = await loadProject(created.root, product, codeRoot);
   store = await SqliteStore.open(join(root, 'state.sqlite'));

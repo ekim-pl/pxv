@@ -6,6 +6,8 @@ Przygotuj jeden zarejestrowany telefon Google Pixel albo jawnie wybraną flotę:
 
 Przykłady używają zainstalowanego polecenia `pxv`. Zastąp wszystkie symbole zastępcze. `--yes` potwierdza rzeczywisty przegląd lub kontrolę fizyczną; nie wykonuje tej kontroli.
 
+Polecenia domyślnie pokazują czytelne podsumowania. Przy zapisywaniu danych dla skryptu dodaj `--json`; obsługiwane opcje pokazuje `pxv POLECENIE --help`. `--dry-run` jest przyjmowane tylko tam, gdzie przygotowuje plan; finalizacja, potwierdzenia i odzyskiwanie odrzucają tę opcję. Historia operacji jest stronicowana: `agent runs --json` zwraca `items` oraz `nextCursor`; niepusty kursor przekaż przez `--cursor` i powtarzaj do otrzymania wartości `null`.
+
 ## 1. Przygotuj komputer i projekt
 
 Użyj sprawdzonego archiwum przenośnego lub pakietu dla Linuksa x86_64. Archiwum przenośne i pakiet Debian zawierają Node oraz natywny proces nadzorujący; narzędzia Androida i uprawnienia USB wymagają osobnej konfiguracji. Pracuj na zwykłym koncie operatora.
@@ -33,11 +35,11 @@ Wykonuj spójne kopie prywatnego stanu projektu i ewidencji urządzeń. Dane do 
 
 Sprawdź politykę przed rejestracją i wykonaniem operacji. Dołączony zestaw pięciu profili jest szkieletem: nie zapewnia zatwierdzonych aplikacji, działających kont VPN ani kwalifikacji wdrożenia.
 
-W polityce v2 definiuj katalog `apps` raz, a w listach `apps` profili wskazuj jego identyfikatory. Przypnij identyfikator pakietu, kod wersji, SHA-256 pliku APK, SHA-256 podpisującego i zatwierdzone źródło. Wersje pakietów Androida są wspólne dla użytkowników; profile nie mogą instalować sprzecznych wersji niezależnie.
+PXV przyjmuje wyłącznie polityki z `schemaVersion: 2`. Zdefiniuj katalog `apps` raz, a w listach `apps` profili wskazuj jego identyfikatory. Przypnij identyfikator pakietu, kod wersji, SHA-256 pliku APK, SHA-256 podpisującego i zatwierdzone źródło. Wersje pakietów Androida są wspólne dla użytkowników; profile nie mogą instalować sprzecznych wersji niezależnie.
 
 Ustawienia Androida `global`, wspólne dla telefonu, umieść w `deviceSettings`. W `settings` profilu stosuj wpisy `secure` lub `system`. Świadomie ustal nazwy profili, uprawnienia, VPN i języki; nazwa właściciela musi odpowiadać zmierzonej nazwie. Wartości tajne nie należą do polityki ani tekstu receptur.
 
-Dla różnych modeli mapa `os` wiąże dokładny codename Pixela z kompletem danych uwierzytelnionego obrazu GrapheneOS. Każdy model przeznaczony do instalacji wymaga własnego wpisu. Nie ma zgadywania ani obrazu zastępczego. Schemat i migrację opisuje [format polityki](../../../docs/POLICY_FORMAT.md).
+Dla różnych modeli mapa `os` wiąże dokładny codename Pixela z kompletem danych uwierzytelnionego obrazu GrapheneOS. Każdy model przeznaczony do instalacji wymaga własnego wpisu. Nie ma zgadywania ani obrazu zastępczego. Schemat opisuje [format polityki](../../../docs/POLICY_FORMAT.md).
 
 ```sh
 pxv policy validate --project-root "$P"
@@ -45,7 +47,7 @@ pxv policy lock --project-root "$P"
 pxv guide project --project-root "$P" --kind pixel --locale pl
 ```
 
-Zmiana polityki wymaga nowej blokady wersji i nowego przeglądu. `policy convert --output NOWY_PLIK` zapisuje format v2 bez zmiany oryginału i bez aktywacji. Wybierz sprawdzony plik w `pxv.project.json`, zweryfikuj i zablokuj politykę przed przygotowaniem nowych planów.
+Zmiana polityki wymaga nowej blokady wersji i nowego przeglądu. Wybierz sprawdzoną politykę w wersji 2 w `pxv.project.json`, zweryfikuj i zablokuj ją przed przygotowaniem nowych planów. Polityki w wersji 1 i ich pliki blokady nie są obsługiwane; nie ma automatycznego konwertera.
 
 ## 3. Zarejestruj dokładnie wskazany telefon
 

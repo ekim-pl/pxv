@@ -272,7 +272,7 @@ it('preserves exact refreshed review bytes and resumes language checkpoints with
   await writeFile(state, '{}');
   const bin = await fakePxv(
     fixture.root,
-    String.raw`import{appendFileSync,readFileSync,writeFileSync}from'node:fs';const args=process.argv.slice(2),file=${JSON.stringify(state)},state=JSON.parse(readFileSync(file,'utf8'));const out=x=>console.log(JSON.stringify(x)),get=k=>args[args.indexOf(k)+1],cmd=args.slice(0,2).join(' ');appendFileSync(${JSON.stringify(log)},JSON.stringify(args)+'\n');const prepared=n=>({planId:'plan'+n,reviewSummary:'review'+n+'\\nEXACT',expiresAt:'2099-01-01T00:00:00Z'});if(cmd==='device provision')out(prepared(1));else if(cmd==='agent execute'){const n=get('--plan').slice(-1);if(readFileSync(get('--review-file'),'utf8')!==prepared(n).reviewSummary)throw Error('review changed');out({id:'run'+n,status:'queued'});}else if(cmd==='agent status'){const id=get('--run');out({run:{id,status:'pending',...(id==='run1'?{manualGate:'normal_credentials'}:state.languageDone?{}:{manualGate:'language:admin'})}});}else if(cmd==='device attest')out({check:get('--check')});else if(cmd==='agent resume'){if(get('--run')==='run1'){console.error('Reviewed plan expired; prepare again');process.exitCode=2;}else{state.languageDone=true;writeFileSync(file,JSON.stringify(state));out({id:'run2',status:'pending'});}}else if(cmd==='agent refresh')out(prepared(2));else throw Error('unexpected '+cmd);`,
+    String.raw`import{appendFileSync,readFileSync,writeFileSync}from'node:fs';const args=process.argv.slice(2),file=${JSON.stringify(state)},state=JSON.parse(readFileSync(file,'utf8'));const out=x=>console.log(JSON.stringify(x)),get=k=>args[args.indexOf(k)+1],cmd=args.slice(0,2).join(' ');appendFileSync(${JSON.stringify(log)},JSON.stringify(args)+'\n');const prepared=n=>({planId:'plan'+n,reviewSummary:'review'+n+'\\nEXACT',expiresAt:'2099-01-01T00:00:00Z'});if(cmd==='device provision')out(prepared(1));else if(cmd==='agent execute'){const n=get('--plan').slice(-1);if(readFileSync(get('--review-file'),'utf8')!==prepared(n).reviewSummary)throw Error('review changed');out({id:'run'+n,status:'queued'});}else if(cmd==='agent status'){const id=get('--run');out({run:{id,status:'pending',...(id==='run1'?{manualGate:'normal_credentials'}:state.languageDone?{}:{manualGate:'language:admin'})}});}else if(cmd==='device attest')out({check:get('--check')});else if(cmd==='agent resume'){if(get('--run')==='run1'){console.error('Reviewed plan expired; prepare again');process.exitCode=2;}else{state.languageDone=true;writeFileSync(file,JSON.stringify(state));out({id:'run2',status:'pending'});process.exitCode=4;}}else if(cmd==='agent refresh')out(prepared(2));else throw Error('unexpected '+cmd);`,
   );
   const session = {
     root: repo,
@@ -296,6 +296,7 @@ it('preserves exact refreshed review bytes and resumes language checkpoints with
     .map((args) => args[args.indexOf('--check') + 1]);
   expect(attested).toEqual(['normal_credentials']);
   expect(calls.filter((args) => args[1] === 'execute')).toHaveLength(2);
+  for (const call of calls) expect(call).toContain('--json');
 });
 it('shows exact Seedvault profile instructions and cancels its exact retained run when the owner stops', async () => {
   const log = join(fixture.root, 'cancel.jsonl');

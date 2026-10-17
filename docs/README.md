@@ -21,7 +21,7 @@ handoff report remains the record of the actual device.
 
 - [Host dependencies](HOST_DEPENDENCIES.md): supported tools, explicit ADB services and native runtime.
 - [Command reference](COMMAND_REFERENCE.md): command families and exact selectors.
-- [Policy format](POLICY_FORMAT.md): v2 authoring, shared apps, per-model OS pins and v1 conversion.
+- [Policy format](POLICY_FORMAT.md): version 2 authoring, shared apps and per-model OS pins.
 - [Encrypted phone registry](PHONE_REGISTRY.md): private credentials, history, retrieval and restore reconciliation.
 - [Network policies](NETWORK_POLICIES.md): VPN ordering and the limits of measured network evidence.
 - [Automation and MCP](AUTOMATION.md): exact reviews, durable runs, pauses and local automation.

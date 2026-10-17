@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { convertPolicyToV2, validatePolicy } from '@pxv/contracts';
+import { toPolicyDocument, validatePolicy } from '@pxv/contracts';
 import { device } from '../contracts/fixtures.js';
 import { createMaster, projectSnapshot, verifyMaster } from '../../tools/lib/personal-master.mjs';
 import { createPersonalMaster } from '../../tools/lib/personal-workflows.mjs';
@@ -18,7 +18,7 @@ afterEach(async () => {
 });
 
 async function v2Policy() {
-  const document = convertPolicyToV2(fixture.selected);
+  const document = toPolicyDocument(fixture.selected);
   const akita = document.os!.akita!;
   document.os!.husky = {
     ...akita,
@@ -65,7 +65,7 @@ it('creates and verifies a v2 master for the exact enrolled model without changi
   })) as { codename: string };
   expect(manifest.codename).toBe('husky');
   const verified = await verifyMaster(fixture.destination);
-  expect(verified.policy.sourceSchemaVersion).toBe(2);
+  expect(verified.policy.schemaVersion).toBe(2);
   expect(verified.policy.profiles[0]?.packages[0]?.path).toBe('artifacts/app.apk');
   expect(await Promise.all(paths.map((path) => readFile(path, 'utf8')))).toEqual(before);
   const manifestPath = join(fixture.destination, 'master.json');
@@ -74,13 +74,11 @@ it('creates and verifies a v2 master for the exact enrolled model without changi
   await expect(verifyMaster(fixture.destination)).rejects.toThrow('Master OS identity differs');
 });
 
-it('requires a current normalized v2 lock and preserves exact legacy source checks', async () => {
+it('rejects legacy sources and requires a current normalized v2 lock', async () => {
   const legacy = structuredClone(fixture.selected);
-  legacy.profiles[0]!.packages[0]!.sha256 = legacy.profiles[0]!.packages[0]!.sha256.toUpperCase();
-  await writeFile(join(fixture.projectRoot, 'policy.json'), JSON.stringify(legacy));
-  await expect(projectSnapshot(fixture.projectRoot, device.canonicalSerial)).rejects.toThrow(
-    'current policy lock',
-  );
+  const legacySource = { ...legacy, schemaVersion: 1 };
+  await writeFile(join(fixture.projectRoot, 'policy.json'), JSON.stringify(legacySource));
+  await expect(projectSnapshot(fixture.projectRoot, device.canonicalSerial)).rejects.toThrow('schemaVersion');
   const document = await v2Policy();
   document.profiles[0]!.name = 'Changed after review';
   await writeFile(join(fixture.projectRoot, 'policy.json'), JSON.stringify(document));

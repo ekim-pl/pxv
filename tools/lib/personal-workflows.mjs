@@ -319,7 +319,7 @@ async function createInputs(session, options) {
   const source = resolve(option(options, 'source-root', dirname(policyFile)));
   await distinctRoots([source, session.project, option(options, 'usb-root'), option(options, 'backup-dir')]);
   const policy = await normalizedPolicy(await readJson(policyFile));
-  const codenames = policy.os ? [policy.os.codename] : Object.keys(policy.osByCodename ?? {});
+  const codenames = Object.keys(policy.osByCodename ?? {});
   if (!codenames.length) throw new Error('Provide a reviewed JSON policy with a pinned GrapheneOS release');
   const codename = option(options, 'codename', codenames.length === 1 ? codenames[0] : undefined);
   if (!(await selectedOsPolicy(policy, codename)))
@@ -395,22 +395,37 @@ export async function recoverPersonalDevice(session, options) {
 }
 /** Refuse outstanding approvals rather than overwriting their evidence. @param {any} session */
 async function noActiveRuns(session) {
-  const rows = await jsonCommand(session, ['agent', 'runs']);
-  if (!Array.isArray(rows) || rows.length >= 1000)
-    throw new Error('Cannot prove the original project has no outstanding runs');
-  for (const { value: run } of rows) {
-    if (['queued', 'running'].includes(run.status) || (run.status === 'pending' && run.manualGate))
-      throw new Error(
-        'Original project has active run ' +
-          run.id +
-          '; explicitly cancel it and perform typed inspected recovery before erasing',
-      );
-    if (
-      ['failed', 'needs-inspection', 'cancelled'].includes(run.status) &&
-      !(await recoveredRun(session, run.id))
-    )
-      throw new Error('Inspect and recover original run ' + run.id + ' before erasing its Android users');
-  }
+  let cursor;
+  const seen = new Set();
+  do {
+    const page = await jsonCommand(session, [
+      'agent',
+      'runs',
+      '--limit',
+      '1000',
+      ...(cursor ? ['--cursor', cursor] : []),
+    ]);
+    if (!Array.isArray(page.items) || (page.nextCursor !== null && typeof page.nextCursor !== 'string'))
+      throw new Error('Cannot prove the original project has no outstanding runs');
+    for (const { value: run } of page.items) await assertInactiveRun(session, run);
+    cursor = page.nextCursor;
+    if (cursor && seen.has(cursor)) throw new Error('Run history cursor did not advance');
+    if (cursor) seen.add(cursor);
+  } while (cursor);
+}
+/** @param {any} session @param {any} run */
+async function assertInactiveRun(session, run) {
+  if (['queued', 'running'].includes(run.status) || (run.status === 'pending' && run.manualGate))
+    throw new Error(
+      'Original project has active run ' +
+        run.id +
+        '; explicitly cancel it and perform typed inspected recovery before erasing',
+    );
+  if (
+    ['failed', 'needs-inspection', 'cancelled'].includes(run.status) &&
+    !(await recoveredRun(session, run.id))
+  )
+    throw new Error('Inspect and recover original run ' + run.id + ' before erasing its Android users');
 }
 /** @param {any} session @param {string} id */
 async function recoveredRun(session, id) {

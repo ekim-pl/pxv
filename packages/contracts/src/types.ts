@@ -144,8 +144,9 @@ export interface OsPolicy {
   publicKey: string;
 }
 
-export interface PolicyPack {
-  schemaVersion: 1;
+/** Expanded policy used by planning and execution; authored input is PolicyDocument. */
+export interface ExecutionPolicy {
+  schemaVersion: 2;
   id: string;
   version: string;
   name: string;
@@ -153,30 +154,31 @@ export interface PolicyPack {
   capabilities: string[];
   requiredAttestations: string[];
   repositories: RepositoryPolicy[];
-  os?: OsPolicy;
-  /** Exact image pins for a mixed-model fleet; mutually exclusive with legacy os. */
+  /** Exact image pins for each enrolled model. */
   osByCodename?: Record<string, OsPolicy>;
-  /** Distinguishes normalized v2 input from historical v1 approvals. */
-  sourceSchemaVersion?: 2;
 }
 
-export interface ProfileDocumentV2 extends Omit<ProfilePolicy, 'packages'> {
+/** @deprecated Use ExecutionPolicy for engine data or PolicyDocument for authored input. */
+export type PolicyPack = ExecutionPolicy;
+
+export interface ProfileDocument extends Omit<ProfilePolicy, 'packages'> {
   apps: string[];
 }
 
-/** Authoring format; normalized to PolicyPack before planning or execution. */
-export interface PolicyDocumentV2 extends Omit<
-  PolicyPack,
-  'schemaVersion' | 'profiles' | 'os' | 'osByCodename' | 'sourceSchemaVersion'
-> {
+/** @deprecated Use ProfileDocument; only v2 authoring is supported. */
+export type ProfileDocumentV2 = ProfileDocument;
+
+/** Authoring format; normalized to ExecutionPolicy before planning or execution. */
+export interface PolicyDocument extends Omit<ExecutionPolicy, 'profiles' | 'osByCodename'> {
   schemaVersion: 2;
   apps: Record<string, ArtifactPolicy>;
-  profiles: ProfileDocumentV2[];
+  profiles: ProfileDocument[];
   deviceSettings: SettingPolicy[];
   os?: Record<string, OsPolicy>;
 }
 
-export type PolicyDocument = PolicyPack | PolicyDocumentV2;
+/** @deprecated Use PolicyDocument; only v2 authoring is supported. */
+export type PolicyDocumentV2 = PolicyDocument;
 
 export interface ExtensionLock {
   id: string;
@@ -220,7 +222,7 @@ export interface ResolvedPolicy {
   engineDigest: string;
   project: ProjectConfig;
   product: ProductDescriptor;
-  policy: PolicyPack;
+  policy: ExecutionPolicy;
   digest: string;
 }
 

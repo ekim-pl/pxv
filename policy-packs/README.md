@@ -2,12 +2,11 @@
 
 These packs demonstrate one, five and arbitrary profile layouts. They are structural templates, not certified hardening policies. No live device acceptance is claimed.
 
-Use each pack's `policy.v2.json` for new Community projects. Its shared app catalog,
+Use each pack's `policy.v2.json` for Community projects. Its shared app catalog,
 profile app references and per-codename OS pins follow the [policy format](../docs/POLICY_FORMAT.md).
-The sibling `policy.json` files remain supported v1 examples used by compatibility,
-acceptance and fork-generation tests; they are not duplicate default entry points.
+Only version 2 policies are supported.
 
-Before using a pack on a phone, a product maintainer must add reviewed OS provenance, APK versions, content digests and signer pins, repository trust anchors, required settings, permission grants and VPN configuration. Empty package lists intentionally avoid presenting invented digests as trusted artifacts. Changing any field changes the resolved policy digest and invalidates the previous reviewed plan.
+Before using a pack on a phone, a product maintainer must add reviewed OS provenance, APK versions, content digests and signer pins, repository trust anchors, required settings, permission grants and VPN configuration. Empty package lists intentionally avoid presenting invented digests as trusted artifacts. Changes to the normalized execution policy change its resolved digest and invalidate the previous reviewed plan. Authoring-only changes, such as adding an unused app catalog entry, do not change that digest. Validate and lock the edited policy before reviewing a new plan.
 
 `reference-five` retains owner, contacts, google, testing and onion roles. `simple` uses only the owner. `custom` demonstrates arbitrary role names and Polish recipient language. Exactly one owner is required; five profiles and the literal name owner are not engine requirements.
 

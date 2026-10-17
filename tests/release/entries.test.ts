@@ -21,6 +21,9 @@ it('runs the canonical guide publisher from outside the checkout without a proje
   const directory = await mkdtemp('/tmp/pxv-docs-entry-');
   temporary.push(directory);
   const output = join(directory, 'guides');
+  const configuration = JSON.parse(await readFile('guides/source/build-manifest.json', 'utf8')) as {
+    editions: string[];
+  };
   const success = await runner.run(
     [
       process.execPath,
@@ -32,18 +35,13 @@ it('runs the canonical guide publisher from outside the checkout without a proje
     { cwd: directory, env: { PATH: '/usr/bin:/bin', PXV_CHROMIUM: '/not-used-by-html-only' } },
   );
   expect(success.code).toBe(0);
-  expect(success.stdout).toContain('4 guide editions built');
+  expect(success.stdout).toContain(`${configuration.editions.length} guide editions built`);
   const manifest = JSON.parse(await readFile(join(output, 'qa/manifest.json'), 'utf8')) as {
     outputCount: number;
     editions: { name: string }[];
   };
-  expect(manifest.outputCount).toBe(4);
-  expect(manifest.editions.map(({ name }) => name)).toEqual([
-    'operator-en',
-    'operator-pl',
-    'user-en',
-    'user-pl',
-  ]);
+  expect(manifest.outputCount).toBe(configuration.editions.length);
+  expect(manifest.editions.map(({ name }) => name)).toEqual(configuration.editions.toSorted());
 });
 it('refuses missing browser selection, unknown flags and invalid output before publishing', async () => {
   const directory = await mkdtemp('/tmp/pxv-docs-errors-');

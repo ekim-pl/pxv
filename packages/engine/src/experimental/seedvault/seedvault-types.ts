@@ -1,7 +1,7 @@
 import type {
   AndroidUserIdentity,
   ObligationWriter,
-  PolicyPack,
+  ExecutionPolicy,
   SeedvaultEvidence,
   SeedvaultInspection,
   SeedvaultProfileIdentity,
@@ -21,7 +21,11 @@ interface SeedvaultExecutionContext extends ExecutionContext {
 
 /** Only typed, inspected Seedvault capabilities cross the device boundary. */
 export interface SeedvaultWorkflowPort {
-  inspect(target: SelectedTarget, policy: PolicyPack, signal?: AbortSignal): Promise<SeedvaultInspection>;
+  inspect(
+    target: SelectedTarget,
+    policy: ExecutionPolicy,
+    signal?: AbortSignal,
+  ): Promise<SeedvaultInspection>;
   executeProfile(
     target: SelectedTarget,
     profile: SeedvaultProfileIdentity,

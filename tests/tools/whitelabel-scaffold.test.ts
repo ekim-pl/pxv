@@ -41,6 +41,7 @@ it('generates a simple default brand and fresh project/device starter without ch
   const communityBefore = await readFile(join(repo, 'product.json'), 'utf8');
   const config = await json<Record<string, unknown>>(join(repo, 'config/templates/white-label.example.json'));
   delete config['starter'];
+  delete (config['product'] as Record<string, unknown>)['features'];
   const configPath = await configFile(root, config);
   const output = join(root, 'out');
 
@@ -54,7 +55,11 @@ it('generates a simple default brand and fresh project/device starter without ch
   const project = await json<{ id: string; productId: string }>(join(output, 'starter/pxv.project.json'));
   const inventory = await json<{ devices: unknown[] }>(join(output, 'starter/inventory.json'));
 
-  expect(product).toMatchObject({ name: 'Acme Fleet', defaultPolicy: 'policy-packs/acme/policy.json' });
+  expect(product).toMatchObject({
+    name: 'Acme Fleet',
+    defaultPolicy: 'policy-packs/acme/policy.json',
+    features: { extensions: false, seedvault: false },
+  });
   expect(theme).toMatchObject({ brandName: 'Acme Fleet', fontAsset: 'assets/fonts/DejaVuSans.ttf' });
   expect(theme.colors).toEqual({ primary: '#17324D', secondary: '#2F6873', accent: '#D9952B' });
   expect(policy.profiles).toHaveLength(1);
@@ -71,6 +76,38 @@ it('generates a simple default brand and fresh project/device starter without ch
   });
   expect(inventory.devices).toEqual([]);
   expect(await readFile(join(repo, 'product.json'), 'utf8')).toBe(communityBefore);
+});
+
+it.each([
+  [{ extensions: true }, { extensions: true, seedvault: false }],
+  [{ seedvault: true }, { extensions: false, seedvault: true }],
+  [
+    { extensions: true, seedvault: true },
+    { extensions: true, seedvault: true },
+  ],
+])('enables only explicitly selected scaffold features %j', async (features, expected) => {
+  const root = await scratch();
+  const config = await json<Record<string, unknown>>(join(repo, 'config/templates/white-label.example.json'));
+  (config['product'] as Record<string, unknown>)['features'] = features;
+  const output = join(root, 'out');
+  const result = scaffold(await configFile(root, config), output);
+  expect(result.status, result.stderr).toBe(0);
+  expect(await json(join(output, 'product.json'))).toMatchObject({ features: expected });
+});
+
+it.each([
+  [null, 'product.features must be an object'],
+  [{ extensions: 'yes' }, 'product.features.extensions must be a boolean'],
+  [{ unknown: true }, 'product.features has missing or unsupported fields'],
+])('rejects invalid scaffold features %j before writing', async (features, expected) => {
+  const root = await scratch();
+  const config = await json<Record<string, unknown>>(join(repo, 'config/templates/white-label.example.json'));
+  (config['product'] as Record<string, unknown>)['features'] = features;
+  const output = join(root, 'out');
+  const result = scaffold(await configFile(root, config), output);
+  expect(result.status).toBe(1);
+  expect(result.stderr).toContain(expected);
+  await expect(readFile(join(output, 'product.json'))).rejects.toThrow();
 });
 
 it('accepts a legacy Polish locale override and optional brand assets', async () => {

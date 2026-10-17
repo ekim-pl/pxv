@@ -58,7 +58,7 @@ function profile(id: string, kind: 'owner' | 'secondary'): ProfilePolicy {
 }
 function configuredPolicy(): PolicyPack {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     id: 'credentials',
     version: '1.0.0',
     name: 'Credentials',

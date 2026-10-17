@@ -5,6 +5,33 @@ import { describe, expect, test } from 'vitest';
 import { SqliteStore } from '../../packages/runtime/src/index.js';
 
 describe('dedicated SQLite worker', () => {
+  test('pages every retained key beyond the legacy entry cap with stable exclusive cursors', async () => {
+    const directory = await mkdtemp('/tmp/pxv-db-pages-');
+    const store = await SqliteStore.open(join(directory, 'db'));
+    try {
+      for (let index = 0; index < 1005; index++)
+        await store.set('runs', `run-${String(index).padStart(4, '0')}`, index);
+      expect(await store.entriesPage('absent')).toEqual({ items: [], nextCursor: null });
+      const first = await store.entriesPage<number>('runs');
+      expect(first.items).toHaveLength(100);
+      expect(first.nextCursor).toBe('run-0099');
+      const second = await store.entriesPage<number>('runs', { cursor: first.nextCursor!, limit: 900 });
+      expect(second.items[0]?.value).toBe(100);
+      const last = await store.entriesPage<number>('runs', { cursor: second.nextCursor! });
+      expect(last.items.map((item) => item.value)).toEqual([1000, 1001, 1002, 1003, 1004]);
+      expect(last.nextCursor).toBeNull();
+      const all = [...first.items, ...second.items, ...last.items];
+      expect(new Set(all.map((item) => item.key)).size).toBe(1005);
+      expect(await store.entriesPage('runs', { cursor: 'zzz' })).toEqual({ items: [], nextCursor: null });
+      expect((await store.entriesPage('runs', { cursor: 'run-1000', limit: 4 })).nextCursor).toBeNull();
+      for (const cursor of ['', 'a\0b', 'a'.repeat(1025)])
+        await expect(store.entriesPage('runs', { cursor })).rejects.toThrow('cursor');
+      for (const limit of [0, -1, 1001, 1.5, NaN])
+        await expect(store.entriesPage('runs', { limit })).rejects.toThrow('limit');
+    } finally {
+      await store.close();
+    }
+  });
   test('persists records, ordered cursor events and deletion', async () => {
     const directory = await mkdtemp('/tmp/pxv-db-');
     const path = join(directory, 'db');
@@ -63,6 +90,7 @@ describe('dedicated SQLite worker', () => {
     const inspect = await SqliteStore.open(path);
     try {
       await expect(inspect.get('damaged', 'key')).rejects.toThrow('original record retained');
+      await expect(inspect.entriesPage('damaged')).rejects.toThrow('damaged/key');
     } finally {
       await inspect.close();
     }

@@ -17,12 +17,26 @@ import {
 
 const runner = new CommandRunner();
 const node = process.execPath;
+const fixtureShebang = `#!/usr/bin/env -S -u NODE_V8_COVERAGE ${node}`;
 async function eventually(predicate: () => Promise<boolean>): Promise<void> {
   for (let index = 0; index < 200; index++) {
     if (await predicate()) return;
     await delay(10);
   }
   throw new Error('Condition did not become true');
+}
+async function ownerCoverageFlushed(directory: string, pid: number): Promise<boolean> {
+  const prefix = `coverage-${pid}-`;
+  const files = await readdir(directory);
+  for (const name of files.filter((name) => name.startsWith(prefix) && name.endsWith('-0.json'))) {
+    try {
+      const trace = JSON.parse(await readFile(join(directory, name), 'utf8')) as { result?: unknown };
+      if (Array.isArray(trace.result)) return true;
+    } catch {
+      // The writer may have created its file before completing the snapshot.
+    }
+  }
+  return false;
 }
 
 describe('checked runtime', () => {
@@ -33,10 +47,13 @@ describe('checked runtime', () => {
     );
     expect(result.stdout).toBe('hello');
     expect(result.stderr).toBe('yes undefined\n');
-    await expect(runner.run([node, '-e', 'process.exit(2)'])).rejects.toBeInstanceOf(CommandError);
-    expect((await runner.run([node, '-e', 'process.exit(3)'], { check: false })).code).toBe(3);
+    await expect(runner.run([node, '-e', 'process.exit(2)'], { env: {} })).rejects.toBeInstanceOf(
+      CommandError,
+    );
+    expect((await runner.run([node, '-e', 'process.exit(3)'], { check: false, env: {} })).code).toBe(3);
     expect(
-      (await runner.run([node, '-e', 'setTimeout(()=>{},10000)'], { timeoutMs: 50, check: false })).code,
+      (await runner.run([node, '-e', 'setTimeout(()=>{},10000)'], { timeoutMs: 50, check: false, env: {} }))
+        .code,
     ).toBe(124);
     await expect(runner.run([])).rejects.toThrow('argument vector');
     await expect(runner.run(['echo'], { timeoutMs: 0 })).rejects.toThrow('timeout');
@@ -52,9 +69,9 @@ describe('checked runtime', () => {
       '-e',
       'let count=0;process.stdin.on("data",b=>count+=b.length).on("end",()=>console.log(count))',
     ];
-    expect((await runner.run(command, { inputFile: file })).stdout).toBe('2097152\n');
+    expect((await runner.run(command, { inputFile: file, env: {} })).stdout).toBe('2097152\n');
     await withDeviceLease(join(directory, 'control'), 'device', 'transport', 'stream', async (lease) => {
-      expect((await runner.run(command, { inputFile: file, mutation: true, lease })).stdout).toBe(
+      expect((await runner.run(command, { inputFile: file, mutation: true, lease, env: {} })).stdout).toBe(
         '2097152\n',
       );
     });
@@ -69,13 +86,18 @@ describe('checked runtime', () => {
     const command = runner.run([node, '-e', 'setTimeout(()=>{},10000)'], {
       signal: active.signal,
       check: false,
+      env: {},
     });
     active.abort();
     expect((await command).code).toBe(124);
     await expect(runner.run(['/nonexistent-pxv-command'])).rejects.toMatchObject({ code: 'ENOENT' });
     expect(
-      (await runner.run([node, '-e', 'process.stdout.write(Buffer.alloc(10*1024*1024))'], { check: false }))
-        .code,
+      (
+        await runner.run([node, '-e', 'process.stdout.write(Buffer.alloc(10*1024*1024))'], {
+          check: false,
+          env: {},
+        })
+      ).code,
     ).toBe(124);
   });
 });
@@ -180,6 +202,7 @@ describe('Linux native ownership', () => {
     const root = await mkdtemp('/tmp/pxv-native-');
     const marker = join(root, 'late');
     const ready = join(root, 'ready');
+    const coverageReady = join(root, 'coverage-ready');
     const module = resolve('packages/runtime/dist/index.js');
     const command = [
       '/bin/sh',
@@ -189,22 +212,31 @@ describe('Linux native ownership', () => {
       ready,
       marker,
     ];
-    const code = `import {withDeviceLease,CommandRunner} from ${JSON.stringify(`file://${module}`)}; await withDeviceLease(${JSON.stringify(root)},'physical','usb','owner-death',async lease=>new CommandRunner().run(${JSON.stringify(command)},{mutation:true,lease,timeoutMs:20000}));`;
+    const code = `import {withDeviceLease,CommandRunner} from ${JSON.stringify(`file://${module}`)}; import {existsSync,writeFileSync} from 'node:fs'; import {takeCoverage} from 'node:v8'; const marker=setInterval(()=>{if(existsSync(${JSON.stringify(ready)})){if(process.env.NODE_V8_COVERAGE)takeCoverage();writeFileSync(${JSON.stringify(coverageReady)},'flushed');clearInterval(marker);}},10); marker.unref(); await withDeviceLease(${JSON.stringify(root)},'physical','usb','owner-death',async lease=>new CommandRunner().run(${JSON.stringify(command)},{mutation:true,lease,timeoutMs:20000}));`;
     const child = spawn(node, ['--input-type=module', '-e', code], { stdio: ['ignore', 'ignore', 'pipe'] });
+    const closed = new Promise<void>((resolve) => child.once('close', () => resolve()));
     let diagnostic = '';
     child.stderr?.on('data', (buffer: Buffer) => {
       diagnostic += buffer.toString();
     });
-    await eventually(async () => {
-      try {
-        await stat(ready);
-        return true;
-      } catch {
-        if (child.exitCode !== null) throw new Error(diagnostic);
-        return false;
-      }
-    });
-    child.kill('SIGKILL');
+    try {
+      await eventually(async () => {
+        try {
+          await stat(coverageReady);
+          return true;
+        } catch {
+          if (child.exitCode !== null) throw new Error(diagnostic);
+          return false;
+        }
+      });
+      const coverageDirectory = process.env['NODE_V8_COVERAGE'];
+      const ownerPid = child.pid;
+      if (coverageDirectory && ownerPid)
+        await eventually(() => ownerCoverageFlushed(coverageDirectory, ownerPid));
+    } finally {
+      child.kill('SIGKILL');
+      await closed;
+    }
     await eventually(async () => (await recoveryReservations(root))[0]?.status === 'recovery_required');
     await delay(1100);
     await expect(stat(marker)).rejects.toMatchObject({ code: 'ENOENT' });
@@ -350,6 +382,7 @@ describe('Linux native ownership', () => {
         const pending = runner.run([node, '-e', 'setTimeout(()=>{},10000)'], {
           mutation: true,
           lease,
+          env: {},
           signal: controller.signal,
         });
         setTimeout(() => controller.abort(), 50);
@@ -414,7 +447,7 @@ describe('Linux native ownership', () => {
       ]) {
         await writeFile(
           program,
-          `#!${node}\nimport {writeSync} from 'node:fs';writeSync(3,${JSON.stringify(payload)});setTimeout(()=>{},100);`,
+          `${fixtureShebang}\nimport {writeSync} from 'node:fs';writeSync(3,${JSON.stringify(payload)});setTimeout(()=>{},100);`,
           { mode: 0o700 },
         );
         await expect(
@@ -431,7 +464,7 @@ describe('Linux native ownership', () => {
   ])('rejects missing or unproven completion receipts %#', async (response) => {
     const root = await mkdtemp('/tmp/pxv-native-');
     const program = join(root, 'fake.mjs');
-    const source = `#!${node}\nimport {writeSync,createReadStream} from 'node:fs';import{createInterface}from'node:readline';const send=v=>writeSync(3,JSON.stringify(v)+'\\n');createInterface({input:createReadStream('',{fd:3})}).on('line',line=>{const m=JSON.parse(line);if(m.type==='acquire')send({type:'ready'});if(m.type==='run'){send({type:'gated',id:m.id});send({...${JSON.stringify(response)},id:m.id});}if(m.type==='finish'){send({type:'finished',success:false,cleanup_proven:true});process.exit(0);}});`;
+    const source = `${fixtureShebang}\nimport {writeSync,createReadStream} from 'node:fs';import{createInterface}from'node:readline';const send=v=>writeSync(3,JSON.stringify(v)+'\\n');createInterface({input:createReadStream('',{fd:3})}).on('line',line=>{const m=JSON.parse(line);if(m.type==='acquire')send({type:'ready'});if(m.type==='run'){send({type:'gated',id:m.id});send({...${JSON.stringify(response)},id:m.id});}if(m.type==='finish'){send({type:'finished',success:false,cleanup_proven:true});process.exit(0);}});`;
     await writeFile(program, source, { mode: 0o700 });
     try {
       vi.stubEnv('PXV_SUPERVISOR', program);
@@ -459,7 +492,7 @@ describe('Linux native ownership', () => {
       for (const source of scripts) {
         await writeFile(
           program,
-          '#!' + node + "\nimport {writeSync} from 'node:fs';" + source + 'setTimeout(()=>{},50);',
+          fixtureShebang + "\nimport {writeSync} from 'node:fs';" + source + 'setTimeout(()=>{},50);',
           { mode: 0o700 },
         );
         await expect(
@@ -483,8 +516,7 @@ describe('Linux native ownership', () => {
     const marker = join(root, 'authorized');
     await writeFile(
       program,
-      '#!' +
-        node +
+      fixtureShebang +
         '\n' +
         "import {writeSync,writeFileSync,createReadStream} from 'node:fs';import{createInterface}from'node:readline';" +
         "const send=v=>writeSync(3,JSON.stringify(v)+'\\n');createInterface({input:createReadStream('',{fd:3})}).on('line',line=>{const m=JSON.parse(line);if(m.type==='acquire')send({type:'ready'});if(m.type==='run')setTimeout(()=>send({type:'gated',id:m.id}),30);if(m.type==='authorize')writeFileSync(" +

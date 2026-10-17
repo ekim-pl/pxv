@@ -59,3 +59,69 @@ describe('CLI argument and consent boundaries', () => {
     expect(write).toHaveBeenCalledWith('0.1.0\n');
   });
 });
+
+describe('command registry validation before project access', () => {
+  it.each(['inspect', 'connections', 'backup', 'restore', 'connect', 'disconnect'])(
+    'requires one exact Seedvault asset for %s before reading resources',
+    async (command) => {
+      for (const flag of ['--all', '--group'])
+        await expect(
+          parseCli([
+            'seedvault',
+            command,
+            flag,
+            ...(flag === '--group' ? ['visit'] : []),
+            '--resource-root',
+            '/missing-pxv-resources',
+          ]),
+        ).rejects.toThrow(`${flag} is not supported`);
+      await expect(
+        parseCli(['seedvault', command, '--resource-root', '/missing-pxv-resources']),
+      ).rejects.toThrow('--asset is required');
+    },
+  );
+  it.each(['finalize', 'attest', 'recover'])(
+    'rejects unsupported dry-run on %s before resource reads',
+    async (command) => {
+      await expect(
+        parseCli(['device', command, '--dry-run', '--resource-root', '/missing-pxv-resources']),
+      ).rejects.toThrow('--dry-run is not supported');
+    },
+  );
+  it('rejects extra positionals, wrong flags and missing required input before resource reads', async () => {
+    for (const [args, message] of [
+      [['policy', 'validate', 'extra'], 'Unexpected positional'],
+      [['agent', 'runs', '--operator', 'ignored'], '--operator is not supported'],
+      [['agent', 'execute', '--plan', 'plan'], '--review-file is required'],
+    ] as const)
+      await expect(parseCli([...args, '--resource-root', '/missing-pxv-resources'])).rejects.toThrow(message);
+  });
+  it('rejects irrelevant attestation evidence before opening resources or project state', async () => {
+    await expect(
+      parseCli([
+        'device',
+        'attest',
+        '--asset',
+        'phone',
+        '--check',
+        'normal_credentials',
+        '--operator',
+        'operator',
+        '--evidence',
+        '/private/ignored.json',
+        '--resource-root',
+        '/missing-pxv-resources',
+      ]),
+    ).rejects.toThrow('--evidence is supported only for --check emulator_image_provenance');
+  });
+  it('prints contextual flags without requiring mutation arguments or opening a project', async () => {
+    const out = vi.fn();
+    const context = await parseCli(['device', 'finalize', '--help', '--resource-root', root], {
+      out,
+      error: vi.fn(),
+    });
+    expect(introductoryCommand(context)).toBe(0);
+    expect(out).toHaveBeenCalledWith(expect.stringContaining('--operator VALUE (required)'));
+    expect(out).not.toHaveBeenCalledWith(expect.stringContaining('--dry-run'));
+  });
+});

@@ -1,3 +1,4 @@
+import { toPolicyDocument } from '@pxv/contracts';
 import { chmod, mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -46,6 +47,7 @@ describe('local encrypted registry operator commands', () => {
   const args = (...values: string[]) => [
     'registry',
     ...values,
+    '--json',
     '--project-root',
     project.root,
     '--resource-root',
@@ -73,7 +75,7 @@ describe('local encrypted registry operator commands', () => {
     resources = join(root, 'resources');
     await mkdir(resources, { mode: 0o700 });
     await writeFile(join(resources, 'product.json'), JSON.stringify(product));
-    const created = await createProject(join(root, 'project'), product, policy, resources);
+    const created = await createProject(join(root, 'project'), product, toPolicyDocument(policy), resources);
     await saveInventory(created, { schemaVersion: 1, devices: [device] });
     project = await loadProject(created.root, product, resources);
     const store = await SqliteStore.open(join(project.root, 'state/pxv.sqlite3'));
@@ -211,10 +213,10 @@ describe('local encrypted registry operator commands', () => {
     await expect(run('history', '--asset', device.assetId)).rejects.toThrow('no registry record');
     await expect(
       run('update', '--all', '--asset', device.assetId, '--file', inputFile, '--record-revision', '0'),
-    ).rejects.toThrow('one exact');
+    ).rejects.toThrow('is not supported');
     await expect(
       run('update', '--group', 'pilot', '--file', inputFile, '--record-revision', '0'),
-    ).rejects.toThrow('one exact');
+    ).rejects.toThrow('is not supported');
     await expect(run('update', '--asset', device.assetId, '--file', inputFile)).rejects.toThrow(
       '--record-revision',
     );
@@ -299,7 +301,7 @@ describe('local encrypted registry operator commands', () => {
   });
 
   it('keeps registry commands local and rejects unsupported commands or missing private unlock input', async () => {
-    await expect(run('init', '--execution', 'docker', '--image', 'unused')).rejects.toThrow('local host');
+    await expect(run('init', '--execution', 'docker')).rejects.toThrow('local host');
     await expect(run('delete')).rejects.toThrow('Unknown registry command');
     const noPassword = args('init').slice(0, -2);
     await expect(runCli(noPassword, io)).rejects.toThrow('local terminal');

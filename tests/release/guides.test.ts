@@ -1,13 +1,13 @@
 import { mkdtemp, readFile, readdir, stat, writeFile } from 'node:fs/promises';
 import { describe, expect, test } from 'vitest';
-import type { HandoffRecord, PolicyPack, ProductDescriptor } from '@pxv/contracts';
-import { resolvePolicy } from '@pxv/contracts';
+import type { HandoffRecord, ProductDescriptor } from '@pxv/contracts';
+import { resolvePolicy, validatePolicy } from '@pxv/contracts';
 import { project } from '../contracts/fixtures.js';
 import { renderHandoff, writeHandoff, type HandoffSnapshot } from '../../packages/guides/src/index.js';
 
 async function snapshot(): Promise<HandoffSnapshot> {
   const product = JSON.parse(await readFile('product.json', 'utf8')) as ProductDescriptor;
-  const policy = JSON.parse(await readFile('policy-packs/simple/policy.json', 'utf8')) as PolicyPack;
+  const policy = validatePolicy(JSON.parse(await readFile('policy-packs/simple/policy.v2.json', 'utf8')));
   const resolvedPolicy = resolvePolicy(policy, { ...project, id: 'project' }, product);
   const record: HandoffRecord = {
     schemaVersion: 1,

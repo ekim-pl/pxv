@@ -24,11 +24,17 @@ brand-specific starter policy, empty project/inventory templates and a `starter`
 directory. `--output-dir` allows review before applying files to the fork. Omitting
 it writes to the source checkout. Inspect generated files before distributing them.
 
+New descriptors explicitly set `features.extensions` and `features.seedvault` to
+`false`. Opt into either reviewed system with boolean `product.features` entries
+in the scaffold configuration, for example `"features": { "extensions": true }`.
+An omitted feature stays disabled in newly generated products. Existing product
+descriptors without `features` retain their compatibility behavior when read.
+
 `starter.policyTemplate` selects `simple` (one owner) or `reference-five` (five profile
-structures). Generated policies use supported v1 authoring; Community's default is
-v2. Neither template supplies deployment-specific OS trust, app pins, VPN accounts,
-backup coverage or acceptance. Customize and, if desired, [convert to v2](POLICY_FORMAT.md)
-through the explicit migration workflow before locking/reviewing.
+structures). Generated policies use the supported version 2 authoring format.
+Neither template supplies deployment-specific OS trust, app pins, VPN accounts,
+backup coverage or acceptance. Customize the [policy](POLICY_FORMAT.md) before
+locking and reviewing it.
 
 `starter.defaultLocale` is a canonical BCP 47 tag applied to generated profiles,
 including the owner. Edit individual profiles afterward as needed. It controls

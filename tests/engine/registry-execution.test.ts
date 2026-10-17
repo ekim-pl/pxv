@@ -1,3 +1,4 @@
+import { toPolicyDocument } from '@pxv/contracts';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -35,16 +36,18 @@ describe('registry invalidation before destructive execution', () => {
       name: 'Work',
       kind: 'secondary',
     });
-    policy.os = {
-      codename: 'akita',
-      release: '2026100600',
-      url: 'https://releases.grapheneos.org/akita-install-2026100600.zip',
-      signatureUrl: 'https://releases.grapheneos.org/akita-install-2026100600.zip.sig',
-      signerPrincipal: 'contact@grapheneos.org',
-      namespace: 'factory images',
-      publicKey: 'ssh-ed25519 AAAA',
+    policy.osByCodename = {
+      akita: {
+        codename: 'akita',
+        release: '2026100600',
+        url: 'https://releases.grapheneos.org/akita-install-2026100600.zip',
+        signatureUrl: 'https://releases.grapheneos.org/akita-install-2026100600.zip.sig',
+        signerPrincipal: 'contact@grapheneos.org',
+        namespace: 'factory images',
+        publicKey: 'ssh-ed25519 AAAA',
+      },
     };
-    const created = await createProject(join(root, 'project'), product, policy, codeRoot);
+    const created = await createProject(join(root, 'project'), product, toPolicyDocument(policy), codeRoot);
     await saveInventory(created, inventory);
     const project = await loadProject(created.root, product, codeRoot);
     path = join(root, 'state.sqlite3');

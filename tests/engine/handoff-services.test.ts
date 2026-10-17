@@ -1,3 +1,4 @@
+import { toPolicyDocument } from '@pxv/contracts';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -24,7 +25,7 @@ describe('independently composed attestation and handoff services', () => {
   const target: SelectedTarget = { device, transport: { kind: 'usb', serial: 'PIXEL1' } };
   beforeEach(async () => {
     root = await mkdtemp(join(tmpdir(), 'pxv-handoff-service-'));
-    const created = await createProject(join(root, 'project'), product, basePolicy());
+    const created = await createProject(join(root, 'project'), product, toPolicyDocument(basePolicy()));
     await saveInventory(created, { schemaVersion: 1, devices: [device] });
     const project = await loadProject(created.root, product);
     store = await SqliteStore.open(join(root, 'state.sqlite'));

@@ -12,7 +12,7 @@ vi.mock('node:worker_threads', async (importOriginal) => {
     ...actual,
     Worker: class extends actual.Worker {
       constructor(...args: ConstructorParameters<typeof actual.Worker>) {
-        super(startup.source ?? args[0], startup.source ? { ...args[1], eval: true } : args[1]);
+        super(startup.source ?? args[0], startup.source ? { ...args[1], eval: true, env: {} } : args[1]);
         workers.push(this);
       }
     },

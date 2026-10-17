@@ -17,7 +17,7 @@ function backend(): AgentBackend {
         : Promise.reject(new Error('Approval mismatch')),
     ),
     getRun: (runId, after) => Promise.resolve({ runId, after, events: [] }),
-    listRuns: () => Promise.resolve([]),
+    listRuns: () => Promise.resolve({ items: [], nextCursor: null }),
     cancelRun: (runId) => Promise.resolve({ runId, requested: true }),
     attestDevice: vi.fn<AgentBackend['attestDevice']>((assetId, check, operator, note, evidence) =>
       Promise.resolve({ assetId, check, operator, note, evidence }),
@@ -140,8 +140,12 @@ describe('real MCP transport contracts', () => {
         { content: [{ type: 'text', text: '{"runId":"run","after":4,"events":[]}' }] },
       );
       expect(await client.callTool({ name: 'list_runs', arguments: {} })).toMatchObject({
-        content: [{ type: 'text', text: '[]' }],
+        content: [{ type: 'text', text: '{"items":[],"nextCursor":null}' }],
       });
+      for (const arguments_ of [{ limit: 1001 }, { limit: 0 }, { cursor: '' }, { cursor: 'a\0b' }])
+        expect(await client.callTool({ name: 'list_runs', arguments: arguments_ })).toMatchObject({
+          isError: true,
+        });
       const resources = await client.listResources();
       expect(resources.resources).toHaveLength(2);
       expect(await client.readResource({ uri: 'pxv://guides/recipient' })).toMatchObject({

@@ -10,9 +10,8 @@ import type {
   HandoffRecord,
   Inventory,
   OperatorAttestation,
-  PolicyPack,
+  ExecutionPolicy,
   PolicyDocument,
-  PolicyDocumentV2,
   ProductDescriptor,
   ProjectConfig,
   RecoveryObligation,
@@ -421,7 +420,7 @@ function policyCredentialReferences(value: z.infer<typeof policyBaseSchema>, con
 
 const policyBaseSchema = z
   .object({
-    schemaVersion: z.literal(1),
+    schemaVersion: z.literal(2, { error: 'Unsupported policy schema version; expected schemaVersion: 2' }),
     id,
     version,
     name: nonempty,
@@ -432,9 +431,7 @@ const policyBaseSchema = z
       .refine(uniqueStrings, 'Duplicate required attestation')
       .default([...DEFAULT_ATTESTATIONS]),
     repositories: z.array(repositoryPolicySchema),
-    os: osPolicySchema.optional(),
     osByCodename: z.record(id, osPolicySchema).optional(),
-    sourceSchemaVersion: z.literal(2).optional(),
   })
   .strict();
 export const policyPackSchema = policyBaseSchema.superRefine((value, context) => {
@@ -453,8 +450,6 @@ export const policyPackSchema = policyBaseSchema.superRefine((value, context) =>
 });
 
 function policyOsPins(value: z.infer<typeof policyBaseSchema>, context: z.RefinementCtx): void {
-  if (value.os && value.osByCodename)
-    context.addIssue({ code: 'custom', message: 'Choose legacy os or osByCodename, not both' });
   if (value.osByCodename) {
     if (!Object.keys(value.osByCodename).length)
       context.addIssue({ code: 'custom', message: 'OS model pins cannot be empty' });
@@ -464,7 +459,7 @@ function policyOsPins(value: z.infer<typeof policyBaseSchema>, context: z.Refine
   }
 }
 
-const profileDocumentV2Schema = profileBaseSchema
+const profileDocumentSchema = profileBaseSchema
   .omit({ packages: true })
   .extend({
     apps: z.array(id).refine(uniqueStrings, 'Duplicate profile app'),
@@ -477,12 +472,11 @@ const profileDocumentV2Schema = profileBaseSchema
   })
   .strict();
 
-const policyDocumentV2Schema = policyBaseSchema
-  .omit({ schemaVersion: true, profiles: true, os: true, osByCodename: true, sourceSchemaVersion: true })
+const policyDocumentSchema = policyBaseSchema
+  .omit({ profiles: true, osByCodename: true })
   .extend({
-    schemaVersion: z.literal(2),
     apps: z.record(id, artifactPolicySchema),
-    profiles: z.array(profileDocumentV2Schema).min(1),
+    profiles: z.array(profileDocumentSchema).min(1),
     deviceSettings: z
       .array(
         settingPolicySchema.refine(
@@ -495,7 +489,7 @@ const policyDocumentV2Schema = policyBaseSchema
   })
   .strict();
 
-function normalizePolicyV2(document: PolicyDocumentV2): PolicyPack {
+function normalizePolicy(document: PolicyDocument): ExecutionPolicy {
   const { apps, deviceSettings, os, profiles, ...base } = document;
   const identities = new Map<string, string>();
   for (const artifact of Object.values(apps)) {
@@ -512,8 +506,6 @@ function normalizePolicyV2(document: PolicyDocumentV2): PolicyPack {
   }
   const normalized = {
     ...base,
-    schemaVersion: 1,
-    sourceSchemaVersion: 2,
     profiles: profiles.map(({ apps: references, settings, ...profile }) => ({
       ...profile,
       packages: references.map((reference) => {
@@ -762,17 +754,15 @@ function parseContract<T>(schema: z.ZodType, value: unknown): T {
 }
 
 export function validatePolicyDocument(value: unknown): PolicyDocument {
-  if (value !== null && typeof value === 'object' && 'schemaVersion' in value && value.schemaVersion === 2) {
-    const document = parseContract<PolicyDocumentV2>(policyDocumentV2Schema, value);
-    normalizePolicyV2(document);
-    return document;
-  }
-  return parseContract(policyPackSchema, value);
+  const document = parseContract<PolicyDocument>(policyDocumentSchema, value);
+  normalizePolicy(document);
+  return document;
 }
-export function validatePolicy(value: unknown): PolicyPack {
-  const document = validatePolicyDocument(value);
-  return document.schemaVersion === 2 ? normalizePolicyV2(document) : document;
+export function validatePolicy(value: unknown): ExecutionPolicy {
+  return normalizePolicy(validatePolicyDocument(value));
 }
+/** Validate expanded engine/lock data, never authored app-catalog documents. */
+export const validatePolicyPack = (value: unknown): ExecutionPolicy => parseContract(policyPackSchema, value);
 export const validateInventory = (value: unknown): Inventory => parseContract(inventorySchema, value);
 export const validateProject = (value: unknown): ProjectConfig => parseContract(projectConfigSchema, value);
 export const validateProduct = (value: unknown): ProductDescriptor =>

@@ -11,7 +11,7 @@ import {
   validateObligation,
   validateObservation,
   validatePlan,
-  validatePolicy,
+  validatePolicyPack,
   validateProduct,
   validateProject,
   validateRunEvent,
@@ -46,17 +46,20 @@ describe('strict configuration parser', () => {
     const changed = structuredClone(policy);
     const profile = changed.profiles[0];
     if (!profile) throw new Error('Fixture profile missing');
-    expect(() => validatePolicy({ ...changed, schemaVersion: '1' })).toThrow();
+    expect(() => validatePolicyPack({ ...changed, schemaVersion: '1' })).toThrow();
     expect(() =>
-      validatePolicy({ ...changed, profiles: [{ ...profile, vpn: { ...profile.vpn, lockdown: 'true' } }] }),
+      validatePolicyPack({
+        ...changed,
+        profiles: [{ ...profile, vpn: { ...profile.vpn, lockdown: 'true' } }],
+      }),
     ).toThrow();
-    expect(() => validatePolicy({ ...changed, os: undefined })).toThrow('undefined');
+    expect(() => validatePolicyPack({ ...changed, osByCodename: undefined })).toThrow('undefined');
   });
 });
 
 describe('policy validation', () => {
   it('rejects unknown fields at every important boundary', () => {
-    expect(() => validatePolicy({ ...policy, inheritedEnvironment: { TOKEN: 'sentinel' } })).toThrow();
+    expect(() => validatePolicyPack({ ...policy, inheritedEnvironment: { TOKEN: 'sentinel' } })).toThrow();
     expect(() => validateProject({ ...project, pythonState: 'state.json' })).toThrow();
     expect(() => validateProduct({ ...product, activationServer: 'https://example.org' })).toThrow();
     expect(() => validateObservation({ ...observation, proof: true })).toThrow();
@@ -89,18 +92,18 @@ describe('policy validation', () => {
   it('requires exactly one owner, unique profiles and unique user names', () => {
     const profile = policy.profiles[0];
     if (!profile) throw new Error('Fixture profile missing');
-    expect(() => validatePolicy({ ...policy, profiles: [] })).toThrow();
-    expect(() => validatePolicy({ ...policy, profiles: [{ ...profile, kind: 'secondary' }] })).toThrow(
+    expect(() => validatePolicyPack({ ...policy, profiles: [] })).toThrow();
+    expect(() => validatePolicyPack({ ...policy, profiles: [{ ...profile, kind: 'secondary' }] })).toThrow(
       'owner',
     );
     expect(() =>
-      validatePolicy({ ...policy, profiles: [profile, { ...profile, kind: 'secondary' }] }),
+      validatePolicyPack({ ...policy, profiles: [profile, { ...profile, kind: 'secondary' }] }),
     ).toThrow('Duplicate profile');
     expect(() =>
-      validatePolicy({ ...policy, profiles: [profile, { ...profile, id: 'second', kind: 'secondary' }] }),
+      validatePolicyPack({ ...policy, profiles: [profile, { ...profile, id: 'second', kind: 'secondary' }] }),
     ).toThrow('Duplicate Android');
     expect(() =>
-      validatePolicy({ ...policy, profiles: [profile, { ...profile, id: 'second', name: 'Second' }] }),
+      validatePolicyPack({ ...policy, profiles: [profile, { ...profile, id: 'second', name: 'Second' }] }),
     ).toThrow('owner');
   });
 
@@ -112,16 +115,16 @@ describe('policy validation', () => {
       profiles: [{ ...profile, ...changes }],
     });
     expect(() =>
-      validatePolicy(withProfile({ packages: [...profile.packages, ...profile.packages] })),
+      validatePolicyPack(withProfile({ packages: [...profile.packages, ...profile.packages] })),
     ).toThrow('Duplicate profile package');
     expect(() =>
-      validatePolicy(withProfile({ settings: [...profile.settings, ...profile.settings] })),
+      validatePolicyPack(withProfile({ settings: [...profile.settings, ...profile.settings] })),
     ).toThrow('Duplicate profile setting');
     expect(() =>
-      validatePolicy(withProfile({ permissions: [...profile.permissions, ...profile.permissions] })),
+      validatePolicyPack(withProfile({ permissions: [...profile.permissions, ...profile.permissions] })),
     ).toThrow('Duplicate profile permission');
     expect(() =>
-      validatePolicy(
+      validatePolicyPack(
         withProfile({
           permissions: [
             { packageId: 'org.example.unknown', permission: 'android.permission.CAMERA', granted: true },
@@ -129,9 +132,9 @@ describe('policy validation', () => {
         }),
       ),
     ).toThrow('undeclared package');
-    expect(() => validatePolicy(withProfile({ packages: [] }))).toThrow('undeclared package');
+    expect(() => validatePolicyPack(withProfile({ packages: [] }))).toThrow('undeclared package');
     expect(() =>
-      validatePolicy(
+      validatePolicyPack(
         withProfile({ vpn: { packageId: 'org.example.unknown', alwaysOn: true, lockdown: true } }),
       ),
     ).toThrow('undeclared package');
@@ -140,13 +143,13 @@ describe('policy validation', () => {
   it('rejects impossible VPN enforcement', () => {
     const profile = policy.profiles[0];
     expect(() =>
-      validatePolicy({
+      validatePolicyPack({
         ...policy,
         profiles: [{ ...profile, vpn: { packageId: null, alwaysOn: true, lockdown: true } }],
       }),
     ).toThrow('requires a package');
     expect(() =>
-      validatePolicy({
+      validatePolicyPack({
         ...policy,
         profiles: [{ ...profile, vpn: { packageId: 'org.example.vpn', alwaysOn: false, lockdown: true } }],
       }),
@@ -166,14 +169,14 @@ describe('policy validation', () => {
       ...policy,
       profiles: [{ ...owner, defaultCredential: credential, defaultDuress: duress }],
     };
-    expect(validatePolicy(configured).profiles[0]?.defaultDuress).toEqual(duress);
+    expect(validatePolicyPack(configured).profiles[0]?.defaultDuress).toEqual(duress);
     for (const defaultCredential of [
       { ...credential, type: 'pattern' },
       { ...credential, secretRef: '../owner-pin' },
       { ...credential, secretRef: 'OwnerPin' },
       { ...credential, value: '123456' },
     ])
-      expect(() => validatePolicy({ ...policy, profiles: [{ ...owner, defaultCredential }] })).toThrow();
+      expect(() => validatePolicyPack({ ...policy, profiles: [{ ...owner, defaultCredential }] })).toThrow();
     expect(() =>
       validateAction({
         kind: 'default-credential',
@@ -196,10 +199,10 @@ describe('policy validation', () => {
     const duress = { ownerCredentialRef: 'owner-pin', pinRef: 'duress-pin', passwordRef: 'duress-password' };
     const secondary = { ...owner, id: 'work', name: 'Work', kind: 'secondary' };
     expect(() =>
-      validatePolicy({ ...policy, profiles: [owner, { ...secondary, defaultDuress: duress }] }),
+      validatePolicyPack({ ...policy, profiles: [owner, { ...secondary, defaultDuress: duress }] }),
     ).toThrow('owner profile');
     expect(
-      validatePolicy({
+      validatePolicyPack({
         ...policy,
         profiles: [
           {
@@ -211,7 +214,7 @@ describe('policy validation', () => {
       }).profiles[0]?.defaultDuress,
     ).toEqual(duress);
     expect(
-      validatePolicy({ ...policy, profiles: [{ ...owner, defaultDuress: duress }] }).profiles[0]
+      validatePolicyPack({ ...policy, profiles: [{ ...owner, defaultDuress: duress }] }).profiles[0]
         ?.defaultDuress,
     ).toEqual(duress);
   });
@@ -234,7 +237,7 @@ describe('policy validation', () => {
     for (const normalRef of ['owner-pin', 'owner-current', 'work-pin'])
       for (const field of ['pinRef', 'passwordRef'])
         expect(() =>
-          validatePolicy({
+          validatePolicyPack({
             ...policy,
             profiles: [
               {
@@ -259,12 +262,12 @@ describe('policy validation', () => {
       maxAgeDays: 7,
       redirectHosts: ['cdn.example.org'],
     };
-    expect(validatePolicy({ ...policy, repositories: [repository] }).repositories).toHaveLength(1);
-    expect(() => validatePolicy({ ...policy, repositories: [repository, repository] })).toThrow(
+    expect(validatePolicyPack({ ...policy, repositories: [repository] }).repositories).toHaveLength(1);
+    expect(() => validatePolicyPack({ ...policy, repositories: [repository, repository] })).toThrow(
       'Duplicate repository',
     );
     expect(() =>
-      validatePolicy({
+      validatePolicyPack({
         ...policy,
         profiles: [{ ...profile, packages: [{ ...artifact, repositoryId: 'missing' }] }],
       }),
@@ -276,20 +279,20 @@ describe('policy validation', () => {
       kind: 'secondary',
       packages: [{ ...artifact, versionCode: 13 }],
     };
-    expect(() => validatePolicy({ ...policy, profiles: [profile, secondary] })).toThrow(
+    expect(() => validatePolicyPack({ ...policy, profiles: [profile, secondary] })).toThrow(
       'Conflicting device-wide APK',
     );
     expect(
-      validatePolicy({ ...policy, profiles: [profile, { ...secondary, packages: [artifact] }] }).profiles,
+      validatePolicyPack({ ...policy, profiles: [profile, { ...secondary, packages: [artifact] }] }).profiles,
     ).toHaveLength(2);
     expect(() =>
-      validatePolicy({
+      validatePolicyPack({
         ...policy,
         repositories: [{ ...repository, url: 'https://user:password@example.org' }],
       }),
     ).toThrow('HTTPS URL');
     expect(() =>
-      validatePolicy({
+      validatePolicyPack({
         ...policy,
         repositories: [{ ...repository, url: 'https://example.org/repo#fragment' }],
       }),
@@ -548,13 +551,16 @@ describe('inline recipes, private inputs and scoped probes', () => {
     const profile = policy.profiles[0];
     if (!profile) throw new Error('Fixture profile missing');
     expect(
-      validatePolicy({ ...policy, profiles: [{ ...profile, recipes: [recipe] }] }).profiles[0]?.recipes,
+      validatePolicyPack({ ...policy, profiles: [{ ...profile, recipes: [recipe] }] }).profiles[0]?.recipes,
     ).toHaveLength(1);
     expect(() =>
-      validatePolicy({ ...policy, profiles: [{ ...profile, recipes: [{ ...recipe, versionCode: 99 }] }] }),
+      validatePolicyPack({
+        ...policy,
+        profiles: [{ ...profile, recipes: [{ ...recipe, versionCode: 99 }] }],
+      }),
     ).toThrow('app identity');
     expect(() =>
-      validatePolicy({ ...policy, profiles: [{ ...profile, recipes: [recipe, recipe] }] }),
+      validatePolicyPack({ ...policy, profiles: [{ ...profile, recipes: [recipe, recipe] }] }),
     ).toThrow('Duplicate recipe');
     expect(validateAction({ kind: 'recipe', profileId: 'admin', recipe }).kind).toBe('recipe');
   });
@@ -566,7 +572,7 @@ describe('inline recipes, private inputs and scoped probes', () => {
     ).toThrow('probe helper');
     const profile = policy.profiles[0];
     if (!profile) throw new Error('Fixture profile missing');
-    const configured = validatePolicy({
+    const configured = validatePolicyPack({
       ...policy,
       profiles: [
         {
@@ -581,13 +587,13 @@ describe('inline recipes, private inputs and scoped probes', () => {
       expect.arrayContaining(['app_setup', 'routes', 'network_failure_tests', 'backup_recovery']),
     );
     expect(() =>
-      validatePolicy({
+      validatePolicyPack({
         ...policy,
         profiles: [{ ...profile, networkProbe: { ...probe, failurePackages: ['org.example.missing'] } }],
       }),
     ).toThrow('not declared');
     expect(() =>
-      validatePolicy({
+      validatePolicyPack({
         ...policy,
         profiles: [{ ...profile, networkProbe: { ...probe, requireVpn: false } }],
       }),

@@ -7,15 +7,15 @@ import {
   canonicalLocale,
   parseDocument,
   profileLocale,
-  validatePolicy,
+  validatePolicyDocument,
   validateProduct,
   validateProject,
 } from '../../../packages/contracts/dist/index.js';
 
-/** @typedef {{schemaVersion:1,product:{id:string,name:string,command:string,packageName:string,debName:string,image:string,support:{name:string,email:string,url:string}},brand:{primary:string,secondary:string,accent:string,fontFamily:string,logoPath?:string,fontFile?:string},starter:{policyTemplate?:'simple'|'reference-five',defaultLocale?:string,language?:string,ownerProfileName?:string}}} ScaffoldConfig */
+/** @typedef {{schemaVersion:1,product:{id:string,name:string,command:string,packageName:string,debName:string,image:string,support:{name:string,email:string,url:string},features?:{extensions?:boolean,seedvault?:boolean}},brand:{primary:string,secondary:string,accent:string,fontFamily:string,logoPath?:string,fontFile?:string},starter:{policyTemplate?:'simple'|'reference-five',defaultLocale?:string,language?:string,ownerProfileName?:string}}} ScaffoldConfig */
 /** @typedef {ScaffoldConfig & {configPath:string}} ConfigWithPath */
 /** @typedef {ReturnType<typeof validateProduct>} Product */
-/** @typedef {ReturnType<typeof validatePolicy>} Policy */
+/** @typedef {ReturnType<typeof validatePolicyDocument>} Policy */
 /** @typedef {ReturnType<typeof validateProject>} Project */
 /** @typedef {{product:Product,policy:Policy,project:Project,brand:Record<string,unknown>,policyPath:string,template:string,logoPath?:string|undefined,logoExtension?:string|undefined,fontPath?:string|undefined,fontExtension?:string|undefined,inventory:{schemaVersion:1,devices:never[]}}} Prepared */
 const sourceRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
@@ -43,10 +43,19 @@ function validateKeys(value, required, name, optional = []) {
 
 /** @param {Record<string, unknown>} value @returns {ScaffoldConfig['product']} */
 function parseProduct(value) {
-  validateKeys(value, ['command', 'debName', 'id', 'image', 'name', 'packageName', 'support'], 'product');
+  validateKeys(value, ['command', 'debName', 'id', 'image', 'name', 'packageName', 'support'], 'product', [
+    'features',
+  ]);
   const id = value['id'];
   if (typeof id !== 'string' || !allowedId.test(id))
     throw new Error('product.id must be a lowercase identifier');
+  if (value['features'] !== undefined) {
+    const features = requireRecord(value['features'], 'product.features');
+    validateKeys(features, [], 'product.features', ['extensions', 'seedvault']);
+    for (const [key, enabled] of Object.entries(features)) {
+      if (typeof enabled !== 'boolean') throw new Error(`product.features.${key} must be a boolean`);
+    }
+  }
   return /** @type {ScaffoldConfig['product']} */ (value);
 }
 
@@ -159,8 +168,8 @@ function generatedProfiles(basePolicy, starter) {
 /** @param {ConfigWithPath} config @returns {Promise<Prepared>} */
 async function prepare(config) {
   const template = config.starter.policyTemplate ?? 'simple';
-  const source = await readFile(join(sourceRoot, 'policy-packs', template, 'policy.json'), 'utf8');
-  const basePolicy = validatePolicy(parseDocument(source));
+  const source = await readFile(join(sourceRoot, 'policy-packs', template, 'policy.v2.json'), 'utf8');
+  const basePolicy = validatePolicyDocument(parseDocument(source));
   const policyPath = `policy-packs/${config.product.id}/policy.json`;
   const logoPath = await inputAsset(config.brand.logoPath, dirname(config.configPath), 'brand.logoPath', [
     '.svg',
@@ -180,12 +189,13 @@ async function prepare(config) {
   const product = validateProduct({
     schemaVersion: 1,
     ...config.product,
+    features: { extensions: false, seedvault: false, ...config.product.features },
     upstreamVersion: '0.1.0',
     engineApi: 1,
     assets: logoAsset ? { logo: logoAsset } : {},
     defaultPolicy: policyPath,
   });
-  const policy = validatePolicy({
+  const policy = validatePolicyDocument({
     ...basePolicy,
     id: config.product.id,
     version: '0.1.0',

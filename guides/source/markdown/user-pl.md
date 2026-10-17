@@ -1,6 +1,6 @@
 # Przygotowany Pixel: przewodnik odbiorcy
 
-Ten przewodnik pomaga odebrać i używać Pixela z GrapheneOS oraz kilkoma profilami użytkowników Androida. Pakiet przekazania opisuje profile i kontrole **Twojego telefonu**. Nazwy aplikacji i położenie opcji zależą od sprawdzonej konfiguracji i zainstalowanej kompilacji.
+Ten przewodnik pomaga odebrać i używać Pixela z GrapheneOS oraz jednym lub wieloma profilami użytkowników Androida. Pakiet przekazania opisuje profile i kontrole **Twojego telefonu**. Nazwy aplikacji i położenie opcji zależą od sprawdzonej konfiguracji i zainstalowanej kompilacji.
 
 **Przed codziennym użyciem:** sprawdź etykietę telefonu, poznaj przeznaczenie profili, zweryfikuj zwykłe blokady, dokończ prywatną konfigurację aplikacji i odbierz instrukcje wsparcia oraz odzyskiwania. Nigdy nie sprawdzaj działania przez użycie kodu lub klucza wymazującego dane.
 
@@ -21,7 +21,7 @@ Zgłoś brakujące aplikacje, niedziałające połączenia lub nieoczekiwane dan
 
 ## 2. Korzystaj z właściwego profilu
 
-Otwórz przełącznik użytkowników Androida i wybierz profil wskazany w pakiecie przekazania. Poproś operatora o pokazanie przełączania, blokowania i kończenia sesji dodatkowego użytkownika na tej kompilacji.
+Jeśli pakiet przekazania wymienia tylko profil właściciela (Owner), korzystaj z niego; przełączanie użytkowników nie jest potrzebne. Jeśli wymienia dodatkowe profile, otwórz przełącznik użytkowników Androida i wybierz właściwy profil. Poproś operatora o pokazanie przełączania, blokowania i kończenia sesji dodatkowego użytkownika na tej kompilacji.
 
 Wykonuj czynności osobiste, służbowe, testowe lub inne uzgodnione zadania we właściwych profilach. Dane aplikacji i konfiguracja konta należą do profilu, w którym zostały wprowadzone. Instalacja aplikacji w kilku profilach nie loguje ich automatycznie na to samo konto.
 

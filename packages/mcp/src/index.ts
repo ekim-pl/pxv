@@ -1,6 +1,6 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import type { EmulatorImagePin } from '@pxv/engine';
+import type { EmulatorImagePin, RunListOptions } from '@pxv/engine';
 import type { Readable, Writable } from 'node:stream';
 import { z } from 'zod';
 
@@ -23,7 +23,7 @@ export interface AgentBackend {
   ): Promise<unknown>;
   executePlan(planId: string, reviewSummary: string, operator: string): Promise<unknown>;
   getRun(runId: string, after: number): Promise<unknown>;
-  listRuns(): Promise<unknown>;
+  listRuns(options?: RunListOptions): Promise<unknown>;
   cancelRun(runId: string): Promise<unknown>;
   attestDevice(
     this: void,
@@ -302,8 +302,27 @@ function registerReadTools(server: McpServer, backend: AgentBackend): void {
     },
     ({ runId, after }) => result(() => backend.getRun(runId, after)),
   );
-  server.registerTool('list_runs', { description: 'Read retained local run metadata', inputSchema: {} }, () =>
-    result(() => backend.listRuns()),
+  server.registerTool(
+    'list_runs',
+    {
+      description: 'Read a key-ordered page of retained run metadata; continue with nextCursor until null',
+      inputSchema: {
+        cursor: z
+          .string()
+          .min(1)
+          .max(1024)
+          .refine((value) => !value.includes('\0'))
+          .optional(),
+        limit: z.number().int().min(1).max(1000).optional(),
+      },
+    },
+    ({ cursor, limit }) =>
+      result(() =>
+        backend.listRuns({
+          ...(cursor !== undefined ? { cursor } : {}),
+          ...(limit !== undefined ? { limit } : {}),
+        }),
+      ),
   );
 }
 

@@ -1,16 +1,16 @@
-import type { Action, ExtensionLock, PolicyPack } from '@pxv/contracts';
-import { canonicalJson, parseDocument, validateExtension, validatePolicy } from '@pxv/contracts';
+import type { Action, ExtensionLock, PolicyDocument } from '@pxv/contracts';
+import { canonicalJson, parseDocument, validateExtension, validatePolicyDocument } from '@pxv/contracts';
 import { readBounded } from '@pxv/runtime';
 import { createHash, randomUUID } from 'node:crypto';
 import { chmod, lstat, mkdir, readdir, rename, rm, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { Worker } from 'node:worker_threads';
 import { extract } from 'tar';
 import { ExtensionDownloader, registryUrl } from './download.js';
 import type { ExtensionMetadata } from './metadata.js';
 import { validateMetadata } from './metadata.js';
 import { validateWorkerInput, validateWorkerResult } from './worker-protocol.js';
+import { invokeWorker } from './worker-process.js';
 
 export type ExtensionSource = { tarball: string; integrity?: string } | { package: string; version: string };
 export interface ExtensionManagerOptions {
@@ -293,20 +293,24 @@ export class ExtensionManager {
     return this.invokeEntry(lock, lock.entry, 'command', command, input, timeoutMs);
   }
 
-  async readContribution(lock: ExtensionLock, kind: 'policyPacks', contribution: string): Promise<PolicyPack>;
+  async readContribution(
+    lock: ExtensionLock,
+    kind: 'policyPacks',
+    contribution: string,
+  ): Promise<PolicyDocument>;
   async readContribution(lock: ExtensionLock, kind: 'guides', contribution: string): Promise<string>;
   async readContribution(
     lock: ExtensionLock,
     kind: 'policyPacks' | 'guides',
     contribution: string,
-  ): Promise<PolicyPack | string> {
+  ): Promise<PolicyDocument | string> {
     const metadata = await this.inspect(lock);
     if (!['policyPacks', 'guides'].includes(kind) || !metadata.contributions[kind].includes(contribution))
       throw new Error('Extension did not declare this contribution');
     const content = (
       await readBounded(join(this.installRoot, lock.installPath, contribution), 2 * 1024 * 1024)
     ).toString('utf8');
-    return kind === 'policyPacks' ? validatePolicy(parseDocument(content)) : content;
+    return kind === 'policyPacks' ? validatePolicyDocument(parseDocument(content)) : content;
   }
 
   async invokeAdapter(
@@ -342,48 +346,12 @@ export class ExtensionManager {
         })
     )
       workerPath = fileURLToPath(new URL('../dist/worker.js', import.meta.url));
-    const instrumentation = process.env['NODE_V8_COVERAGE'];
-    const workerEnv: Record<string, string> = {};
-    if (instrumentation) workerEnv['NODE_V8_COVERAGE'] = instrumentation;
     const entry = pathToFileURL(join(this.installRoot, lock.installPath, entryPath)).href;
-    return await new Promise<Action[]>((resolveActions, reject) => {
-      const worker = new Worker(workerPath, {
-        workerData: { entry, mode, command, input },
-        env: workerEnv,
-        stdout: true,
-        stderr: true,
-        resourceLimits: { maxOldGenerationSizeMb: 128 },
-      });
-      const timer = setTimeout(() => {
-        void worker.terminate();
-        reject(new Error('Extension worker timed out'));
-      }, timeoutMs);
-      const finish = (): void => {
-        clearTimeout(timer);
-        void worker.terminate();
-      };
-      worker.stdout?.resume();
-      worker.stderr?.resume();
-      worker.once('message', (message: unknown) => {
-        finish();
-        try {
-          if (!message || typeof message !== 'object') throw new Error('Invalid extension worker response');
-          const envelope = message as { ok?: unknown; actions?: unknown; error?: unknown };
-          if (envelope.ok !== true)
-            throw new Error(typeof envelope.error === 'string' ? envelope.error : 'Extension worker failed');
-          resolveActions(validateWorkerResult(envelope.actions));
-        } catch (error) {
-          reject(error instanceof Error ? error : new Error('Invalid extension result'));
-        }
-      });
-      worker.once('error', () => {
-        finish();
-        reject(new Error('Extension worker failed'));
-      });
-      worker.once('exit', () => {
-        finish();
-        reject(new Error('Extension worker exited without planned actions'));
-      });
-    });
+    const message = await invokeWorker(workerPath, { entry, mode, command, input }, timeoutMs);
+    if (!message || typeof message !== 'object') throw new Error('Invalid extension worker response');
+    const envelope = message as { ok?: unknown; actions?: unknown; error?: unknown };
+    if (envelope.ok !== true)
+      throw new Error(typeof envelope.error === 'string' ? envelope.error : 'Extension worker failed');
+    return validateWorkerResult(envelope.actions);
   }
 }

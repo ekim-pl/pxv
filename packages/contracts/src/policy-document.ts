@@ -1,15 +1,15 @@
-import type { ArtifactPolicy, PolicyDocumentV2, SettingPolicy } from './types.js';
-import { validatePolicy, validatePolicyDocument } from './schemas.js';
+import type { ArtifactPolicy, PolicyDocument, ExecutionPolicy, SettingPolicy } from './types.js';
+import { validatePolicyPack, validatePolicyDocument } from './schemas.js';
+import { canonicalJson } from './policy.js';
 
-/** Conversion returns new authoring data; callers decide where to save and activate it. */
-export function convertPolicyToV2(value: unknown): PolicyDocumentV2 {
-  const policy = validatePolicy(value);
-  const { profiles, os, osByCodename, sourceSchemaVersion: _source, ...base } = policy;
-  void _source;
+/** Serialize validated expanded engine data to the supported authoring format. */
+export function toPolicyDocument(value: ExecutionPolicy): PolicyDocument {
+  const policy = validatePolicyPack(value);
+  const { profiles, osByCodename, ...base } = policy;
   const apps: Record<string, ArtifactPolicy> = {};
   const references = new Map<string, string>();
   const deviceSettings = new Map<string, SettingPolicy>();
-  const converted = {
+  const document = {
     ...base,
     schemaVersion: 2 as const,
     apps,
@@ -17,7 +17,8 @@ export function convertPolicyToV2(value: unknown): PolicyDocumentV2 {
     profiles: profiles.map(({ packages, settings, ...profile }) => ({
       ...profile,
       apps: packages.map((artifact) => {
-        let reference = references.get(artifact.packageId);
+        const identity = canonicalJson(artifact);
+        let reference = references.get(identity);
         if (!reference) {
           const candidate = artifact.packageId.toLowerCase();
           reference =
@@ -25,7 +26,7 @@ export function convertPolicyToV2(value: unknown): PolicyDocumentV2 {
               ? candidate
               : `app-${Object.keys(apps).length + 1}`;
           while (Object.hasOwn(apps, reference)) reference += '-app';
-          references.set(artifact.packageId, reference);
+          references.set(identity, reference);
           apps[reference] = structuredClone(artifact);
         }
         return reference;
@@ -36,8 +37,8 @@ export function convertPolicyToV2(value: unknown): PolicyDocumentV2 {
         return false;
       }),
     })),
-    ...(osByCodename ? { os: osByCodename } : os ? { os: { [os.codename]: os } } : {}),
+    ...(osByCodename ? { os: osByCodename } : {}),
   };
-  converted.deviceSettings = [...deviceSettings.values()];
-  return validatePolicyDocument(converted) as PolicyDocumentV2;
+  document.deviceSettings = [...deviceSettings.values()];
+  return validatePolicyDocument(document);
 }

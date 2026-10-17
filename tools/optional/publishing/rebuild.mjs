@@ -1,12 +1,13 @@
 #!/usr/bin/env node
-import { access, readFile, writeFile, mkdir, readdir, rm } from 'node:fs/promises';
+import { readFile, writeFile, mkdir, readdir, rm } from 'node:fs/promises';
 import { resolve, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { parseArgs } from 'node:util';
 import { buildDocumentation } from '../../../packages/release/dist/docs.js';
-import { parseDocument, validatePolicy } from '../../../packages/contracts/dist/index.js';
+import { parseDocument, validatePolicyDocument } from '../../../packages/contracts/dist/index.js';
+import { verifyGuideLinks } from './links.mjs';
 
 /** @typedef {{destination:string,htmlOnly:boolean,render:boolean,chrome?:string,policyFile?:string}} BuildOptions */
 /** @typedef {{x0:number,y0:number,x1:number,y1:number}} PageBox */
@@ -274,17 +275,12 @@ async function verifyIndex(destination, productName) {
   const index = await readFile(join(destination, 'index.html'), 'utf8');
   if (!index.includes(`<h1>${productName}`))
     throw Error('Guide index does not use the current product brand');
-  for (const match of index.matchAll(/href="([^"]+)"/gu)) {
-    const link = match[1];
-    if (!link || /^(?:https?:|mailto:|#)/u.test(link)) continue;
-    await access(join(destination, decodeURIComponent(link)));
-  }
 }
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 const options = buildOptions(root);
 const policy = options.policyFile
-  ? validatePolicy(parseDocument(await readFile(options.policyFile, 'utf8')))
+  ? validatePolicyDocument(parseDocument(await readFile(options.policyFile, 'utf8')))
   : undefined;
 const configuration = /** @type {{editions:string[]}} */ (
   JSON.parse(await readFile(join(root, 'guides/source/build-manifest.json'), 'utf8'))
@@ -312,6 +308,7 @@ const product = /** @type {{name:string,upstreamVersion:string}} */ (
   JSON.parse(await readFile(join(root, 'product.json'), 'utf8'))
 );
 await verifyIndex(options.destination, product.name);
+await verifyGuideLinks(options.destination, [join(options.destination, 'index.html'), ...outputs]);
 const qa = join(options.destination, 'qa');
 await mkdir(qa, { recursive: true });
 /** @type {Edition[]} */

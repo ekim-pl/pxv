@@ -13,9 +13,7 @@ const io: CliIo = { out: (value) => output.push(value), error: (value) => output
 describe('guides rebuild command', () => {
   it('leaves other sections alone and rejects unknown guide commands', async () => {
     expect(await guidesRebuildCommand(await parseCli(['version'], io))).toBeUndefined();
-    await expect(guidesRebuildCommand(await parseCli(['guides', 'unknown'], io))).rejects.toThrow(
-      'Choose guides rebuild',
-    );
+    await expect(parseCli(['guides', 'unknown'], io)).rejects.toThrow('Choose guides rebuild');
   });
 
   it('requires the renderer source checkout before launching tools', async () => {
@@ -77,7 +75,7 @@ describe('guides rebuild command', () => {
         'guides',
         'rebuild',
         '--policy',
-        '../../policy-packs/simple/policy.json',
+        '../../policy-packs/simple/policy.v2.json',
         '--output-dir',
         '../../output/profile',
       ],
@@ -96,7 +94,7 @@ describe('guides rebuild command', () => {
         '--output-dir',
         resolve('output/profile'),
         '--policy',
-        resolve('policy-packs/simple/policy.json'),
+        resolve('policy-packs/simple/policy.v2.json'),
       ],
       cwd: process.cwd(),
     });
@@ -109,9 +107,9 @@ describe('guides rebuild command', () => {
       return Promise.resolve();
     };
     for (const args of [
-      ['--policy', 'policy-packs/simple/policy.json'],
-      ['--policy', 'policy-packs/simple/policy.json', '--output-dir', 'guides'],
-      ['--policy', 'policy-packs/simple/policy.json', '--output-dir', 'guides/private'],
+      ['--policy', 'policy-packs/simple/policy.v2.json'],
+      ['--policy', 'policy-packs/simple/policy.v2.json', '--output-dir', 'guides'],
+      ['--policy', 'policy-packs/simple/policy.v2.json', '--output-dir', 'guides/private'],
     ]) {
       const context = await parseCli(['guides', 'rebuild', ...args], io);
       await expect(guidesRebuildCommand(context, { execute })).rejects.toThrow(/Policy booklets require/u);

@@ -1,6 +1,6 @@
 import { DatabaseSync } from 'node:sqlite';
 import { chmodSync } from 'node:fs';
-import type { EncodedTransition } from './store.js';
+import { entryPageOptions, type EncodedTransition } from './store.ts';
 export interface StorageRequest {
   id: number;
   method: string;
@@ -69,6 +69,7 @@ export class StorageHandler {
       get: () => this.get(String(args[0]), String(args[1])),
       set: () => this.set(String(args[0]), String(args[1]), String(args[2])),
       entries: () => this.entries(String(args[0]), Number(args[1])),
+      entriesPage: () => this.entriesPage(String(args[0]), args[1], args[2]),
       delete: () => this.delete(String(args[0]), String(args[1])),
       appendEvent: () => this.appendEvent(String(args[0]), String(args[1])),
       events: () => this.events(String(args[0]), Number(args[1]), Number(args[2])),
@@ -122,6 +123,25 @@ export class StorageHandler {
         key: row['key'],
         value: parseStored(row['value'], `${collection}/${String(row['key'])}`),
       }));
+  }
+  private entriesPage(collection: string, cursorValue: unknown, limitValue: unknown) {
+    const { cursor, limit } = entryPageOptions({
+      ...(cursorValue !== null ? { cursor: cursorValue as string } : {}),
+      limit: limitValue as number,
+    });
+    const rows =
+      cursor === undefined
+        ? this.database
+            .prepare('SELECT key,value FROM records WHERE collection=? ORDER BY key LIMIT ?')
+            .all(collection, limit + 1)
+        : this.database
+            .prepare('SELECT key,value FROM records WHERE collection=? AND key>? ORDER BY key LIMIT ?')
+            .all(collection, cursor, limit + 1);
+    const items = rows.slice(0, limit).map((row) => ({
+      key: String(row['key']),
+      value: parseStored(row['value'], `${collection}/${String(row['key'])}`),
+    }));
+    return { items, nextCursor: rows.length > limit ? items.at(-1)!.key : null };
   }
   private delete(collection: string, key: string): boolean {
     return (

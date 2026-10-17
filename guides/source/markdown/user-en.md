@@ -1,6 +1,6 @@
 # Your prepared Pixel: recipient guide
 
-This guide explains how to receive and use a Pixel prepared with GrapheneOS and several Android user profiles. Your handoff packet describes the profiles and checks for **your phone**. App names and screen locations depend on the reviewed configuration and installed build.
+This guide explains how to receive and use a Pixel prepared with GrapheneOS and one or more Android user profiles. Your handoff packet describes the profiles and checks for **your phone**. App names and screen locations depend on the reviewed configuration and installed build.
 
 **Before daily use:** confirm the phone's label, learn which profile serves each purpose, verify your ordinary locks, complete private app setup, and receive the support and recovery instructions. Never try a destructive code or notification key to check that it works.
 
@@ -21,7 +21,7 @@ Raise missing apps, broken connections or unexpected data before accepting the p
 
 ## 2. Use the intended profile
 
-Open the Android user switcher and select the profile named in your handoff packet. Ask the operator to demonstrate switching, locking and ending a secondary-user session on this exact build.
+If your handoff packet lists only the Owner profile, use that profile; no user switching is needed. If it lists additional profiles, open the Android user switcher and select the intended profile. Ask the operator to demonstrate switching, locking and ending a secondary-user session on this exact build.
 
 Keep personal, work, test or other agreed activities in their intended profiles. App data and account setup belong to the profile where you entered them. Installing an app in several profiles does not sign those profiles into the same account automatically.
 

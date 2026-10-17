@@ -654,7 +654,7 @@ describe('all persistent full Android users', () => {
   it('reconciles every full user against policy rather than silently omitting it', async () => {
     const android = new FixtureAndroid();
     const policy: PolicyPack = {
-      schemaVersion: 1,
+      schemaVersion: 2,
       id: 'test',
       name: 'fixture',
       version: '0.1.0',
@@ -680,7 +680,7 @@ describe('all persistent full Android users', () => {
 
 function fixturePolicy(): PolicyPack {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     id: 'fixture',
     name: 'Fixture',
     version: '0.1.0',

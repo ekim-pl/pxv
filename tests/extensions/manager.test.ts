@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { canonicalJson } from '@pxv/contracts';
 import { ExtensionManager, safeRelativePath, validateMetadata } from '@pxv/extensions';
 import type { ExtensionMetadata } from '@pxv/extensions';
-import { policy } from '../contracts/fixtures.js';
+import { policyDocument } from '../contracts/fixtures.js';
 
 interface TarFile {
   name: string;
@@ -383,7 +383,7 @@ describe('extension distribution and isolation', () => {
     const content = bundle({
       metadata: contributed,
       extra: [
-        { name: 'package/policy.json', content: JSON.stringify(policy) },
+        { name: 'package/policy.json', content: JSON.stringify(policyDocument) },
         {
           name: 'package/adapter.mjs',
           content: `export default {apiVersion:1,plan:input=>[{kind:'manual',capability:'operator_signoff',instructions:'Adapter '+input}]};`,
@@ -391,7 +391,7 @@ describe('extension distribution and isolation', () => {
       ],
     });
     const lock = await manager.install({ tarball: await pathFor(root, content) });
-    expect(await manager.readContribution(lock, 'policyPacks', 'policy.json')).toEqual(policy);
+    expect(await manager.readContribution(lock, 'policyPacks', 'policy.json')).toEqual(policyDocument);
     expect(await manager.readContribution(lock, 'guides', 'guide.md')).toBe('# Private extension guide');
     expect(await manager.invokeAdapter(lock, 'adapter.mjs', 'review')).toEqual([
       { kind: 'manual', capability: 'operator_signoff', instructions: 'Adapter review' },
@@ -412,6 +412,17 @@ describe('extension distribution and isolation', () => {
     });
     const invalid = await manager.install({ tarball: await pathFor(root, malformed) });
     await expect(manager.readContribution(invalid, 'policyPacks', 'policy.json')).rejects.toThrow();
+    const legacy = bundle({
+      metadata: contributed,
+      extra: [
+        { name: 'package/policy.json', content: JSON.stringify({ ...policyDocument, schemaVersion: 1 }) },
+        { name: 'package/adapter.mjs', content: 'export default {apiVersion:1,plan:()=>[]};' },
+      ],
+    });
+    const legacyLock = await manager.install({ tarball: await pathFor(root, legacy) });
+    await expect(manager.readContribution(legacyLock, 'policyPacks', 'policy.json')).rejects.toThrow(
+      'Unsupported policy schema version',
+    );
   });
 });
 

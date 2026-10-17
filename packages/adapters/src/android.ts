@@ -9,7 +9,7 @@ import type {
   AndroidUserIdentity,
   DeviceObservation,
   PermissionPolicy,
-  PolicyPack,
+  ExecutionPolicy,
   ProfileObservation,
   ProfilePolicy,
   RecoveryObligation,
@@ -318,7 +318,7 @@ export class AndroidAdapter {
   }
   async inspect(
     target: SelectedTarget,
-    policy: PolicyPack,
+    policy: ExecutionPolicy,
     signal?: AbortSignal,
   ): Promise<DeviceObservation> {
     await this.guardTarget(target, signal);

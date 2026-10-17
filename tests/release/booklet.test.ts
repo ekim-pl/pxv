@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { marked } from 'marked';
 import { describe, expect, test } from 'vitest';
-import { convertPolicyToV2, validatePolicy, type PolicyPack } from '@pxv/contracts';
+import { toPolicyDocument, validatePolicy, validatePolicyPack, type PolicyPack } from '@pxv/contracts';
 import { policy as fixture } from '../contracts/fixtures.js';
 import { renderPolicyBooklet } from '../../packages/release/src/booklet.js';
 
@@ -19,7 +19,7 @@ const sources = Object.fromEntries(
 
 function installation(count: number): PolicyPack {
   const template = fixture.profiles[0]!;
-  return validatePolicy({
+  return validatePolicyPack({
     ...fixture,
     name: 'Booklet test installation',
     profiles: Array.from({ length: count }, (_, index) => ({
@@ -112,15 +112,14 @@ describe('policy-specific recipient booklets', () => {
     }
   });
 
-  test('normalizes v1 and v2 policies to the same user-facing requirements', () => {
-    const v1 = installation(3);
-    const v2 = validatePolicy(convertPolicyToV2(v1));
-    expect(v2.sourceSchemaVersion).toBe(2);
+  test('preserves user-facing requirements when a v2 document is loaded again', () => {
+    const policy = installation(3);
+    const reloaded = validatePolicy(toPolicyDocument(policy));
     for (const locale of locales) {
       for (const kind of kinds) {
         const source = sources[locale][kind];
-        expect(renderPolicyBooklet(source, kind, v2, locale)).toBe(
-          renderPolicyBooklet(source, kind, v1, locale),
+        expect(renderPolicyBooklet(source, kind, reloaded, locale)).toBe(
+          renderPolicyBooklet(source, kind, policy, locale),
         );
       }
     }
@@ -198,7 +197,7 @@ describe('policy-specific recipient booklets', () => {
       failurePackages: [],
     };
     profile.backup = { enabled: true, transportPackage: 'org.example.backuptransportsentinel' };
-    const normalized = validatePolicy(policy);
+    const normalized = validatePolicyPack(policy);
     const sentinels = [
       'artifactpathsentinel',
       'artifacturlsentinel',

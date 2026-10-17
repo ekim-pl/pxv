@@ -3,13 +3,13 @@ import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import {
   validateHandoff,
-  validatePolicy,
+  validatePolicyPack,
   validateProduct,
   verifyResolvedPolicy,
   digest,
   profileLocale,
   type HandoffRecord,
-  type PolicyPack,
+  type ExecutionPolicy,
   type ProductDescriptor,
   type ResolvedPolicy,
 } from '@pxv/contracts';
@@ -17,7 +17,7 @@ import { atomicWritePrivate, CommandRunner, readBounded, type Runtime } from '@p
 
 export interface HandoffSnapshot {
   product: ProductDescriptor;
-  policy: PolicyPack;
+  policy: ExecutionPolicy;
   record: HandoffRecord;
   assetId: string;
   resolvedPolicy: ResolvedPolicy;
@@ -88,7 +88,7 @@ function validateDisplay(snapshot: HandoffSnapshot, record: HandoffRecord, local
 }
 function validatedHandoff(snapshot: HandoffSnapshot, locale: 'en' | 'pl') {
   const product = validateProduct(snapshot.product);
-  const policy = validatePolicy(snapshot.policy);
+  const policy = validatePolicyPack(snapshot.policy);
   const record = validateHandoff(snapshot.record);
   const resolved = verifyResolvedPolicy(snapshot.resolvedPolicy);
   if (

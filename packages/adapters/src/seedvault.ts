@@ -1,7 +1,7 @@
 import {
   validateSeedvaultRequest,
   type ObligationWriter,
-  type PolicyPack,
+  type ExecutionPolicy,
   type RecoveryObligation,
   type SeedvaultInspection,
   type SeedvaultProfileIdentity,
@@ -26,7 +26,11 @@ export interface SeedvaultExecutionOptions extends OperationOptions {
 /** Uses the normal UI path; never exports keys, runs root, or treats bmgr as a full backup. */
 export class SeedvaultAdapter {
   constructor(readonly android: AndroidAdapter) {}
-  inspect(target: SelectedTarget, policy: PolicyPack, signal?: AbortSignal): Promise<SeedvaultInspection> {
+  inspect(
+    target: SelectedTarget,
+    policy: ExecutionPolicy,
+    signal?: AbortSignal,
+  ): Promise<SeedvaultInspection> {
     return inspectSeedvault(this.android, target, policy, signal);
   }
   async executeProfile(

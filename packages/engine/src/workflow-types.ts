@@ -2,7 +2,8 @@ import type {
   AndroidUserIdentity,
   ArtifactPolicy,
   DeviceObservation,
-  PolicyPack,
+  OsPolicy,
+  ExecutionPolicy,
   ProfilePolicy,
   ReviewedPlan,
   SelectedTarget,
@@ -85,7 +86,7 @@ export interface CapabilityEvidenceRef {
 
 export interface WorkflowPort {
   readonly capabilities?: { uiAutomation: boolean };
-  inspect(target: SelectedTarget, policy: PolicyPack, signal?: AbortSignal): Promise<DeviceObservation>;
+  inspect(target: SelectedTarget, policy: ExecutionPolicy, signal?: AbortSignal): Promise<DeviceObservation>;
   createUser(
     target: SelectedTarget,
     profile: ProfilePolicy,
@@ -134,7 +135,7 @@ export interface WorkflowPort {
     profile: ProfilePolicy,
     context: ExecutionContext,
   ): Promise<void>;
-  flash(target: SelectedTarget, policy: PolicyPack, context: ExecutionContext): Promise<void>;
+  flash(target: SelectedTarget, policy: ExecutionPolicy, context: ExecutionContext): Promise<void>;
   finalize(target: SelectedTarget, context: ExecutionContext): Promise<void>;
   runRecipe?(
     target: SelectedTarget,
@@ -175,7 +176,7 @@ export interface OsSnapshot {
   signaturePath: string;
   sha256: string;
   signatureSha256: string;
-  policy: NonNullable<PolicyPack['os']>;
+  policy: OsPolicy;
 }
 
 export interface ArtifactPort {
@@ -190,11 +191,7 @@ export interface ArtifactPort {
     target: SelectedTarget,
     signal?: AbortSignal,
   ): Promise<void>;
-  snapshotOs?(
-    policy: NonNullable<PolicyPack['os']>,
-    destination: string,
-    signal?: AbortSignal,
-  ): Promise<OsSnapshot>;
+  snapshotOs?(policy: OsPolicy, destination: string, signal?: AbortSignal): Promise<OsSnapshot>;
 }
 
 export type Operation = 'create-users' | 'deploy-apps' | 'provision' | 'install-os' | 'extension';

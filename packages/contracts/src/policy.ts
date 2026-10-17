@@ -3,7 +3,7 @@ import { profileLocale } from './locales.js';
 import {
   validateInventory,
   validateObservation,
-  validatePolicy,
+  validatePolicyPack,
   validateProduct,
   validateProject,
   validateResolvedPolicy,
@@ -17,7 +17,7 @@ import type {
   ObservationCheck,
   ObservationReport,
   OsPolicy,
-  PolicyPack,
+  ExecutionPolicy,
   ProfilePolicy,
   ProductDescriptor,
   ProjectConfig,
@@ -71,7 +71,7 @@ export function digest(value: unknown): string {
 }
 
 export function resolvePolicy(
-  policy: PolicyPack,
+  policy: ExecutionPolicy,
   project: ProjectConfig,
   product: ProductDescriptor,
   engineDigest = digest({ version: '0.1.0', api: 1 }),
@@ -87,7 +87,7 @@ export function resolvePolicy(
     engineDigest,
     project: validatedProject,
     product: validatedProduct,
-    policy: validatePolicy(policy),
+    policy: validatePolicyPack(policy),
   };
   return { ...lock, digest: digest(lock) };
 }
@@ -101,12 +101,12 @@ export function verifyResolvedPolicy(value: unknown): ResolvedPolicy {
 
 /** Resolve only the enrolled model's exact pin; never substitute another model. */
 export function osPolicyForTarget(
-  policy: Pick<PolicyPack, 'os' | 'osByCodename'>,
+  policy: Pick<ExecutionPolicy, 'osByCodename'>,
   codename: string,
 ): OsPolicy | undefined {
   if (policy.osByCodename)
     return Object.hasOwn(policy.osByCodename, codename) ? policy.osByCodename[codename] : undefined;
-  return policy.os?.codename === codename ? policy.os : undefined;
+  return undefined;
 }
 
 function chooseTransport(device: DeviceTarget, preferred?: Transport['kind']): Transport {
@@ -224,10 +224,10 @@ function checkProfile(profile: ProfilePolicy, actual: ObservedProfile, check: Ob
 
 /** Shared by attestation and finalization; operator receipts cannot change failed checks. */
 export function evaluateObservation(
-  input: PolicyPack | ResolvedPolicy,
+  input: ExecutionPolicy | ResolvedPolicy,
   observation: DeviceObservation,
 ): ObservationReport {
-  const policy = validatePolicy('policy' in input ? input.policy : input);
+  const policy = validatePolicyPack('policy' in input ? input.policy : input);
   const measured = validateObservation(observation);
   const checks: ObservationCheck[] = [];
   const check = (key: string, expected: unknown, actual: unknown): void => {
@@ -241,7 +241,7 @@ export function evaluateObservation(
   };
   check('device.codename', measured.device.codename, measured.os.codename);
   const os = osPolicyForTarget(policy, measured.device.codename);
-  if (policy.os || policy.osByCodename) {
+  if (policy.osByCodename) {
     check('os.supported', true, os !== undefined);
     if (os) {
       check('os.codename', os.codename, measured.os.codename);
@@ -283,7 +283,7 @@ export function ownedObligations(
   );
 }
 
-function normalCredentialsRequired(policy: PolicyPack): boolean {
+function normalCredentialsRequired(policy: ExecutionPolicy): boolean {
   return (
     policy.capabilities.includes('normal_credentials') ||
     policy.profiles.some(
@@ -291,11 +291,11 @@ function normalCredentialsRequired(policy: PolicyPack): boolean {
     )
   );
 }
-function duressRequired(policy: PolicyPack): boolean {
+function duressRequired(policy: ExecutionPolicy): boolean {
   return policy.capabilities.includes('duress') || policy.profiles.some((profile) => profile.defaultDuress);
 }
 export function requiredAttestations(
-  policy: PolicyPack,
+  policy: ExecutionPolicy,
   deviceKind: DeviceTarget['kind'] = 'pixel',
 ): string[] {
   const result = new Set(policy.requiredAttestations);
@@ -355,7 +355,7 @@ const requirementText: Record<string, { en: string; pl: string }> = {
 };
 
 export function buildReadinessRequirements(
-  policy: PolicyPack,
+  policy: ExecutionPolicy,
   deviceKind: DeviceTarget['kind'] = 'pixel',
 ): ReadinessRequirement[] {
   return requiredAttestations(policy, deviceKind).map((id) => ({
@@ -379,7 +379,7 @@ export function buildReadinessRequirements(
 }
 
 /** Private normal credentials precede language setup; duress is always last and never activated. */
-export function finalSetupActions(policy: PolicyPack): Action[] {
+export function finalSetupActions(policy: ExecutionPolicy): Action[] {
   const actions: Action[] = [];
   for (const profile of policy.profiles)
     if (profile.defaultCredential)

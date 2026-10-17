@@ -1,16 +1,17 @@
 import { runExitCode } from './device-command.js';
-import { withRunPauseReason, type Operation, type RunRecord } from '@pxv/engine';
+import { type RunRecord } from '@pxv/engine';
 import { readBounded } from '@pxv/runtime';
+import { takeCoverage } from 'node:v8';
 import type { ApplicationCliContext } from './arguments.js';
 import { confirmation } from './arguments.js';
 import { agentBackend } from './backend.js';
 
-async function runResponse(context: ApplicationCliContext, run: RunRecord | undefined) {
-  if (!run) return undefined;
-  const plan = await context.app.store.get<{ operation?: Operation }>('plans', run.planId);
-  return withRunPauseReason(run, plan?.operation);
+function runListOptions(context: ApplicationCliContext) {
+  return {
+    ...(context.values['cursor'] !== undefined ? { cursor: context.value('cursor') } : {}),
+    ...(context.values['limit'] !== undefined ? { limit: Number(context.value('limit')) } : {}),
+  };
 }
-
 export async function internalWorker(context: ApplicationCliContext): Promise<number> {
   const { value } = context;
 
@@ -20,7 +21,6 @@ export async function internalWorker(context: ApplicationCliContext): Promise<nu
   if (process.connected) process.disconnect();
   try {
     const run = await app.engine.execute(runId, signal);
-    await app.store.delete('worker-launch', runId);
     return run.status === 'completed' ? 0 : run.status === 'pending' ? 4 : 3;
   } catch (error) {
     const prior = await app.store.get<RunRecord>('runs', runId);
@@ -31,6 +31,9 @@ export async function internalWorker(context: ApplicationCliContext): Promise<nu
         error: 'Worker stopped; inspect retained evidence before another review',
       });
     throw error;
+  } finally {
+    if (process.env['NODE_V8_COVERAGE']) takeCoverage();
+    await app.store.delete('worker-launch', runId);
   }
 }
 export async function agentCommand(context: ApplicationCliContext): Promise<number> {
@@ -49,20 +52,12 @@ export async function agentCommand(context: ApplicationCliContext): Promise<numb
     return 0;
   }
   if (command === 'runs') {
-    const runs = await app.store.entries<RunRecord>('runs');
-    output(
-      await Promise.all(
-        runs.map(async (item) => ({ ...item, value: await runResponse(context, item.value) })),
-      ),
-    );
+    output(await app.engine.listRuns(runListOptions(context)));
     return 0;
   }
   if (command === 'status') {
     const cursor = Number(value('after', '0'));
-    output({
-      run: await runResponse(context, await app.store.get<RunRecord>('runs', value('run'))),
-      events: await app.store.events(value('run'), cursor, 100),
-    });
+    output(await app.engine.runStatus(value('run'), cursor));
     return 0;
   }
   if (command === 'cancel') {
@@ -77,8 +72,8 @@ export async function agentCommand(context: ApplicationCliContext): Promise<numb
       flag('yes'),
     );
     const run = await app.engine.execute(value('run'), signal);
-    output(await runResponse(context, run));
-    return 0;
+    output(await app.engine.describeRun(run));
+    return runExitCode([run]);
   }
   if (command === 'execute') return executePlan(context);
   throw new Error('Unknown agent command');
@@ -93,7 +88,7 @@ async function executePlan(context: ApplicationCliContext): Promise<number> {
     // durable manual pause; detaching would orphan it when PID 1 exits.
     const submitted = await app.engine.submit(value('plan'), summary, value('operator'));
     const run = await app.engine.execute(submitted.id, signal);
-    output(await runResponse(context, run));
+    output(await app.engine.describeRun(run));
     return runExitCode([run]);
   }
   const run = await agentBackend(app.engine, resources, launcher, true).executePlan(
@@ -101,6 +96,6 @@ async function executePlan(context: ApplicationCliContext): Promise<number> {
     summary,
     value('operator'),
   );
-  output(withRunPauseReason(run as RunRecord));
+  output(run);
   return 0;
 }

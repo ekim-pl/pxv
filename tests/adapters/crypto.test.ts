@@ -217,13 +217,14 @@ describe('real cryptographic artifact checks', () => {
     const inputFile = join(directory, 'early-exit-input');
     await writeFile(inputFile, Buffer.alloc(8 * 1024 * 1024));
     for (let attempt = 0; attempt < 6; attempt++) {
-      const result = await native.run([process.execPath, '-e', 'process.exit(7)'], { inputFile });
+      const result = await native.run([process.execPath, '-e', 'process.exit(7)'], { inputFile, env: {} });
       expect(result.code).toBe(7);
     }
   });
   it('propagates input-read and spawn failures while stopping the child and its streams', async () => {
     await expect(
       native.run([process.execPath, '-e', 'process.stdin.resume()'], {
+        env: {},
         inputFile: join(directory, 'missing-input'),
       }),
     ).rejects.toMatchObject({ code: 'ENOENT' });

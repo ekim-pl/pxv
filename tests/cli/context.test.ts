@@ -1,3 +1,4 @@
+import { toPolicyDocument } from '@pxv/contracts';
 import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import type * as FileSystemModule from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -161,7 +162,7 @@ describe('production dependency wiring and evidence boundaries', () => {
     const artifact = policy.profiles[0]?.packages[0];
     if (!artifact) throw new Error('Fixture artifact missing');
     artifact.path = 'app.apk';
-    const project = await createProject(projectRoot, product, policy);
+    const project = await createProject(projectRoot, product, toPolicyDocument(policy));
     await saveInventory(project, { schemaVersion: 1, devices: [target.device] });
     const store = await SqliteStore.open(join(projectRoot, 'state/pxv.sqlite3'));
     await store.close();
@@ -335,7 +336,7 @@ describe('production dependency wiring and evidence boundaries', () => {
       pinRef: 'duress-pin',
       passwordRef: 'duress-password',
     };
-    await writeFile(join(projectRoot, 'policy.yaml'), JSON.stringify(policy));
+    await writeFile(join(projectRoot, 'policy.yaml'), JSON.stringify(toPolicyDocument(policy)));
     const app = await openApp();
     expect(mocks.credentialConstruct).not.toHaveBeenCalled();
     const signal = new AbortController().signal;
@@ -375,7 +376,7 @@ describe('production dependency wiring and evidence boundaries', () => {
       redirectHosts: [],
     };
     policy.repositories = [repository];
-    await writeFile(join(projectRoot, 'policy.yaml'), JSON.stringify(policy));
+    await writeFile(join(projectRoot, 'policy.yaml'), JSON.stringify(toPolicyDocument(policy)));
     const configured = await openApp();
     const approved = { ...artifact, repositoryId: 'trusted', url: 'https://example.org/repo/app.apk' };
     delete approved.path;
@@ -462,23 +463,29 @@ describe('production dependency wiring and evidence boundaries', () => {
     await expect(app.engine.artifacts.snapshotOs?.(os, '/snapshot')).rejects.toThrow('direct USB');
     expect(mocks.imageSnapshot).not.toHaveBeenCalled();
     expect(mocks.require).not.toHaveBeenCalled();
-    await expect(app.engine.port.flash(target, { ...policy, os }, execution)).rejects.toThrow('direct USB');
+    await expect(
+      app.engine.port.flash(target, { ...policy, osByCodename: { akita: os } }, execution),
+    ).rejects.toThrow('direct USB');
     expect(mocks.imageVerify).not.toHaveBeenCalled();
     expect(mocks.android.flash).not.toHaveBeenCalled();
     process.env['PXV_DOCKER_MODE'] = 'direct';
     expect(await app.engine.artifacts.snapshotOs?.(os, '/snapshot')).toEqual(snapshot);
     delete process.env['PXV_DOCKER_MODE'];
     await expect(app.engine.port.flash(target, policy, execution)).rejects.toThrow('OS policy missing');
-    await expect(app.engine.port.flash(target, { ...policy, os }, execution)).rejects.toThrow(
-      'OS snapshot missing',
-    );
+    await expect(
+      app.engine.port.flash(target, { ...policy, osByCodename: { akita: os } }, execution),
+    ).rejects.toThrow('OS snapshot missing');
     mocks.imageVerify.mockResolvedValue(snapshot);
-    await app.engine.port.flash(target, { ...policy, os }, { ...execution, osSnapshot: snapshot });
+    await app.engine.port.flash(
+      target,
+      { ...policy, osByCodename: { akita: os } },
+      { ...execution, osSnapshot: snapshot },
+    );
     expect(mocks.android.flash).toHaveBeenCalled();
     await expect(
       app.engine.port.flash(
         target,
-        { ...policy, os: { ...os, release: '2026100700' } },
+        { ...policy, osByCodename: { akita: { ...os, release: '2026100700' } } },
         { ...execution, osSnapshot: snapshot },
       ),
     ).rejects.toThrow('snapshot policy differs');

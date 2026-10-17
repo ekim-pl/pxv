@@ -2,8 +2,6 @@ import { resolveSelection, validateProject } from '@pxv/contracts';
 import {
   containedPath,
   recordLifecycle,
-  withRunPauseReason,
-  type Operation,
   type PreparedOperation,
   type RunRecord,
   type WorkflowEngine,
@@ -90,12 +88,6 @@ function backendContext(engine: WorkflowEngine, allowMutations: boolean) {
   };
 }
 type BackendContext = ReturnType<typeof backendContext>;
-
-async function runResponse(engine: WorkflowEngine, run: RunRecord | undefined) {
-  if (!run) return undefined;
-  const plan = await engine.store.get<{ operation?: Operation }>('plans', run.planId);
-  return withRunPauseReason(run, plan?.operation);
-}
 
 function workerEnvironment(): Record<string, string> {
   const env: Record<string, string> = { PATH: process.env['PATH'] ?? '/usr/bin:/bin' };
@@ -204,18 +196,10 @@ function readBackend(
       return publicValue(await engine.observe(select(assetId)));
     },
     async getRun(runId, after) {
-      return publicValue({
-        run: await runResponse(engine, await engine.store.get<RunRecord>('runs', runId)),
-        events: await engine.store.events(runId, after, 100),
-      });
+      return publicValue(await engine.runStatus(runId, after));
     },
-    async listRuns() {
-      const records = await engine.store.entries<RunRecord>('runs');
-      return publicValue(
-        await Promise.all(
-          records.map(async (item) => ({ ...item, value: await runResponse(engine, item.value) })),
-        ),
-      );
+    async listRuns(options) {
+      return publicValue(await engine.listRuns(options));
     },
     async guide(name) {
       return readFile(
@@ -256,10 +240,10 @@ function workflowBackend(
         const claimed = await engine.store.compareAndSet('worker-launch', run.id, undefined, {
           claimedAt: new Date().toISOString(),
         });
-        if (!claimed) return publicValue(await runResponse(engine, run));
+        if (!claimed) return publicValue(await engine.describeRun(run));
         await launchWorker(engine, resources, launcher, run);
       }
-      return publicValue(await runResponse(engine, run));
+      return publicValue(await engine.describeRun(run));
     },
     async cancelRun(runId) {
       if (!allowMutations) throw new Error('Explicit cancellation requires mutations enabled');
@@ -426,7 +410,7 @@ export function liveAgentBackend(
     executePlan: (planId, summary, operator) =>
       using((backend) => backend.executePlan(planId, summary, operator)),
     getRun: (runId, after) => using((backend) => backend.getRun(runId, after), true),
-    listRuns: () => using((backend) => backend.listRuns(), true),
+    listRuns: (options) => using((backend) => backend.listRuns(options), true),
     cancelRun: (runId) => using((backend) => backend.cancelRun(runId), false, false, true),
     attestDevice: (assetId, check, operator, note, evidence) =>
       using((backend) => backend.attestDevice(assetId, check, operator, note, evidence)),

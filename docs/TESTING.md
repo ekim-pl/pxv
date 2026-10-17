@@ -164,7 +164,15 @@ Use the unfiltered command for the actual gate:
 PXV_REQUIRE_CRYPTO=1 pnpm test:coverage
 ```
 
-The harness writes raw Node worker/subprocess traces to `.quality/v8`, source-maps them onto the executable Vitest maps, and reports the merged result in `.quality/coverage.json` and `coverage/coverage-final.json`. Type/comment lines never become statements, and unmatched child branch ranges never imply coverage. Do not override the aggregate command's coverage output directory: the merge expects the configured `coverage/coverage-final.json` path. Run one aggregate quality/coverage process per checkout at a time because these output locations are shared.
+Vitest collects coverage for its own test workers. The aggregate harness enables
+native Node tracing only for application workers and subprocesses spawned by the
+tests, avoiding a second trace of the test-pool supervisor during forced teardown.
+Application workers flush coverage and their owners await exit before teardown;
+fixture executables containing no application code are not traced. Empty or
+incomplete trace files receive bounded retries. Persistent malformed traces name
+the offending files and fail the coverage report rather than being discarded.
+
+The harness writes raw application worker/subprocess traces to `.quality/v8`, source-maps them onto the executable Vitest maps, and reports the merged result in `.quality/coverage.json` and `coverage/coverage-final.json`. Type/comment lines never become statements, and unmatched child branch ranges never imply coverage. Do not override the aggregate command's coverage output directory: the merge expects the configured `coverage/coverage-final.json` path. Run one aggregate quality/coverage process per checkout at a time because these output locations are shared.
 
 ## Diagnose failures without weakening the gate
 

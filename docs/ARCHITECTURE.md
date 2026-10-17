@@ -8,10 +8,15 @@ The façade's retained public port, plan, run/state and emulator-evidence type e
 
 ## Core data flow
 
-Version 2 authoring policies normalize a shared app catalog, owner-scoped device
-settings and per-codename OS pins into the existing action contracts. Legacy v1
-normalization preserves historical lock identities. Converted input carries its
-version in the resolved identity and requires a new review. See [policy format](POLICY_FORMAT.md).
+Only version 2 authoring policies are accepted. The engine expands the shared app
+catalog, owner-scoped device settings and per-codename OS pins into a version 2
+execution model consumed by the existing action contracts. Version 1 policies and
+their retained locks are unsupported. See [policy format](POLICY_FORMAT.md).
+
+`PolicyDocument` names authored input, while `ExecutionPolicy` names the expanded
+engine model. Their validators and serializers remain separate even though both
+use schema version 2. The former public `PolicyPack` type remains a deprecated
+alias for `ExecutionPolicy`; the wire format is unchanged.
 
 Project-local `state/artifacts` stores verified content by digest. Per-plan immutable
 paths retain shared bytes and repository evidence. Concurrent publication is atomic;
@@ -34,7 +39,16 @@ only within one measurement; user membership and permission checks remain separa
 
 A dedicated Node worker owns synchronous built-in SQLite calls behind the injected `Store` interface. Expected-state transitions commit related records and audit events in one short transaction. Run/manual checkpoints, attestations, handoff/custody and lifecycle archival cannot leave a successful record with a missing companion write. A changed expected generation rejects the transition. Unknown/malformed records remain available for inspection. Event reads use bounded cursors; read-only access refuses to initialize a missing database. Atomic private files use replacement, file fsync and directory fsync.
 
-Application composition owns storage lifetime; services borrow it. Failed application construction closes the opened worker, and each MCP request closes its own context. Storage startup has a bounded readiness wait, rejects premature exits including exit 0, and retries only idempotent database initialization on lock contention. Worker loss rejects pending requests; reopening does not replay them.
+Shared engine queries provide run status, pause reasons and history to CLI and MCP.
+Run history uses bounded keyset pages with opaque continuation cursors rather than
+a silently capped collection read. Superseded-plan replacements are resolved in
+one history traversal per requested page. Latest-run queries enrich only the
+selected record. Event cursors remain separate sequence numbers.
+The CLI command registry owns usage, supported flags, required arguments and
+feature gates, and validates requests before project state is opened. Presentation
+converts structured results to readable summaries or explicit `--json` output.
+
+Application composition owns storage lifetime; services borrow it. Failed application construction closes the opened worker, and each MCP request closes its own context. Storage startup has a bounded readiness wait, rejects premature exits including exit 0, and retries only idempotent database initialization on lock contention. Worker loss rejects pending requests; reopening does not replay them. Closing storage awaits worker exit, and a failed database close still closes the worker message port so shutdown can settle with the original error.
 
 Project ownership serializes cooperating configuration writes and operations. Submission, execution, review refresh, attestation, finalization, custody and lifecycle changes recheck the loaded configuration, policy and inventory byte revisions plus executable identity after acquiring it. Stale contexts require reload and review. Configuration/lock writes also compare their expected source revisions. Project ownership precedes physical-device ownership.
 

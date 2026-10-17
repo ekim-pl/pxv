@@ -5,6 +5,12 @@ plans, bounded event cursors and per-phone recovery state. They do not provide a
 remote MDM service or cross-workstation ownership. Use one shared operator control
 directory for native installations, forks and containers that can reach a phone.
 
+CLI summaries are human-readable by default. Add `--json` whenever a script parses
+stdout; successful structured commands emit one JSON document, with progress and
+diagnostics on stderr. On a nonzero exit, stdout may be empty or contain partial
+results; check the exit outcome before treating any returned preparation as complete. Help, version and guide output remain textual. This is an
+intentional change from the previous default JSON output.
+
 ## Prepare, review and execute
 
 Prepare a provisioning plan with `device plan --asset ID` or a supported
@@ -26,7 +32,7 @@ capture/review files; use new names for another review.
   test ! -L "$P/secrets"
   test "$(stat -c '%u:%a' "$P/secrets")" = "$(id -u):700"
   set -C
-  pxv device plan --project-root "$P" --asset PHONE_ID > "$P/secrets/plan.json"
+  pxv device plan --project-root "$P" --asset PHONE_ID --json > "$P/secrets/plan.json"
   node --input-type=module - "$P/secrets/plan.json" "$P/secrets/review.txt" <<'NODE'
 import { readFileSync, writeFileSync } from 'node:fs';
 const plan = JSON.parse(readFileSync(process.argv[2], 'utf8'));
@@ -45,8 +51,8 @@ An editor-added newline changes the exact review and is rejected.
 ```sh
 pxv agent execute --project-root "$P" --plan PLAN_ID \
   --review-file "$P/secrets/review.txt" --operator 'Operator'
-pxv agent runs --project-root "$P"
-pxv agent status --project-root "$P" --run RUN_ID --after 0
+pxv agent runs --project-root "$P" --limit 100 --json
+pxv agent status --project-root "$P" --run RUN_ID --after 0 --json
 ```
 
 Submission and its run record commit atomically. Reusing an idempotency key with
@@ -84,6 +90,11 @@ selector, delete a fence, change the control root or replay a flash to bypass th
 state. Attestation, finalization and recovery select one exact asset. See the
 [recovery runbook](CANARY_BACKUP_RECOVERY.md).
 
+Execution and resume exit with 4 when further work is pending, 3 when failed or
+inspection is required, and 130 when cancelled. A pending result is a checkpoint to
+inspect, not an execution failure to retry. Read its structured status before
+choosing the next command; a successful process exit never supplies a human check.
+
 If a valid pending run at an intentional `manual-step` checkpoint outlives its
 review, `agent refresh --run RUN_ID` prepares a new plan for unfinished work.
 Inspect its new `reviewSummary`, save it exactly and submit the new plan through
@@ -96,6 +107,19 @@ and request later events. A single page is not the whole history. Native complet
 events preserve their first-observation timestamp across polling and recovery;
 that timestamp is not a measured command-completion time. Malformed evidence and
 changed receipt payloads fail closed.
+
+Run history has a separate opaque cursor. `agent runs --json` and MCP `list_runs`
+return `{ items, nextCursor }` instead of an array. Read `items`, then pass each
+non-null `nextCursor` as CLI `--cursor` or MCP `cursor`, retaining the same page
+limit, until it is null. The default limit is 100 and the maximum is 1,000. Pages
+follow retained record keys and do not provide a transactional snapshot across
+concurrent submissions. Do not reuse event sequence numbers as run-list cursors.
+Existing integrations must update their array parsing and traverse pages to read
+the complete history. Status and history share engine queries across CLI and MCP;
+their stored evidence does not establish the current physical phone state. A
+`current` review status means its stored metadata matches the loaded project,
+policy, enrollment and lifecycle generation and has not expired. It does not
+replace full plan-integrity validation at execution or supply human approval.
 
 ## MCP server
 

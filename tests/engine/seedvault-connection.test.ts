@@ -1,3 +1,4 @@
+import { toPolicyDocument } from '@pxv/contracts';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { afterEach, beforeEach, expect, it, vi, type Mock } from 'vitest';
@@ -29,7 +30,7 @@ beforeEach(async () => {
   const code = join(root, 'code');
   await mkdir(join(code, 'packages/core'), { recursive: true });
   await writeFile(join(code, 'packages/core/index.js'), 'export const version=1;');
-  const created = await createProject(join(root, 'project'), product, basePolicy(), code);
+  const created = await createProject(join(root, 'project'), product, toPolicyDocument(basePolicy()), code);
   await saveInventory(created, { schemaVersion: 1, devices: [device] });
   project = await loadProject(created.root, product, code);
   store = await SqliteStore.open(join(root, 'connections.sqlite3'));

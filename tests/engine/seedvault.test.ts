@@ -1,3 +1,4 @@
+import { toPolicyDocument } from '@pxv/contracts';
 import { randomUUID } from 'node:crypto';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -189,7 +190,7 @@ describe('supervised Seedvault runs', () => {
       name: 'Personal',
       kind: 'secondary',
     });
-    const created = await createProject(join(root, 'project'), product, policy, codeRoot);
+    const created = await createProject(join(root, 'project'), product, toPolicyDocument(policy), codeRoot);
     await saveInventory(created, { schemaVersion: 1, devices: [selectedDevice] });
     const project = await loadProject(created.root, product, codeRoot);
     store = await SqliteStore.open(join(root, 'state.sqlite'));

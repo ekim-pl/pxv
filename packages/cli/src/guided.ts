@@ -3,7 +3,7 @@ import {
   finalSetupActions,
   profileLocale,
   type DeviceTarget,
-  type PolicyPack,
+  type ExecutionPolicy,
   type ProductDescriptor,
 } from '@pxv/contracts';
 import { runPauseReason, type RunPauseReason, type RunRecord } from '@pxv/engine';
@@ -17,7 +17,7 @@ function quote(value: string): string {
 /** Policy-derived operator guidance projects only public requirements, never input values. */
 export function renderProjectGuide(
   product: ProductDescriptor,
-  policy: PolicyPack,
+  policy: ExecutionPolicy,
   kind: DeviceTarget['kind'],
   locale: 'en' | 'pl',
 ): string {

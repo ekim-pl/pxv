@@ -46,7 +46,7 @@ const target: SelectedTarget = {
 };
 const policy: PolicyPack = {
   requiredAttestations: [],
-  schemaVersion: 1,
+  schemaVersion: 2,
   id: 'test',
   version: '1.0.0',
   name: 'Test',

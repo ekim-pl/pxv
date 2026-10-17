@@ -1,10 +1,11 @@
+import { toPolicyDocument } from '@pxv/contracts';
 import { mkdtemp, mkdir, writeFile, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
 import { createProject } from '@pxv/engine';
 import { ExtensionManager } from '@pxv/extensions';
-import type { ExtensionLock, PolicyPack } from '@pxv/contracts';
+import type { ExtensionLock, PolicyDocument } from '@pxv/contracts';
 import { runCli } from '../../packages/cli/src/cli.js';
 import { policy, product } from '../contracts/fixtures.js';
 let root: string;
@@ -19,10 +20,13 @@ const lock: ExtensionLock = {
   entry: 'index.js',
   installPath: 'a'.repeat(64),
 };
-function contribution(_lock: ExtensionLock, kind: 'policyPacks', _path: string): Promise<PolicyPack>;
+function contribution(_lock: ExtensionLock, kind: 'policyPacks', _path: string): Promise<PolicyDocument>;
 function contribution(_lock: ExtensionLock, kind: 'guides', _path: string): Promise<string>;
-function contribution(_lock: ExtensionLock, kind: 'policyPacks' | 'guides'): Promise<PolicyPack | string> {
-  return Promise.resolve(kind === 'policyPacks' ? policy : '# Guide');
+function contribution(
+  _lock: ExtensionLock,
+  kind: 'policyPacks' | 'guides',
+): Promise<PolicyDocument | string> {
+  return Promise.resolve(kind === 'policyPacks' ? toPolicyDocument(policy) : '# Guide');
 }
 beforeEach(async () => {
   root = await mkdtemp(join(tmpdir(), 'pxv-config-write-'));
@@ -32,7 +36,7 @@ beforeEach(async () => {
   await mkdir(resources);
   await writeFile(join(resources, 'product.json'), JSON.stringify(product));
   projectRoot = join(root, 'project');
-  await createProject(projectRoot, product, policy);
+  await createProject(projectRoot, product, toPolicyDocument(policy));
 });
 afterEach(async () => {
   vi.restoreAllMocks();
@@ -63,7 +67,7 @@ describe('reviewed project file commits', () => {
     const config = JSON.parse(await readFile(configPath, 'utf8')) as Record<string, unknown>;
     await writeFile(configPath, JSON.stringify({ ...config, extensions: [lock] }));
     vi.spyOn(ExtensionManager.prototype, 'readContribution').mockImplementation(contribution);
-    const changed = JSON.stringify({ ...policy, name: 'Concurrent reviewed policy' });
+    const changed = JSON.stringify(toPolicyDocument({ ...policy, name: 'Concurrent reviewed policy' }));
     await expect(
       runCli(args(['extension', 'policy', '--extension', lock.id, '--contribution', 'policy.json']), {
         ...io,

@@ -1,3 +1,4 @@
+import { toPolicyDocument } from '@pxv/contracts';
 import { recordObligation } from './obligations.js';
 import { DatabaseSync } from 'node:sqlite';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
@@ -25,7 +26,7 @@ describe('reviewed workflows, operator and recipient gates', () => {
     const created = await createProject(
       join(root, `project-${Math.random().toString(16).slice(2)}`),
       product,
-      policy,
+      toPolicyDocument(policy),
     );
     await saveInventory(created, { schemaVersion: 1, devices: [port.observation.device] });
     context = await loadProject(created.root, product);
@@ -720,14 +721,16 @@ describe('reviewed workflows, operator and recipient gates', () => {
   it('requires pinned USB OS snapshots and binds their hashes into the reviewed plan', async () => {
     await expect(engine.prepare(target, 'install-os')).rejects.toThrow('pinned OS policy');
     const desired = basePolicy();
-    desired.os = {
-      codename: 'akita',
-      release: '2026100600',
-      url: 'https://example.org/os.zip',
-      signatureUrl: 'https://example.org/os.zip.sig',
-      publicKey: 'ssh-ed25519 AAAA',
-      signerPrincipal: 'release@example.org',
-      namespace: 'factory images',
+    desired.osByCodename = {
+      akita: {
+        codename: 'akita',
+        release: '2026100600',
+        url: 'https://example.org/os.zip',
+        signatureUrl: 'https://example.org/os.zip.sig',
+        publicKey: 'ssh-ed25519 AAAA',
+        signerPrincipal: 'release@example.org',
+        namespace: 'factory images',
+      },
     };
     await configure(desired);
     await expect(engine.prepare(target, 'install-os')).rejects.toThrow('snapshot service');
@@ -748,11 +751,13 @@ describe('reviewed workflows, operator and recipient gates', () => {
       pauseReason: { kind: 'reenrollment' },
     });
     expect(port.calls).toEqual(['install-os']);
-    const extension = await engine.prepareExtension(target, [{ kind: 'install-os', os: desired.os }]);
+    const extension = await engine.prepareExtension(target, [
+      { kind: 'install-os', os: desired.osByCodename.akita! },
+    ]);
     expect(extension.operation).toBe('install-os');
     await expect(
       engine.prepareExtension(target, [
-        { kind: 'install-os', os: desired.os },
+        { kind: 'install-os', os: desired.osByCodename.akita! },
         { kind: 'manual', capability: 'operator_signoff', instructions: 'mixed' },
       ]),
     ).rejects.toThrow('separate operation');
@@ -963,7 +968,7 @@ describe('reviewed workflows, operator and recipient gates', () => {
         inventory: latest.config.inventoryFile,
       };
       const next = {
-        policy: { ...latest.policy, name: 'Changed by a second operator' },
+        policy: toPolicyDocument({ ...latest.policy, name: 'Changed by a second operator' }),
         config: { ...latest.config, inventoryFile: 'different-inventory.json' },
         inventory: { ...latest.inventory, devices: [{ ...device, groups: ['updated'] }] },
       };
@@ -990,7 +995,12 @@ describe('reviewed workflows, operator and recipient gates', () => {
     await mkdir(join(codeRoot, 'packages/core'), { recursive: true });
     const source = join(codeRoot, 'packages/core/index.js');
     await writeFile(source, 'export const version=1;');
-    const created = await createProject(join(root, 'isolated-project'), product, basePolicy(), codeRoot);
+    const created = await createProject(
+      join(root, 'isolated-project'),
+      product,
+      toPolicyDocument(basePolicy()),
+      codeRoot,
+    );
     await saveInventory(created, { schemaVersion: 1, devices: [device] });
     const project = await loadProject(created.root, product, codeRoot);
     const isolated = new WorkflowEngine({
@@ -1017,7 +1027,7 @@ describe('reviewed workflows, operator and recipient gates', () => {
       projectId: context.config.id,
       controlRoot: engine.controlRoot,
       expectedSha256: context.revisions.policy,
-      data: JSON.stringify({ ...context.policy, name: 'Changed after signoff prompt' }),
+      data: JSON.stringify(toPolicyDocument({ ...context.policy, name: 'Changed after signoff prompt' })),
     });
     await expect(engine.attest(target, 'operator_signoff', 'Alice')).rejects.toThrow(
       'Project source changed',

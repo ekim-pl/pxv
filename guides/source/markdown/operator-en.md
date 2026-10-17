@@ -6,6 +6,8 @@ Prepare one enrolled Google Pixel or an explicitly selected fleet with GrapheneO
 
 Examples use the installed `pxv` command. Replace placeholders before use. `--yes` confirms a real review or physical check; it does not perform that check.
 
+Commands display readable summaries by default. Add `--json` when capturing structured output for a script, and use `pxv COMMAND --help` for supported flags. `--dry-run` is accepted only where it prepares a plan; finalization, attestation and recovery reject it. Run history is paginated: `agent runs --json` returns `items` and `nextCursor`; follow a non-null cursor with `--cursor` until it is null.
+
 ## 1. Prepare the workstation and project
 
 Use the reviewed Linux x86_64 portable archive or installed package. The portable archive and Debian package include Node and the native supervisor; Android tools and USB permissions still need setup. Run as the ordinary operator account.
@@ -33,11 +35,11 @@ Back up private project state and inventory consistently. Keep unlock material s
 
 Review the authored policy before enrollment or execution. The bundled five-profile pack is a structural starter: it does not supply approved apps, working VPN accounts or a qualified deployment.
 
-Use policy v2 to define an `apps` catalog once and reference its IDs in each profile's `apps` list. Pin package ID, version code, APK SHA-256, signer SHA-256 and an approved source. Android package versions are shared across users; profiles cannot independently install conflicting versions.
+PXV accepts only `schemaVersion: 2` policies. Define an `apps` catalog once and reference its IDs in each profile's `apps` list. Pin package ID, version code, APK SHA-256, signer SHA-256 and an approved source. Android package versions are shared across users; profiles cannot independently install conflicting versions.
 
 Place device-wide Android `global` settings in `deviceSettings`. Profile `settings` contain `secure` or `system` entries. Define profile names, permissions, VPN and language deliberately; the owner name must match the observed owner. Keep secrets out of policy values and recipe text.
 
-For mixed models, `os` maps each exact Pixel codename to a complete authenticated GrapheneOS image pin. Every model to be flashed needs its own entry. No image is selected by a guessed model or fallback. See [policy format](../../../docs/POLICY_FORMAT.md) for schema and migration.
+For mixed models, `os` maps each exact Pixel codename to a complete authenticated GrapheneOS image pin. Every model to be flashed needs its own entry. No image is selected by a guessed model or fallback. See [policy format](../../../docs/POLICY_FORMAT.md) for the schema.
 
 ```sh
 pxv policy validate --project-root "$P"
@@ -45,7 +47,7 @@ pxv policy lock --project-root "$P"
 pxv guide project --project-root "$P" --kind pixel --locale en
 ```
 
-A policy change needs a new lock and fresh review. `policy convert --output NEW_FILE` creates v2 input without changing the original or activating it; select the reviewed file in `pxv.project.json`, validate and lock it before preparing new plans.
+A policy change needs a new lock and fresh review. Select the reviewed version 2 policy in `pxv.project.json`, validate and lock it before preparing new plans. Version 1 policies and their locks are unsupported; there is no automated converter.
 
 ## 3. Enroll one exact physical device
 

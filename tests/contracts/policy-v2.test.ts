@@ -1,17 +1,21 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, expectTypeOf, it } from 'vitest';
 import {
-  convertPolicyToV2,
+  toPolicyDocument,
   digest,
   evaluateObservation,
   osPolicyForTarget,
   resolvePolicy,
   validatePolicy,
+  validatePolicyPack,
   validatePolicyDocument,
   validateProduct,
   verifyResolvedPolicy,
   type OsPolicy,
+  type ExecutionPolicy,
+  type PolicyPack,
+  type PolicyDocument,
 } from '@pxv/contracts';
-import { observation, policy, product, project } from './fixtures.js';
+import { observation, policy, policyDocument, product, project } from './fixtures.js';
 
 const image = (codename: string, release = '2026100600'): OsPolicy => ({
   codename,
@@ -23,14 +27,22 @@ const image = (codename: string, release = '2026100600'): OsPolicy => ({
   publicKey: 'ssh-ed25519 AAAA',
 });
 
-describe('v2 policy authoring and historical locks', () => {
+describe('v2-only policy authoring and locks', () => {
+  it('keeps the deprecated public policy alias compatible with expanded engine data', () => {
+    expectTypeOf<PolicyPack>().toEqualTypeOf<ExecutionPolicy>();
+    expectTypeOf(validatePolicy).returns.toEqualTypeOf<ExecutionPolicy>();
+    expectTypeOf(toPolicyDocument).returns.toEqualTypeOf<PolicyDocument>();
+    const execution: ExecutionPolicy = validatePolicy(policyDocument);
+    const legacyName: PolicyPack = execution;
+    expect(toPolicyDocument(legacyName)).toEqual(policyDocument);
+  });
   it('defines a shared app once and normalizes device settings onto the owner exactly once', () => {
     const original = structuredClone(policy);
     const owner = original.profiles[0]!;
     const global = { namespace: 'global' as const, key: 'airplane_mode_on', value: '0' };
     owner.settings.push(global);
     original.profiles.push({ ...structuredClone(owner), id: 'work', name: 'Work', kind: 'secondary' });
-    const document = convertPolicyToV2(original);
+    const document = toPolicyDocument(original);
     expect(Object.keys(document.apps)).toEqual(['org.example.vpn']);
     expect(document.profiles.map((profile) => profile.apps)).toEqual([
       ['org.example.vpn'],
@@ -47,25 +59,88 @@ describe('v2 policy authoring and historical locks', () => {
     expect(normalized.profiles[1]?.settings).not.toContainEqual(global);
     expect(normalized.profiles.map((profile) => profile.packages)).toEqual([owner.packages, owner.packages]);
     expect(original.profiles[1]?.settings).toContainEqual(global);
-    expect(normalized.sourceSchemaVersion).toBe(2);
+    expect(normalized.schemaVersion).toBe(2);
+    expect(normalized).not.toHaveProperty('sourceSchemaVersion');
   });
 
-  it('retains v1 normalized bytes and historical lock digests while v2 requires fresh approval', () => {
-    expect(validatePolicy(policy)).toEqual(policy);
-    expect(validatePolicy(policy)).not.toHaveProperty('sourceSchemaVersion');
+  it('rejects v1 authoring, normalized policies and retained v1 locks', () => {
+    const legacy = { ...policy, schemaVersion: 1 };
+    for (const validate of [validatePolicy, validatePolicyDocument, validatePolicyPack])
+      expect(() => validate(legacy)).toThrow('Unsupported policy schema version');
+    expect(() => validatePolicy({ ...policyDocument, schemaVersion: 1 })).toThrow(
+      'Unsupported policy schema version',
+    );
+    const retained = resolvePolicy(policy, project, product);
+    expect(() => verifyResolvedPolicy({ ...retained, policy: legacy })).toThrow(
+      'Unsupported policy schema version',
+    );
+    expect(() => evaluateObservation(legacy as typeof policy, observation)).toThrow(
+      'Unsupported policy schema version',
+    );
+    expect(() => resolvePolicy(legacy as typeof policy, project, product)).toThrow(
+      'Unsupported policy schema version',
+    );
+    expect(() => toPolicyDocument(legacy as typeof policy)).toThrow('Unsupported policy schema version');
+  });
+
+  it('roundtrips supported normalized policies and locks without format markers', () => {
+    expect(validatePolicy(policyDocument)).toEqual(policy);
+    expect(validatePolicyPack(policy)).toEqual(policy);
+    expect(toPolicyDocument(policy)).toEqual(policyDocument);
+    expect(() => validatePolicy(policy)).toThrow();
+    expect(() => validatePolicyDocument(policy)).toThrow();
+    expect(() => validatePolicyPack(policyDocument)).toThrow();
+    expect(() => validatePolicyPack({ ...policy, sourceSchemaVersion: 2 })).toThrow();
     const retained = resolvePolicy(policy, project, product);
     expect(verifyResolvedPolicy(JSON.parse(JSON.stringify(retained)))).toEqual(retained);
-    const converted = validatePolicy(convertPolicyToV2(policy));
-    expect(converted.profiles).toEqual(policy.profiles);
-    expect(digest(converted)).not.toBe(digest(policy));
-    expect(resolvePolicy(converted, project, product).digest).not.toBe(retained.digest);
+    expect(digest(validatePolicy(toPolicyDocument(policy)))).toBe(digest(policy));
+    expect(retained.schemaVersion).toBe(1);
+    expect(retained.policy.schemaVersion).toBe(2);
+  });
+
+  it.each([
+    { path: 'apks/alternate.apk' },
+    { url: 'https://downloads.example.org/vpn.apk', redirectHosts: ['cdn.example.org'] },
+    { repositoryId: 'trusted' },
+  ])('preserves distinct artifact sources through authored roundtrips: %j', (source) => {
+    const document = structuredClone(policyDocument);
+    const artifact = document.apps['org.example.vpn']!;
+    const { packageId, versionCode, sha256, signerSha256 } = artifact;
+    document.repositories = [
+      {
+        id: 'trusted',
+        url: 'https://repository.example.org',
+        signerSha256,
+        maxAgeDays: 7,
+        redirectHosts: [],
+      },
+    ];
+    document.apps = {
+      original: artifact,
+      alternate: { packageId, versionCode, sha256, signerSha256, ...source },
+      duplicate: { ...artifact },
+    };
+    const owner = document.profiles[0]!;
+    document.profiles = [
+      { ...owner, apps: ['original'] },
+      { ...owner, id: 'work', name: 'Work', kind: 'secondary', apps: ['alternate'] },
+      { ...owner, id: 'shared', name: 'Shared', kind: 'secondary', apps: ['duplicate'] },
+    ];
+    const normalized = validatePolicy(document);
+    const serialized = toPolicyDocument(normalized);
+    expect(Object.keys(serialized.apps)).toHaveLength(2);
+    expect(serialized.profiles[0]!.apps).toEqual(serialized.profiles[2]!.apps);
+    expect(serialized.profiles[0]!.apps).not.toEqual(serialized.profiles[1]!.apps);
+    const reloaded = validatePolicy(serialized);
+    expect(reloaded).toEqual(normalized);
+    expect(digest(reloaded)).toBe(digest(normalized));
   });
 
   it('preserves distinct case-sensitive Android package IDs when catalog names would collide', () => {
     const original = structuredClone(policy);
     const owner = original.profiles[0]!;
     owner.packages.push({ ...owner.packages[0]!, packageId: 'org.example.VPN', sha256: 'b'.repeat(64) });
-    const document = convertPolicyToV2(original);
+    const document = toPolicyDocument(original);
     const references = document.profiles[0]!.apps;
     expect(new Set(references).size).toBe(2);
     expect(references.map((reference) => document.apps[reference]?.packageId)).toEqual([
@@ -75,19 +150,19 @@ describe('v2 policy authoring and historical locks', () => {
     expect(validatePolicy(document).profiles[0]!.packages).toEqual(owner.packages);
   });
 
-  it('can convert an existing mixed-model v2 policy again without losing model pins or app references', () => {
-    const document = convertPolicyToV2(policy);
+  it('serializes mixed-model policies without losing model pins or app references', () => {
+    const document = toPolicyDocument(policy);
     document.os = { akita: image('akita'), husky: image('husky', '2026100700') };
     const original = structuredClone(document);
-    expect(convertPolicyToV2(document)).toEqual(original);
+    expect(toPolicyDocument(validatePolicy(document))).toEqual(original);
     expect(document).toEqual(original);
   });
 
-  it('rejects conflicting legacy globals, unknown app references and misplaced v2 globals', () => {
+  it('rejects conflicting normalized globals, unknown app references and misplaced globals', () => {
     const owner = structuredClone(policy.profiles[0]!);
     owner.settings.push({ namespace: 'global', key: 'airplane_mode_on', value: '0' });
     expect(() =>
-      validatePolicy({
+      validatePolicyPack({
         ...policy,
         profiles: [
           owner,
@@ -101,22 +176,22 @@ describe('v2 policy authoring and historical locks', () => {
         ],
       }),
     ).toThrow('Conflicting device-wide setting');
-    const document = convertPolicyToV2(policy);
+    const document = toPolicyDocument(policy);
     document.profiles[0]!.apps.push('unknown');
     expect(() => validatePolicy(document)).toThrow('Unknown app catalog reference');
-    const misplaced = convertPolicyToV2(policy);
+    const misplaced = toPolicyDocument(policy);
     misplaced.profiles[0]!.settings.push({ namespace: 'global', key: 'airplane_mode_on', value: '0' });
     expect(() => validatePolicy(misplaced)).toThrow('deviceSettings');
     expect(() =>
       validatePolicy({
-        ...convertPolicyToV2(policy),
+        ...toPolicyDocument(policy),
         deviceSettings: [{ namespace: 'secure', key: 'screensaver_enabled', value: '0' }],
       }),
     ).toThrow('global namespace');
   });
 
   it('validates unused catalog entries and prevents contradictory device-wide APK versions', () => {
-    const document = convertPolicyToV2(policy);
+    const document = toPolicyDocument(policy);
     const artifact = document.apps['org.example.vpn']!;
     expect(() =>
       validatePolicy({
@@ -137,7 +212,7 @@ describe('v2 policy authoring and historical locks', () => {
 
 describe('mixed-model image pins', () => {
   it('selects and verifies the exact model pin without accepting another model release', () => {
-    const document = convertPolicyToV2(policy);
+    const document = toPolicyDocument(policy);
     document.os = { akita: image('akita'), husky: image('husky', '2026100700') };
     const normalized = validatePolicy(document);
     expect(osPolicyForTarget(normalized, 'akita')).toEqual(document.os.akita);
@@ -168,17 +243,15 @@ describe('mixed-model image pins', () => {
     });
   });
 
-  it('rejects empty or mismatched model maps and ambiguous legacy/mixed pins', () => {
-    const document = convertPolicyToV2(policy);
+  it('rejects empty or mismatched model maps and legacy single image pins', () => {
+    const document = toPolicyDocument(policy);
     expect(() => validatePolicy({ ...document, os: {} })).toThrow('cannot be empty');
     expect(() => validatePolicy({ ...document, os: { akita: image('husky') } })).toThrow(
       'differs from codename',
     );
-    expect(() =>
-      validatePolicy({ ...policy, os: image('akita'), osByCodename: { husky: image('husky') } }),
-    ).toThrow('not both');
-    expect(osPolicyForTarget({ os: image('akita') }, 'husky')).toBeUndefined();
-    expect(osPolicyForTarget({ os: image('akita') }, 'akita')).toEqual(image('akita'));
+    expect(() => validatePolicy({ ...document, os: image('akita') })).toThrow();
+    expect(() => validatePolicyPack({ ...policy, os: image('akita') })).toThrow();
+    expect(osPolicyForTarget({}, 'akita')).toBeUndefined();
   });
 });
 

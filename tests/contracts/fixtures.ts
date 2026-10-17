@@ -1,4 +1,4 @@
-import { validatePolicy } from '@pxv/contracts';
+import { toPolicyDocument, validatePolicy } from '@pxv/contracts';
 import type {
   DeviceObservation,
   DeviceTarget,
@@ -22,26 +22,28 @@ export const device: DeviceTarget = {
   groups: ['pilot'],
 };
 export const policy = validatePolicy({
-  schemaVersion: 1,
+  schemaVersion: 2,
   id: 'fixture',
   version: '0.1.0',
   name: 'Fixture policy',
   capabilities: ['normal_credentials', 'duress'],
   repositories: [],
+  apps: {
+    'org.example.vpn': {
+      packageId: 'org.example.vpn',
+      versionCode: 12,
+      sha256: hashA,
+      signerSha256: hashB,
+      path: '/tmp/vpn.apk',
+    },
+  },
+  deviceSettings: [],
   profiles: [
     {
       id: 'admin',
       name: 'Administrator',
       kind: 'owner',
-      packages: [
-        {
-          packageId: 'org.example.vpn',
-          versionCode: 12,
-          sha256: hashA,
-          signerSha256: hashB,
-          path: '/tmp/vpn.apk',
-        },
-      ],
+      apps: ['org.example.vpn'],
       settings: [{ namespace: 'secure', key: 'screensaver_enabled', value: '0' }],
       permissions: [
         { packageId: 'org.example.vpn', permission: 'android.permission.POST_NOTIFICATIONS', granted: true },
@@ -51,6 +53,7 @@ export const policy = validatePolicy({
     },
   ],
 });
+export const policyDocument = toPolicyDocument(policy);
 export const observation: DeviceObservation = {
   schemaVersion: 1,
   device,
@@ -92,7 +95,7 @@ export const product: ProductDescriptor = {
   upstreamVersion: '0.1.0',
   engineApi: 1,
   assets: { logo: 'assets/logo.svg' },
-  defaultPolicy: 'policy-packs/reference-five/policy.json',
+  defaultPolicy: 'policy-packs/reference-five/policy.v2.json',
   support: { name: 'Community', email: 'support@example.org', url: 'https://example.org/pxv' },
 };
 export const obligation: RecoveryObligation = {

@@ -103,5 +103,6 @@ export async function guidesRebuildCommand(
     root,
     context,
   );
+  context.output({ rebuilt: true });
   return 0;
 }

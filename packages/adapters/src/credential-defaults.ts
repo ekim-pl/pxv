@@ -4,7 +4,7 @@ import { join, resolve } from 'node:path';
 import {
   parseDocument,
   type AndroidUserIdentity,
-  type PolicyPack,
+  type ExecutionPolicy,
   type ProfilePolicy,
   type SelectedTarget,
 } from '@pxv/contracts';
@@ -48,7 +48,7 @@ function valueFor(values: PrivateValues, ref: string, kind: 'pin' | 'password' =
     throw inputFailure();
   return value;
 }
-function validateValues(policy: PolicyPack, values: PrivateValues): void {
+function validateValues(policy: ExecutionPolicy, values: PrivateValues): void {
   const normal = new Set<string>();
   for (const profile of policy.profiles) {
     const credential = profile.defaultCredential;
@@ -129,7 +129,7 @@ async function boundedRead(file: FileHandle, signal?: AbortSignal): Promise<Buff
     throw error;
   }
 }
-function configuredCommands(policy: PolicyPack): string[] {
+function configuredCommands(policy: ExecutionPolicy): string[] {
   const commands = new Set<string>();
   for (const profile of policy.profiles) {
     if (profile.defaultCredential) commands.add(`set-${profile.defaultCredential.type}`);
@@ -143,7 +143,7 @@ export class CredentialDefaultsService {
   constructor(
     readonly android: AndroidAdapter,
     readonly projectRoot: string,
-    readonly policy: PolicyPack,
+    readonly policy: ExecutionPolicy,
   ) {}
 
   private async values(target: SelectedTarget, signal?: AbortSignal): Promise<PrivateValues> {

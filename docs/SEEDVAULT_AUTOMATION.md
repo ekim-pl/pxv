@@ -11,7 +11,7 @@ The [personal recovery tool](#personal-recovery-tool) coordinates one person's p
 
 ## Commands and review
 
-These commands require host execution, an explicitly enrolled Pixel and the original shared host control directory. Start ADB explicitly through the ordinary host workflow. First enroll using direct USB, then verify its TLS endpoint:
+These commands require host execution, an explicitly enrolled Pixel and the original shared host control directory. Every command except `report` requires an explicit `--asset ID`; `--all` and `--group` are rejected before project state is opened. Start ADB explicitly through the ordinary host workflow. First enroll using direct USB, then verify its TLS endpoint:
 
 ```sh
 pxv seedvault connect --project-root "$P" --asset "$ASSET" \

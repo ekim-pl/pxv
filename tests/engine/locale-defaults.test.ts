@@ -1,3 +1,4 @@
+import { toPolicyDocument } from '@pxv/contracts';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -47,7 +48,7 @@ describe('per-user default locales', () => {
     const code = join(root, 'code');
     await mkdir(join(code, 'packages/fixture'), { recursive: true });
     await writeFile(join(code, 'packages/fixture/index.js'), 'export const version=1;');
-    const created = await createProject(join(root, 'project'), product, policy, code);
+    const created = await createProject(join(root, 'project'), product, toPolicyDocument(policy), code);
     await saveInventory(created, { schemaVersion: 1, devices: [device] });
     engine = new WorkflowEngine({
       project: await loadProject(created.root, product, code),

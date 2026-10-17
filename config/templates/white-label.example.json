@@ -7,6 +7,10 @@
     "packageName": "@acme/pxv",
     "debName": "acme-pxv",
     "image": "registry.example.org/acme/pxv",
+    "features": {
+      "extensions": false,
+      "seedvault": false
+    },
     "support": {
       "name": "Acme Device Support",
       "email": "support@example.org",

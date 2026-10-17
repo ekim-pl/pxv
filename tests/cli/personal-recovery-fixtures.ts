@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { digest, type PolicyPack, type SeedvaultAdapterDefinition } from '@pxv/contracts';
+import { toPolicyDocument, digest, type PolicyPack, type SeedvaultAdapterDefinition } from '@pxv/contracts';
 import type { SeedvaultReport } from '../../packages/engine/src/seedvault-types.js';
 import { device, policy, product, project } from '../contracts/fixtures.js';
 
@@ -26,14 +26,16 @@ export async function personalFixture() {
   const hash = (value: Buffer) => createHash('sha256').update(value).digest('hex');
   const selected: PolicyPack = {
     ...structuredClone(policy),
-    os: {
-      codename: 'akita',
-      release: '2026100600',
-      url: 'https://releases.grapheneos.org/akita-install-2026100600.zip',
-      signatureUrl: 'https://releases.grapheneos.org/akita-install-2026100600.zip.sig',
-      signerPrincipal: 'contact@grapheneos.org',
-      namespace: 'factory images',
-      publicKey: 'ssh-ed25519 AAAA',
+    osByCodename: {
+      akita: {
+        codename: 'akita',
+        release: '2026100600',
+        url: 'https://releases.grapheneos.org/akita-install-2026100600.zip',
+        signatureUrl: 'https://releases.grapheneos.org/akita-install-2026100600.zip.sig',
+        signerPrincipal: 'contact@grapheneos.org',
+        namespace: 'factory images',
+        publicKey: 'ssh-ed25519 AAAA',
+      },
     },
     profiles: policy.profiles.map((profile) => ({
       ...profile,
@@ -54,7 +56,7 @@ export async function personalFixture() {
   };
   const identity = { product, engineVersion: '0.1.0', engineDigest: 'a'.repeat(64) };
   await writeFile(join(projectRoot, 'pxv.project.json'), JSON.stringify(project));
-  await writeFile(join(projectRoot, 'policy.json'), JSON.stringify(selected));
+  await writeFile(join(projectRoot, 'policy.json'), JSON.stringify(toPolicyDocument(selected)));
   await writeFile(
     join(projectRoot, 'policy.lock.json'),
     JSON.stringify({ ...identity, project, policy: selected }),
@@ -232,6 +234,8 @@ export async function fakeResources(fixture: PersonalFixture) {
 
 export async function fakePxv(root: string, body: string) {
   const path = join(root, 'fake-pxv');
-  await writeFile(path, `#!${process.execPath}\n${body}\n`, { mode: 0o700 });
+  await writeFile(path, `#!/usr/bin/env -S -u NODE_V8_COVERAGE ${process.execPath}\n${body}\n`, {
+    mode: 0o700,
+  });
   return path;
 }

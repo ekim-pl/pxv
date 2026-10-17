@@ -1,3 +1,4 @@
+import { toPolicyDocument } from '@pxv/contracts';
 import { ChildProcess } from 'node:child_process';
 import type * as RuntimeModule from '@pxv/runtime';
 import type * as ChildProcessModule from 'node:child_process';
@@ -7,6 +8,11 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createProject, loadProject, saveInventory, WorkflowEngine } from '@pxv/engine';
 import { SqliteStore } from '@pxv/runtime';
+import { createMcpServer } from '@pxv/mcp';
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
+import { agentCommand } from '../../packages/cli/src/run-command.js';
+import type { ApplicationCliContext } from '../../packages/cli/src/arguments.js';
 import { agentBackend, liveAgentBackend } from '../../packages/cli/src/backend.js';
 import * as Context from '../../packages/cli/src/context.js';
 import { ExtensionManager } from '@pxv/extensions';
@@ -15,6 +21,7 @@ import { MemoryPort, basePolicy } from '../engine/fixtures.js';
 import { device, policy as setupPolicy, product } from '../contracts/fixtures.js';
 
 const { detachedSpawn } = vi.hoisted(() => ({ detachedSpawn: vi.fn<typeof ChildProcessModule.spawn>() }));
+type RunPage = Awaited<ReturnType<WorkflowEngine['listRuns']>>;
 vi.mock('node:child_process', async (importOriginal) => {
   const actual = await importOriginal<typeof ChildProcessModule>();
   return {
@@ -63,7 +70,7 @@ describe('MCP/CLI backend ports and detached execution', () => {
     await mkdir(join(resourceRoot, 'guides/source/markdown'), { recursive: true });
     await writeFile(join(resourceRoot, 'guides/source/markdown/operator-en.md'), 'operator instructions');
     await writeFile(join(resourceRoot, 'guides/source/markdown/user-en.md'), 'recipient instructions');
-    const project = await createProject(join(root, 'project'), product, basePolicy());
+    const project = await createProject(join(root, 'project'), product, toPolicyDocument(basePolicy()));
     await saveInventory(project, { schemaVersion: 1, devices: [device] });
     store = await SqliteStore.open(join(root, 'state.sqlite'));
     engine = new WorkflowEngine({
@@ -135,6 +142,64 @@ describe('MCP/CLI backend ports and detached execution', () => {
       () => backend.extensionCommand('all', 'private', 'command', {}),
     ])
       await expect(action()).rejects.toThrow('disabled');
+  });
+
+  it('traverses more than 1000 retained runs through the CLI command and MCP protocol without omissions', async () => {
+    const count = 1005;
+    for (let index = 0; index < count; index++) {
+      const id = `retained-${String(index).padStart(4, '0')}`;
+      await store.set('runs', id, {
+        id,
+        planId: 'unavailable-plan',
+        status: 'completed',
+        operator: 'Operator',
+        createdAt: '2026-10-17T10:00:00Z',
+      });
+    }
+    const cliIds: string[] = [];
+    let cursor: string | null = null;
+    do {
+      const values = { limit: '600', ...(cursor ? { cursor } : {}) };
+      let page!: RunPage;
+      const context = {
+        command: 'runs',
+        app: { engine },
+        values,
+        value: (key: keyof typeof values) => values[key],
+        output: (value: RunPage) => {
+          page = value;
+        },
+      } as unknown as ApplicationCliContext;
+      expect(await agentCommand(context)).toBe(0);
+      cliIds.push(...page.items.map((item) => item.key));
+      cursor = page.nextCursor;
+    } while (cursor);
+    expect(cliIds).toHaveLength(count);
+    expect(new Set(cliIds).size).toBe(count);
+
+    const server = createMcpServer(agentBackend(engine, resourceRoot, 'launcher.js', false));
+    const client = new Client({ name: 'paged-runs', version: '1' });
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    await server.connect(serverTransport);
+    await client.connect(clientTransport);
+    const mcpIds: string[] = [];
+    try {
+      do {
+        const result = await client.callTool({
+          name: 'list_runs',
+          arguments: { limit: 700, ...(cursor ? { cursor } : {}) },
+        });
+        const content = result.content as { type: string; text: string }[];
+        const page = JSON.parse(content[0]!.text) as RunPage;
+        mcpIds.push(...page.items.map((item) => item.key));
+        cursor = page.nextCursor;
+      } while (cursor);
+      expect(mcpIds).toEqual(cliIds);
+      expect(new Set(mcpIds).size).toBe(count);
+    } finally {
+      await client.close();
+      await server.close();
+    }
   });
 
   it('opens retained cancellation and inspected recovery without loading optional extension code', async () => {
@@ -212,7 +277,7 @@ describe('MCP/CLI backend ports and detached execution', () => {
   });
 
   it('prepares fresh reviews through the backend without executing them', async () => {
-    const project = await createProject(join(root, 'setup'), product, setupPolicy);
+    const project = await createProject(join(root, 'setup'), product, toPolicyDocument(setupPolicy));
     await saveInventory(project, { schemaVersion: 1, devices: [device] });
     const setup = new WorkflowEngine({
       project: await loadProject(project.root, product),
@@ -224,10 +289,31 @@ describe('MCP/CLI backend ports and detached execution', () => {
     const prepared = await setup.prepare({ device, transport: { kind: 'usb', serial: 'PIXEL1' } });
     const run = await setup.submit(prepared.plan.id, prepared.reviewSummary, 'Alice');
     await setup.execute(run.id);
-    const result = await live(setup).refreshReview(run.id);
+    const backend = live(setup);
+    const result = (await backend.refreshReview(run.id)) as { planId: string; reviewSummary: string };
     expect(typeof (result as { planId: string }).planId).toBe('string');
     expect(typeof (result as { reviewSummary: string }).reviewSummary).toBe('string');
     expect(await store.get('runs', run.id)).toMatchObject({ status: 'superseded' });
+    expect(await backend.getRun(run.id, 0)).toMatchObject({
+      run: {
+        supersededBy: result.planId,
+        nextSteps: [
+          {
+            kind: 'review-refreshed-plan',
+            command: ['agent', 'execute', '--plan', result.planId, '--help'],
+          },
+        ],
+      },
+    });
+    const replacement = await setup.submit(result.planId, result.reviewSummary, 'Alice');
+    expect(replacement.id).not.toBe(result.planId);
+    expect(await backend.getRun(run.id, 0)).toMatchObject({
+      run: {
+        nextSteps: [
+          { kind: 'follow-superseding-run', command: ['agent', 'status', '--run', replacement.id] },
+        ],
+      },
+    });
     expect(detachedSpawn).not.toHaveBeenCalled();
   });
 
@@ -275,7 +361,7 @@ describe('MCP/CLI backend ports and detached execution', () => {
       .spyOn(ExtensionManager.prototype, 'readContribution')
       .mockImplementation(
         (_lock, kind) =>
-          Promise.resolve(kind === 'guides' ? '# Guide' : basePolicy()) as ReturnType<
+          Promise.resolve(kind === 'guides' ? '# Guide' : toPolicyDocument(basePolicy())) as ReturnType<
             ExtensionManager['readContribution']
           >,
       );
@@ -347,7 +433,10 @@ describe('MCP/CLI backend ports and detached execution', () => {
     };
     const changed = basePolicy();
     changed.name = 'Externally changed policy';
-    await writeFile(join(engine.project.root, engine.project.config.policyFile), JSON.stringify(changed));
+    await writeFile(
+      join(engine.project.root, engine.project.config.policyFile),
+      JSON.stringify(toPolicyDocument(changed)),
+    );
     await expect(live.executePlan(prepared.planId, prepared.reviewSummary, 'Alice')).rejects.toThrow(
       'Project policy',
     );

@@ -12,6 +12,7 @@ export type {
   ExtensionDefinition,
   IntegrationAdapterDefinition,
   PolicyPack,
+  ExecutionPolicy,
   ProductDescriptor,
 } from '@pxv/contracts';
 

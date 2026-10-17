@@ -13,7 +13,7 @@
   ],
   "source": "source/markdown",
   "policyBuild": {
-    "input": "validated version 1 or version 2 installation policy via --policy",
+    "input": "validated version 2 authoring policy via --policy",
     "destination": "separate --output-dir; authoritative sources remain unchanged",
     "quickstart": "variable profile instructions and one appendix page per configured GrapheneOS user profile",
     "credentials": "paired blank ordinary credential and account/recovery sheets per configured profile; secrets are completed privately",

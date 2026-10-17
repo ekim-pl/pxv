@@ -1,3 +1,4 @@
+import { toPolicyDocument } from '@pxv/contracts';
 import { recordObligation } from './obligations.js';
 import { DatabaseSync } from 'node:sqlite';
 import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
@@ -45,7 +46,7 @@ describe('scoped recipe, network and recovery evidence', () => {
     const created = await createProject(
       join(root, `project-${Math.random().toString(16).slice(2)}`),
       product,
-      policy,
+      toPolicyDocument(policy),
     );
     await saveInventory(created, { schemaVersion: 1, devices: [device] });
     return new WorkflowEngine({
@@ -391,7 +392,7 @@ describe('scoped recipe, network and recovery evidence', () => {
     const runner = new CommandRunner();
     await expect(
       withDeviceLease(join(root, 'control'), deviceKey, transportKey, 'failed-run', async (lease) => {
-        await runner.run([process.execPath, '-e', 'process.exit(0)'], { mutation: true, lease });
+        await runner.run([process.execPath, '-e', 'process.exit(0)'], { mutation: true, lease, env: {} });
         throw new Error('Injected operation failure');
       }),
     ).rejects.toThrow('Injected');

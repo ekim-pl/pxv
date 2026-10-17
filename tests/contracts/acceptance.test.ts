@@ -112,8 +112,9 @@ describe('language-independent acceptance contracts', () => {
     };
     for (const layout of inventory.profileLayouts)
       expect(
-        validatePolicy(JSON.parse(readFileSync(`policy-packs/${layout.pack}/policy.json`, 'utf8')) as unknown)
-          .profiles,
+        validatePolicy(
+          JSON.parse(readFileSync(`policy-packs/${layout.pack}/policy.v2.json`, 'utf8')) as unknown,
+        ).profiles,
       ).toHaveLength(layout.count);
   });
 });

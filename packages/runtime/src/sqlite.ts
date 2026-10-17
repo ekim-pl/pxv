@@ -1,7 +1,15 @@
 import { mkdir, lstat } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { Worker } from 'node:worker_threads';
-import { encodeRecord as encode, encodeTransition, type Store, type StoreTransition } from './store.js';
+import {
+  encodeRecord as encode,
+  encodeTransition,
+  entryPageOptions,
+  type EntryPage,
+  type EntryPageOptions,
+  type Store,
+  type StoreTransition,
+} from './store.js';
 
 interface Reply {
   id?: number;
@@ -38,11 +46,14 @@ function ready(worker: Worker): Promise<void> {
 /** All synchronous SQLite operations are confined to one dedicated worker. */
 export class SqliteStore implements Store {
   readonly #worker: Worker;
+  readonly #exited: Promise<void>;
   readonly #pending = new Map<number, Pending>();
   #sequence = 0;
   #closed = false;
+  #closing: Promise<void> | undefined;
   private constructor(worker: Worker) {
     this.#worker = worker;
+    this.#exited = new Promise((resolve) => worker.once('exit', () => resolve()));
   }
 
   static async open(path: string, options: { readOnly?: boolean } = {}): Promise<SqliteStore> {
@@ -101,6 +112,10 @@ export class SqliteStore implements Store {
       return Promise.reject(new Error('Invalid entry limit'));
     return this.#request('entries', [collection, limit]);
   }
+  async entriesPage<T = unknown>(collection: string, options: EntryPageOptions = {}): Promise<EntryPage<T>> {
+    const { cursor, limit } = entryPageOptions(options);
+    return this.#request('entriesPage', [collection, cursor ?? null, limit]);
+  }
   delete(collection: string, key: string): Promise<boolean> {
     return this.#request('delete', [collection, key]);
   }
@@ -148,8 +163,15 @@ export class SqliteStore implements Store {
     return this.#request('transition', [encodeTransition(input)]);
   }
   async close(): Promise<void> {
-    if (this.#closed) return;
-    await this.#request('close', []);
-    this.#closed = true;
+    if (this.#closed) return this.#exited;
+    return (this.#closing ??= this.#close());
+  }
+  async #close(): Promise<void> {
+    try {
+      await this.#request('close', []);
+    } finally {
+      this.#closed = true;
+      await this.#exited;
+    }
   }
 }

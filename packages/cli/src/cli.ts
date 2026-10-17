@@ -89,11 +89,15 @@ function readOnlyCommand({ section, command }: ProjectCliContext): boolean {
 }
 export async function runCli(argv: string[], io?: CliIo): Promise<number> {
   const context = await parseCli(argv, io);
-  const early = introductoryCommand(context) ?? (await externalCommand(context));
-  if (early !== undefined) return early;
-  const project = await loadProject(context.projectRoot, context.product, context.resources);
-  const selected = selectedContext(context, project);
-  return (await projectCommand(selected)) ?? usingApplication(selected);
+  try {
+    const early = introductoryCommand(context) ?? (await externalCommand(context));
+    if (early !== undefined) return early;
+    const project = await loadProject(context.projectRoot, context.product, context.resources);
+    const selected = selectedContext(context, project);
+    return (await projectCommand(selected)) ?? (await usingApplication(selected));
+  } finally {
+    context.flushOutput();
+  }
 }
 
 async function executionMode(context: CliContext): Promise<number | undefined> {

@@ -1,3 +1,4 @@
+import { assertCommandFeature } from './command-registry.js';
 import { parseDocument, validateProject, type ExtensionLock } from '@pxv/contracts';
 import { containedPath } from '@pxv/engine';
 import { ExtensionManager, type ExtensionSource } from '@pxv/extensions';
@@ -102,16 +103,9 @@ async function invoke(
   }
   return 0;
 }
-function assertExtensionCommand(context: ProjectCliContext): void {
-  if (
-    context.product.features?.extensions === false &&
-    !['list', 'inspect', 'guide', 'remove'].includes(context.command ?? '')
-  )
-    throw new Error('Extensions are outside this core product; use an extension-enabled product');
-}
 export async function extensionCommand(context: ProjectCliContext): Promise<number> {
   const { value, command, project, output, io } = context;
-  assertExtensionCommand(context);
+  assertCommandFeature(['extension', String(context.command)], context.product);
   const manager = extensionManager(context);
   if (command === 'list') {
     output(await manager.list());

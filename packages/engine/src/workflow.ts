@@ -2,6 +2,8 @@ import type { Action, SeedvaultRequest, SelectedTarget } from '@pxv/contracts';
 import { createWorkflowServices } from './composition.js';
 import { assertProjectFresh } from './project.js';
 import type { EngineOptions, EmulatorImagePin, Operation, RunRecord } from './workflow-types.js';
+import type { EntryPageOptions } from '@pxv/runtime';
+import type { RunStatus } from './run-query-service.js';
 /** @public Retained application façade types for existing WorkflowEngine port consumers. */
 export type {
   EmulatorImagePin,
@@ -83,6 +85,15 @@ export class WorkflowEngine {
   cancel(runId: string) {
     return this.services.execution.cancel(runId);
   }
+  describeRun(run: RunRecord): Promise<RunStatus> {
+    return this.services.runs.describe(run);
+  }
+  runStatus(runId: string, after = 0) {
+    return this.services.runs.status(runId, after);
+  }
+  listRuns(options: EntryPageOptions = {}) {
+    return this.services.runs.list(options);
+  }
   recover(target: SelectedTarget, previousOperationId: string, signal?: AbortSignal) {
     return this.services.recovery.recover(target, previousOperationId, signal);
   }
@@ -95,6 +106,16 @@ export class WorkflowEngine {
   async readiness(target: SelectedTarget) {
     await assertProjectFresh(this.project);
     return this.services.evidence.readiness(target);
+  }
+  async deviceStatus(target: SelectedTarget) {
+    const readiness = await this.readiness(target);
+    const run = await this.services.runs.latest(target.device.assetId);
+    return {
+      ...readiness,
+      currentStateVerified: false,
+      evidenceSource: 'stored' as const,
+      ...(run ? { run } : {}),
+    };
   }
   attest(
     target: SelectedTarget,

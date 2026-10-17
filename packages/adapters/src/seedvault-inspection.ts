@@ -1,7 +1,7 @@
 import {
   sameAndroidUser,
   type AndroidUserIdentity,
-  type PolicyPack,
+  type ExecutionPolicy,
   type SeedvaultInspection,
   type SeedvaultProfileIdentity,
   type SelectedTarget,
@@ -58,7 +58,7 @@ function classifyLegacy(
 export async function inspectSeedvault(
   android: AndroidAdapter,
   target: SelectedTarget,
-  policy: PolicyPack,
+  policy: ExecutionPolicy,
   signal?: AbortSignal,
 ): Promise<SeedvaultInspection> {
   await android.guardTarget(target, signal);
@@ -87,7 +87,7 @@ export async function inspectSeedvault(
 async function inspectProfile(
   android: AndroidAdapter,
   target: SelectedTarget,
-  policy: PolicyPack,
+  policy: ExecutionPolicy,
   user: AndroidUserIdentity,
   signal?: AbortSignal,
 ): Promise<SeedvaultProfileIdentity> {

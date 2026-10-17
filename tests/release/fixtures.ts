@@ -13,7 +13,7 @@ export async function fixture(brand = 'alpha'): Promise<string> {
     debName: brand,
     image: `example/${brand}`,
     assets: { logo: 'assets/logo.svg' },
-    defaultPolicy: 'policy-packs/simple/policy.json',
+    defaultPolicy: 'policy-packs/simple/policy.v2.json',
   });
   await writeFile(join(root, 'product.json'), JSON.stringify(product));
   await copyFile(join(source, 'package.json'), join(root, 'package.json'));
@@ -40,8 +40,8 @@ export async function fixture(brand = 'alpha'): Promise<string> {
   );
   await mkdir(join(root, 'policy-packs', 'simple'), { recursive: true });
   await copyFile(
-    join(source, 'policy-packs', 'simple', 'policy.json'),
-    join(root, 'policy-packs', 'simple', 'policy.json'),
+    join(source, 'policy-packs', 'simple', 'policy.v2.json'),
+    join(root, 'policy-packs', 'simple', 'policy.v2.json'),
   );
   await cp(join(source, 'packages', 'runtime', 'src'), join(root, 'packages', 'runtime', 'src'), {
     recursive: true,

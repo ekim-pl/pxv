@@ -1,3 +1,4 @@
+import { toPolicyDocument } from '@pxv/contracts';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -9,6 +10,7 @@ import type * as AdapterModule from '@pxv/adapters';
 import type { ExtensionLock } from '@pxv/contracts';
 import { device, policy, product, project as config } from '../contracts/fixtures.js';
 const mocks = vi.hoisted(() => ({
+  takeCoverage: vi.fn(),
   resourceRoot: vi.fn(),
   productAt: vi.fn(),
   application: vi.fn(),
@@ -38,6 +40,7 @@ const mocks = vi.hoisted(() => ({
   serverClose: vi.fn(),
   reservations: vi.fn(),
 }));
+vi.mock('node:v8', () => ({ takeCoverage: mocks.takeCoverage }));
 vi.mock('../../packages/cli/src/context.js', () => ({
   resourceRoot: mocks.resourceRoot,
   productAt: mocks.productAt,
@@ -98,6 +101,8 @@ vi.mock('@pxv/extensions', () => ({
 }));
 vi.mock('@pxv/mcp', () => ({ serveStdio: mocks.serveStdio }));
 import { runCli, type CliIo } from '../../packages/cli/src/cli.js';
+import type { ApplicationCliContext } from '../../packages/cli/src/arguments.js';
+import { handoffCommand, lifecycleCommand } from '../../packages/cli/src/handoff-command.js';
 let root: string;
 let resources: string;
 let projectRoot: string;
@@ -130,6 +135,10 @@ const engine = {
   executeFleet: vi.fn(),
   cancel: vi.fn(),
   readiness: vi.fn(),
+  deviceStatus: vi.fn(),
+  describeRun: vi.fn(),
+  runStatus: vi.fn(),
+  listRuns: vi.fn(),
   acceptCustody: vi.fn(),
   acceptedHandoff: vi.fn(),
   refreshReview: vi.fn(),
@@ -152,7 +161,7 @@ beforeEach(async () => {
   projectRoot = join(root, 'project');
   await mkdir(resources);
   await mkdir(projectRoot);
-  await writeFile(join(projectRoot, config.policyFile), JSON.stringify(policy));
+  await writeFile(join(projectRoot, config.policyFile), JSON.stringify(toPolicyDocument(policy)));
   project = {
     root: projectRoot,
     revisions: { config: 'a'.repeat(64), policy: 'b'.repeat(64), inventory: 'c'.repeat(64) },
@@ -193,7 +202,7 @@ beforeEach(async () => {
   mocks.extensionInspect.mockResolvedValue({ verified: true });
   mocks.extensionInvoke.mockResolvedValue([]);
   mocks.readContribution.mockImplementation((...args: unknown[]) =>
-    Promise.resolve(args[1] === 'guides' ? '# Extension guide' : policy),
+    Promise.resolve(args[1] === 'guides' ? '# Extension guide' : toPolicyDocument(policy)),
   );
   mocks.invokeAdapter.mockResolvedValue([]);
   mocks.executePlan.mockResolvedValue({ id: 'run', status: 'queued' });
@@ -207,6 +216,17 @@ beforeEach(async () => {
   engine.execute.mockResolvedValue({ id: 'run', status: 'completed' });
   engine.executeFleet.mockResolvedValue([{ id: 'run', status: 'completed' }]);
   engine.readiness.mockResolvedValue({ ready: true });
+  engine.deviceStatus.mockResolvedValue({
+    ready: true,
+    currentStateVerified: false,
+    evidenceSource: 'stored',
+  });
+  engine.describeRun.mockImplementation((run: unknown) => Promise.resolve(run));
+  engine.runStatus.mockImplementation(async (runId: string, after: number) => ({
+    run: await (store.get('runs', runId) as Promise<unknown>),
+    events: await (store.events(runId, after, 100) as Promise<unknown>),
+  }));
+  engine.listRuns.mockResolvedValue({ items: [], nextCursor: null });
   engine.acceptCustody.mockResolvedValue({ outcome: 'completed-custody' });
   engine.acceptedHandoff.mockRejectedValue(
     new Error('Finalize the device before exporting a handoff packet'),
@@ -221,9 +241,17 @@ afterEach(async () => {
   process.env = saved;
   await rm(root, { recursive: true, force: true });
 });
-const args = (values: string[]) => [...values, '--resource-root', resources, '--project-root', projectRoot];
+const args = (values: string[]) => [
+  ...values,
+  '--json',
+  '--resource-root',
+  resources,
+  '--project-root',
+  projectRoot,
+];
 describe('operator controller dispatch without device access', () => {
   it('keeps internal worker outcomes durable for completed, manual and failed runs', async () => {
+    process.env['NODE_V8_COVERAGE'] = '/fixture/coverage';
     if (typeof process.disconnect === 'function')
       vi.spyOn(process, 'disconnect').mockImplementation(() => undefined);
     if (typeof process.send === 'function') vi.spyOn(process, 'send').mockImplementation(() => true);
@@ -236,10 +264,15 @@ describe('operator controller dispatch without device access', () => {
       expect(await runCli(args(['internal-worker', '--run', 'run']), io)).toBe(code);
     }
     expect(store.delete).toHaveBeenCalledTimes(3);
+    expect(mocks.takeCoverage).toHaveBeenCalledTimes(3);
     engine.execute.mockRejectedValueOnce(new Error('missing run'));
     store.get.mockResolvedValueOnce(undefined);
     await expect(runCli(args(['internal-worker', '--run', 'missing']), io)).rejects.toThrow('missing run');
     expect(store.set).not.toHaveBeenCalled();
+    expect(mocks.takeCoverage).toHaveBeenCalledTimes(4);
+    delete process.env['NODE_V8_COVERAGE'];
+    expect(await runCli(args(['internal-worker', '--run', 'untraced']), io)).toBe(0);
+    expect(mocks.takeCoverage).toHaveBeenCalledTimes(4);
   });
   it('rejects missing workflows and ambiguous multi-asset device commands before actions', async () => {
     await expect(runCli(args(['device', '--asset', 'all']), io)).rejects.toThrow('Unknown device workflow');
@@ -247,7 +280,7 @@ describe('operator controller dispatch without device access', () => {
       'Unknown device workflow',
     );
     await expect(runCli(args(['lifecycle']), io)).rejects.toThrow('Unknown lifecycle');
-    await expect(runCli(args(['handoff', 'unknown']), io)).rejects.toThrow('Unknown command');
+    await expect(runCli(args(['handoff', 'unknown']), io)).rejects.toThrow('Unknown handoff command');
     project.inventory.devices.push({
       ...device,
       assetId: 'second',
@@ -295,9 +328,10 @@ describe('operator controller dispatch without device access', () => {
     expect(engine.recover).not.toHaveBeenCalled();
   });
   it('projects legacy OS pause reasons on status without rewriting the run', async () => {
-    store.get
-      .mockResolvedValueOnce({ id: 'flash', planId: 'plan', status: 'pending' })
-      .mockResolvedValueOnce({ operation: 'install-os' });
+    engine.runStatus.mockResolvedValueOnce({
+      run: { id: 'flash', planId: 'plan', status: 'pending', pauseReason: { kind: 'reenrollment' } },
+      events: [],
+    });
     expect(await runCli(args(['agent', 'status', '--run', 'flash']), io)).toBe(0);
     expect(JSON.parse(output.at(-1) ?? 'null')).toMatchObject({
       run: { id: 'flash', status: 'pending', pauseReason: { kind: 'reenrollment' } },
@@ -382,7 +416,7 @@ describe('operator controller dispatch without device access', () => {
       ),
     ).toBe(0);
     expect(JSON.parse(await readFile(join(projectRoot, config.policyFile), 'utf8')) as unknown).toEqual(
-      policy,
+      toPolicyDocument(policy),
     );
     expect(
       await runCli(
@@ -608,7 +642,7 @@ describe('operator controller dispatch without device access', () => {
     await expect(runCli(args(['lifecycle', 'unknown', '--asset', 'all', '--yes']), io)).rejects.toThrow(
       /Unknown lifecycle/,
     );
-    expect(store.close).toHaveBeenCalledTimes(5);
+    expect(store.close).toHaveBeenCalledTimes(4);
   });
   it('reports detached run progress and explicit cancellation/resume without spawning a new worker for reads', async () => {
     expect(await runCli(args(['agent', 'refresh', '--run', 'run']), io)).toBe(0);
@@ -771,5 +805,201 @@ describe('operator controller dispatch without device access', () => {
     expect(await serving).toBe(0);
     expect(mocks.serverClose).toHaveBeenCalledOnce();
     expect(mocks.application).not.toHaveBeenCalled();
+  });
+});
+
+describe('early command validation and JSON emission', () => {
+  it.each(['attest', 'finalize', 'recover'])(
+    'rejects dry-run %s before reads, prompts or mutations',
+    async (command) => {
+      const confirm = vi.fn();
+      await expect(
+        runCli(args(['device', command, '--asset', 'all', '--dry-run', '--yes']), { ...io, confirm }),
+      ).rejects.toThrow('--dry-run is not supported');
+      expect(mocks.resourceRoot).not.toHaveBeenCalled();
+      expect(mocks.loadProject).not.toHaveBeenCalled();
+      expect(mocks.application).not.toHaveBeenCalled();
+      expect(confirm).not.toHaveBeenCalled();
+      expect(engine.attest).not.toHaveBeenCalled();
+      expect(engine.finalize).not.toHaveBeenCalled();
+      expect(engine.recover).not.toHaveBeenCalled();
+    },
+  );
+  it.each(['invoke', 'adapter'])(
+    'requires one exact extension %s asset before project access',
+    async (command) => {
+      for (const selector of [['--all'], ['--group', 'pilot']]) {
+        await expect(
+          runCli(
+            args([
+              'extension',
+              command,
+              '--extension',
+              lock.id,
+              ...(command === 'invoke' ? ['--command', 'apply'] : ['--contribution', 'apply']),
+              ...selector,
+            ]),
+            io,
+          ),
+        ).rejects.toThrow('is not supported');
+      }
+      expect(mocks.resourceRoot).not.toHaveBeenCalled();
+      expect(mocks.loadProject).not.toHaveBeenCalled();
+      expect(mocks.application).not.toHaveBeenCalled();
+      expect(mocks.extensionInvoke).not.toHaveBeenCalled();
+      expect(mocks.invokeAdapter).not.toHaveBeenCalled();
+    },
+  );
+  it('combines fleet preparation and final runs into exactly one JSON document', async () => {
+    const stdout: string[] = [],
+      stderr: string[] = [];
+    project.inventory.devices.push({
+      ...device,
+      assetId: 'second',
+      canonicalSerial: 'SECOND',
+      transports: [{ kind: 'usb', serial: 'SECOND' }],
+    });
+    expect(
+      await runCli(args(['fleet', 'provision', '--all', '--yes']), {
+        out: (text) => stdout.push(text),
+        error: (text) => stderr.push(text),
+      }),
+    ).toBe(0);
+    expect(stdout).toHaveLength(1);
+    expect(JSON.parse(stdout[0]!)).toMatchObject({
+      plans: [
+        { assetId: 'all', reviewSummary: 'exact-summary' },
+        { assetId: 'second', reviewSummary: 'exact-summary' },
+      ],
+      runs: [{ id: 'run', status: 'completed' }],
+    });
+    expect(stderr).toEqual(['exact-summary', 'exact-summary']);
+  });
+  it('retains the prepared review as one JSON document when later fleet preparation fails', async () => {
+    const stdout: string[] = [],
+      stderr: string[] = [];
+    project.inventory.devices.push({
+      ...device,
+      assetId: 'second',
+      canonicalSerial: 'SECOND',
+      transports: [{ kind: 'usb', serial: 'SECOND' }],
+    });
+    engine.prepare
+      .mockResolvedValueOnce(prepared)
+      .mockRejectedValueOnce(new Error('second target unavailable'));
+    await expect(
+      runCli(args(['fleet', 'provision', '--all', '--dry-run']), {
+        out: (text) => stdout.push(text),
+        error: (text) => stderr.push(text),
+      }),
+    ).rejects.toThrow('second target unavailable');
+    expect(stdout).toHaveLength(1);
+    expect(JSON.parse(stdout[0]!)).toMatchObject({
+      planId: 'reviewed-plan',
+      reviewSummary: 'exact-summary',
+      assetId: 'all',
+    });
+    expect(stderr).toEqual(['exact-summary']);
+    expect(engine.submit).not.toHaveBeenCalled();
+    expect(engine.executeFleet).not.toHaveBeenCalled();
+  });
+  it('passes reviewed provenance evidence and bounded notes to the attestation service', async () => {
+    const evidence = { format: 'reviewed-emulator-image', sha256: 'a'.repeat(64) };
+    const file = join(root, 'emulator-evidence.json');
+    await writeFile(file, JSON.stringify(evidence));
+    expect(
+      await runCli(
+        args([
+          'device',
+          'attest',
+          '--asset',
+          'all',
+          '--check',
+          'emulator_image_provenance',
+          '--operator',
+          'operator',
+          '--note',
+          'Reviewed emulator image',
+          '--evidence',
+          file,
+          '--yes',
+        ]),
+        io,
+      ),
+    ).toBe(0);
+    expect(engine.attest).toHaveBeenCalledWith(
+      expect.any(Object),
+      'emulator_image_provenance',
+      'operator',
+      'Reviewed emulator image',
+      evidence,
+    );
+  });
+  it('checks finalization and guide languages before calling mutation services', async () => {
+    await expect(
+      runCli(
+        args(['device', 'finalize', '--asset', 'all', '--operator', 'operator', '--locale', 'fr', '--yes']),
+        io,
+      ),
+    ).rejects.toThrow('Invalid locale');
+    expect(engine.finalize).not.toHaveBeenCalled();
+    expect(
+      await runCli(
+        args(['device', 'finalize', '--asset', 'all', '--operator', 'operator', '--locale', 'pl', '--yes']),
+        io,
+      ),
+    ).toBe(0);
+    expect(engine.finalize).toHaveBeenCalledWith(expect.any(Object), 'operator', 'pl');
+    await expect(
+      runCli(args(['device', 'guided', '--asset', 'all', '--locale', 'fr', '--yes']), io),
+    ).rejects.toThrow('Guide locale must be en or pl');
+    expect(engine.prepare).not.toHaveBeenCalled();
+  });
+  it('presents destructive OS consent and uses a bounded operator fallback without USER', async () => {
+    delete process.env['USER'];
+    const confirm = vi.fn().mockResolvedValue(true);
+    expect(await runCli(args(['device', 'install-os', '--asset', 'all']), { ...io, confirm })).toBe(0);
+    expect(confirm).toHaveBeenCalledWith(expect.stringContaining('DESTRUCTIVE: erase and install'));
+    expect(engine.submit).toHaveBeenCalledWith('reviewed-plan', 'exact-summary', 'operator');
+  });
+  it('forwards explicit history continuation and refresh capabilities without changing review bytes', async () => {
+    expect(await runCli(args(['agent', 'runs', '--cursor', 'opaque-next-page', '--limit', '25']), io)).toBe(
+      0,
+    );
+    expect(engine.listRuns).toHaveBeenCalledWith({ cursor: 'opaque-next-page', limit: 25 });
+    engine.refreshReview.mockResolvedValueOnce({ ...prepared, capabilities: { supported: true } });
+    expect(await runCli(args(['agent', 'refresh', '--run', 'run']), io)).toBe(0);
+    expect(JSON.parse(output.at(-1)!)).toMatchObject({
+      reviewSummary: 'exact-summary',
+      capabilities: { supported: true },
+    });
+  });
+  it('rejects unsupported handoff export languages before writing a packet', async () => {
+    engine.acceptedHandoff.mockResolvedValueOnce({ record: { locale: 'en' }, snapshot: {} });
+    await expect(
+      runCli(
+        args(['handoff', 'export', '--asset', 'all', '--output', join(root, 'packet'), '--locale', 'fr']),
+        io,
+      ),
+    ).rejects.toThrow('Invalid locale');
+    await expect(readFile(join(root, 'packet'))).rejects.toMatchObject({ code: 'ENOENT' });
+  });
+  it('keeps direct handler fallthrough and missing lifecycle operations free of side effects', async () => {
+    const confirm = vi.fn(),
+      output = vi.fn();
+    const context = {
+      command: undefined,
+      project,
+      app: { engine, store },
+      io: { ...io, confirm },
+      output,
+    } as unknown as ApplicationCliContext;
+    expect(await handoffCommand(context)).toBeUndefined();
+    await expect(lifecycleCommand(context)).rejects.toThrow('Unknown lifecycle operation');
+    expect(confirm).not.toHaveBeenCalled();
+    expect(output).not.toHaveBeenCalled();
+    expect(mocks.recordLifecycle).not.toHaveBeenCalled();
+    expect(engine.acceptedHandoff).not.toHaveBeenCalled();
+    expect(engine.acceptCustody).not.toHaveBeenCalled();
   });
 });

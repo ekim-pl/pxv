@@ -36,8 +36,7 @@ async function observationCommand(
       await Promise.all(
         selected.map(async (item) => ({
           assetId: item.device.assetId,
-          ...(await context.app.engine.readiness(item)),
-          currentStateVerified: false,
+          ...(await context.app.engine.deviceStatus(item)),
         })),
       ),
     );

@@ -30,6 +30,9 @@ export default defineConfig({
   },
   test: {
     include: ['tests/**/*.test.ts', 'packages/**/test/**/*.test.ts'],
+    setupFiles: process.env['PXV_CHILD_V8_COVERAGE_DIRECTORY']
+      ? [fileURLToPath(new URL('./tools/lib/coverage-setup.mjs', import.meta.url))]
+      : [],
     testTimeout: 30000,
     hookTimeout: 30000,
     coverage: {
