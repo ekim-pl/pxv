@@ -118,8 +118,16 @@ async function executeSeedvault(
   return runExitCode([result]);
 }
 
+function assertSeedvaultCommand(context: ApplicationCliContext): void {
+  if (
+    context.product.features?.seedvault === false &&
+    !['report', 'connections', 'disconnect'].includes(context.command ?? '')
+  )
+    throw new Error('Seedvault is an optional experimental recovery module; use a recovery-enabled product');
+}
 export async function seedvaultCommand(context: ApplicationCliContext): Promise<number> {
   const { command, app, value, output, signal } = context;
+  assertSeedvaultCommand(context);
   if (command === 'report') {
     output(await app.engine.seedvaultReport(value('run')));
     return 0;

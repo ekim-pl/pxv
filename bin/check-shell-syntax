@@ -1,7 +1,0 @@
-#!/usr/bin/env bash
-set -euo pipefail
-project_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)"
-if (($# == 0)); then
-  set -- "$project_dir"/bin/* "$project_dir"/guides/rebuild.sh "$project_dir"/scripts/examples/*.sh
-fi
-for script in "$@"; do bash -n -- "$script"; done

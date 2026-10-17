@@ -1,4 +1,4 @@
-import type { OsPolicy, SelectedTarget } from '@pxv/contracts';
+import { canonicalJson, type OsPolicy, type SelectedTarget } from '@pxv/contracts';
 import { access, mkdtemp, mkdir, realpath, rm, writeFile } from 'node:fs/promises';
 import { constants } from 'node:fs';
 import { delimiter, dirname, isAbsolute, join } from 'node:path';
@@ -6,6 +6,13 @@ import { tmpdir } from 'node:os';
 import { AdapterError, checked, shellQuote, type CommandRunner, type OperationOptions } from './command.js';
 import { copySnapshot, download, fileDigest, regularFile, seal } from './files.js';
 import { extractZip } from './zip.js';
+import {
+  cachedArtifact,
+  cacheKey,
+  cachePlanDirectory,
+  cachePlanReference,
+  linkCachedArtifact,
+} from './artifact-cache.js';
 
 const MAX_IMAGE_BYTES = 4 * 1024 ** 3 - 1;
 export interface VerifiedImage {
@@ -18,6 +25,7 @@ export interface VerifiedImage {
 export interface ImageOptions {
   runner: CommandRunner;
   sshKeygen?: string;
+  cacheRoot?: string;
 }
 function validatePolicy(policy: OsPolicy): void {
   [policy.url, policy.signatureUrl].forEach(validateImageUrl);
@@ -36,9 +44,11 @@ function validatePolicy(policy: OsPolicy): void {
 export class ImageService {
   readonly runner: CommandRunner;
   readonly sshKeygen: string;
+  readonly cacheRoot?: string;
   constructor(options: ImageOptions) {
     this.runner = options.runner;
     this.sshKeygen = options.sshKeygen ?? 'ssh-keygen';
+    if (options.cacheRoot) this.cacheRoot = options.cacheRoot;
   }
   async verify(
     path: string,
@@ -89,6 +99,41 @@ export class ImageService {
   }
   async snapshot(policy: OsPolicy, directory: string, signal?: AbortSignal): Promise<VerifiedImage> {
     validatePolicy(policy);
+    if (!this.cacheRoot) return this.privateSnapshot(policy, directory, signal);
+    const image = await cachedArtifact(
+      {
+        root: join(this.cacheRoot, 'os'),
+        key: cacheKey(canonicalJson(policy)),
+        build: (path) => this.privateSnapshot(policy, path, signal),
+        verify: (path) =>
+          this.verify(join(path, 'factory.zip'), join(path, 'factory.zip.sig'), policy, signal),
+        contentId: (value) => `${value.sha256}-${value.signatureSha256}`,
+        relocate: (value, path) => ({
+          ...value,
+          path: join(path, 'factory.zip'),
+          signaturePath: join(path, 'factory.zip.sig'),
+        }),
+      },
+      signal,
+    );
+    await cachePlanDirectory(directory);
+    const path = join(directory, 'factory.zip');
+    const signaturePath = join(directory, 'factory.zip.sig');
+    try {
+      await linkCachedArtifact(image.path, path);
+      await linkCachedArtifact(image.signaturePath, signaturePath);
+      await cachePlanReference(join(directory, 'reference.json'), image);
+      return { ...image, path, signaturePath };
+    } catch (error) {
+      await rm(directory, { recursive: true, force: true });
+      throw error;
+    }
+  }
+  private async privateSnapshot(
+    policy: OsPolicy,
+    directory: string,
+    signal?: AbortSignal,
+  ): Promise<VerifiedImage> {
     await mkdir(dirname(directory), { recursive: true, mode: 0o700 });
     await mkdir(directory, { mode: 0o700 });
     const path = join(directory, 'factory.zip');

@@ -32,6 +32,7 @@ import type {
   RecipeExecutionResult,
   ProbeObservation,
   ProbeExecutionResult,
+  Operation,
 } from './workflow-types.js';
 import type { ObservationReader } from './observation-service.js';
 import type { PlanReader } from './plan-repository.js';
@@ -41,6 +42,8 @@ import type { Journal } from './journal.js';
 import { checkLanguageDelta, normalReceiptMatches } from './setup-evidence.js';
 import { canonicalEffects } from './reviewed-plan.js';
 import type { CredentialDefaultHistory, DefaultCredentialAction } from './credential-default-history.js';
+import { runPauseReason, withRunPauseReason } from './run-state.js';
+import { invalidateRegistryBindings } from './phone-registry.js';
 export class ExecutionService {
   constructor(
     readonly project: ProjectContext,
@@ -145,7 +148,7 @@ export class ExecutionService {
     active.workflowExpected = state;
   }
   private canResume(run: RunRecord): boolean {
-    return run.status === 'pending' && run.manualGate !== undefined && Number.isSafeInteger(run.cursor);
+    return runPauseReason(run)?.kind === 'manual-step' && Number.isSafeInteger(run.cursor);
   }
   private async executeOwned(runId: string, externalSignal?: AbortSignal): Promise<RunRecord> {
     const run = await this.store.get<RunRecord>('runs', runId);
@@ -153,7 +156,10 @@ export class ExecutionService {
     this.journal.track(run);
     await this.journal.ingestNative(runId);
     const resume = this.canResume(run);
-    if (run.status !== 'queued' && !resume) return run;
+    if (run.status !== 'queued' && !resume) {
+      const historical = await this.store.get<{ operation?: Operation }>('plans', run.planId);
+      return withRunPauseReason(run, historical?.operation);
+    }
     const prepared = await this.plans.read(run.planId);
     const control = new ExecutionControl(this.store, runId, externalSignal);
     try {
@@ -168,7 +174,7 @@ export class ExecutionService {
       control.dispose();
     }
     await this.finishExecution(run);
-    return run;
+    return withRunPauseReason(run, prepared.operation);
   }
   private async finishExecution(run: RunRecord): Promise<void> {
     if (run.status === 'needs-inspection' || run.status === 'cancelled') {
@@ -258,6 +264,7 @@ export class ExecutionService {
     await this.checkExecutionEffects(active);
     run.status = 'running';
     delete run.manualGate;
+    delete run.pauseReason;
     await this.journal.save(run, resume ? 'resumed' : 'started');
     if (!(await this.executeActions(active))) return;
     await this.completeActions(active);
@@ -350,6 +357,12 @@ export class ExecutionService {
   private async executeAction(active: ActiveExecution, action: Action, index: number): Promise<boolean> {
     if (action.kind === 'manual') return this.executeManual(active, action, index);
     if (action.kind === 'install-os') {
+      await invalidateRegistryBindings(
+        this.store,
+        active.target.device,
+        undefined,
+        this.clock().toISOString(),
+      );
       await this.credentialDefaults.clear(active.target);
       await this.port.flash(active.target, this.project.policy, active.context);
       return true;
@@ -359,6 +372,12 @@ export class ExecutionService {
     const live = await this.observations.observe(active.target, active.control.signal);
     this.checkEstablishedUsers(active.observation, live);
     if (action.kind === 'create-user') {
+      await invalidateRegistryBindings(
+        this.store,
+        active.target.device,
+        profile.id,
+        this.clock().toISOString(),
+      );
       await this.port.createUser(active.target, profile, active.context);
       return true;
     }
@@ -421,9 +440,21 @@ export class ExecutionService {
     await this.credentialDefaultCheckpoint(active, action.kind === 'default-duress');
     if (action.kind === 'default-credential') {
       if (!this.port.setCredentialDefault) throw new Error('Credential defaults adapter is unavailable');
+      await invalidateRegistryBindings(
+        this.store,
+        active.target.device,
+        profile.id,
+        this.clock().toISOString(),
+      );
       await this.port.setCredentialDefault(active.target, user, profile, active.context);
     } else {
       if (!this.port.setDuressDefault) throw new Error('Duress defaults adapter is unavailable');
+      await invalidateRegistryBindings(
+        this.store,
+        active.target.device,
+        undefined,
+        this.clock().toISOString(),
+      );
       await this.port.setDuressDefault(active.target, user, profile, active.context);
     }
     await this.credentialDefaults.recordAccepted(active.target, action, user, active.run.id);
@@ -509,10 +540,23 @@ export class ExecutionService {
     index: number,
     gate: string,
     observation = active.observation,
+    instructions?: string,
   ): Promise<false> {
     active.run.status = 'pending';
     active.run.cursor = index;
     active.run.manualGate = gate;
+    const action = active.prepared.plan.actions[index];
+    const pauseReason = {
+      kind: 'manual-step',
+      gate,
+      ...(action && 'profileId' in action ? { profileId: action.profileId } : {}),
+      ...(action?.kind === 'recipe'
+        ? { recipeId: action.recipe.id, instructions: `Complete app configuration: ${action.recipe.id}.` }
+        : action?.kind === 'manual'
+          ? { instructions: action.instructions }
+          : {}),
+    } as const;
+    active.run.pauseReason = { ...pauseReason, ...(instructions ? { instructions } : {}) };
     active.observation = observation;
     await this.checkpoint(active, 'manual-pending', gate);
     return false;
@@ -534,17 +578,34 @@ export class ExecutionService {
     action: Extract<Action, { kind: 'manual' }>,
     index: number,
   ): Promise<boolean> {
-    const consumed = active.run.completedSetup?.some((value) => value.check === action.capability);
+    const consumed = active.run.completedSetup?.some(
+      (value) =>
+        value.check === action.capability &&
+        (action.capability !== 'app_setup' || value.actionIndex === index),
+    );
     const receipt = await this.currentReceipt(active, action.capability);
-    if (!consumed && !receipt) return this.pauseExecution(active, index, action.capability);
-    if (receipt && !consumed)
-      active.run.completedSetup = [
-        ...(active.run.completedSetup ?? []),
-        { check: action.capability, receiptId: receipt.id, planDigest: receipt.planDigest },
-      ];
+    const used = this.usedAppSetupReceipt(active.run, receipt);
+    if (!consumed && (!receipt || used)) return this.pauseExecution(active, index, action.capability);
+    if (receipt && !consumed) this.consumeSetupReceipt(active.run, receipt, index);
     active.run.cursor = index + 1;
     await this.journal.save(active.run, 'manual-receipt-consumed');
     return true;
+  }
+  private usedAppSetupReceipt(run: RunRecord, receipt: OperatorAttestation | undefined): boolean {
+    return (
+      receipt?.check === 'app_setup' && !!run.completedSetup?.some((value) => value.receiptId === receipt.id)
+    );
+  }
+  private consumeSetupReceipt(run: RunRecord, receipt: OperatorAttestation, index: number): void {
+    run.completedSetup = [
+      ...(run.completedSetup ?? []),
+      {
+        check: receipt.check,
+        receiptId: receipt.id,
+        planDigest: receipt.planDigest,
+        ...(receipt.check === 'app_setup' ? { actionIndex: index } : {}),
+      },
+    ];
   }
   private async executeRecipe(
     active: ActiveExecution,
@@ -565,7 +626,7 @@ export class ExecutionService {
     if (result.status === 'manual-pending') {
       await this.writeRecipeEvidence(active, action, index, profile, user, result, 'manual-pending');
       active.observation = await this.observations.observe(active.target, active.control.signal);
-      return this.pauseExecution(active, index, 'app_setup');
+      return this.pauseExecution(active, index, 'app_setup', active.observation, result.instructions);
     }
     if (result.postconditions !== action.recipe.postconditions.length)
       throw new Error('Recipe postcondition evidence is incomplete');
@@ -591,9 +652,11 @@ export class ExecutionService {
   ): Promise<boolean> {
     if (previous.configurationDigest !== digest(action.recipe) || !sameUser(previous.user, user))
       throw new Error('Recipe checkpoint identity changed');
-    if (!(await this.currentReceipt(active, 'app_setup', live)))
-      return this.pauseExecution(active, index, 'app_setup', live);
+    const receipt = await this.currentReceipt(active, 'app_setup', live);
+    if (!receipt || receipt.id === previous.previousReceiptId)
+      return this.pauseExecution(active, index, 'app_setup', live, previous.result.instructions);
     await this.writeRecipeEvidence(active, action, index, profile, user, previous.result, 'manual-completed');
+    this.consumeSetupReceipt(active.run, receipt, index);
     return true;
   }
   private async writeRecipeEvidence(
@@ -627,6 +690,9 @@ export class ExecutionService {
           }
         : {}),
       result,
+      ...(status === 'manual-pending'
+        ? { previousReceiptId: (await this.currentReceipt(active, 'app_setup'))?.id ?? null }
+        : {}),
     });
     if (status === 'manual-pending') return;
     active.run.capabilityEvidence = [
@@ -738,6 +804,11 @@ export class ExecutionService {
   private async completeActions(active: ActiveExecution): Promise<void> {
     if (active.prepared.operation === 'install-os') {
       active.run.status = 'pending';
+      active.run.pauseReason = {
+        kind: 'reenrollment',
+        instructions:
+          'Finish phone setup, authorize USB debugging and re-enroll before preparing provisioning.',
+      };
       await this.journal.save(active.run, 'awaiting-os-reenrollment');
       return;
     }
@@ -745,6 +816,9 @@ export class ExecutionService {
     const state = this.workflowState(active.target, active.prepared, active.observation, active.run);
     active.run.status =
       state.status === 'verified' && active.prepared.operation !== 'provision' ? 'completed' : 'pending';
+    const pauseReason = runPauseReason(active.run, active.prepared.operation);
+    if (pauseReason) active.run.pauseReason = pauseReason;
+    else delete active.run.pauseReason;
     await this.checkpoint(active, active.run.status);
   }
   async cancel(runId: string): Promise<void> {

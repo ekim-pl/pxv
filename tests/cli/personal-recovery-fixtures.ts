@@ -39,7 +39,12 @@ export async function personalFixture() {
       ...profile,
       packages: profile.packages.map((item) => ({ ...item, path: 'artifacts/app.apk', sha256: hash(apk) })),
       networkProbe: {
-        artifact: { ...profile.packages[0]!, path: 'artifacts/probe.apk', sha256: hash(probe) },
+        artifact: {
+          ...profile.packages[0]!,
+          packageId: 'org.pxv.probe',
+          path: 'artifacts/probe.apk',
+          sha256: hash(probe),
+        },
         endpoint: 'https://example.org/check',
         expectedEgressCidrs: ['192.0.2.0/24'],
         requireVpn: false,

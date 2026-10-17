@@ -241,6 +241,64 @@ function adapter(runner: FakeRunner): AndroidAdapter {
   artifacts.checkCompatibility = () => Promise.resolve();
   return new AndroidAdapter({ runner, artifacts, adbServer: endpoint });
 }
+describe('observation-scoped shared APK inspection', () => {
+  function sharedPolicy(): PolicyPack {
+    const configured = structuredClone(policy);
+    const secondary = configured.profiles[0];
+    const owner = configured.profiles[1];
+    if (!secondary || !owner) throw new Error('Missing profile fixtures');
+    owner.packages = structuredClone(secondary.packages);
+    owner.permissions = structuredClone(secondary.permissions);
+    return configured;
+  }
+  it('inspects one shared APK path once while keeping each user identity and permissions', async () => {
+    const runner = new FakeRunner();
+    const android = adapter(runner);
+    const configured = sharedPolicy();
+    const observed = await android.inspect(target, configured);
+    expect(runner.calls.filter(({ args }) => args.includes('pull'))).toHaveLength(1);
+    expect(observed.profiles.map((profile) => profile.user)).toEqual([
+      user,
+      { userId: 0, serialNo: 0, name: 'Owner' },
+    ]);
+    expect(observed.profiles.map((profile) => profile.packages.length)).toEqual([1, 1]);
+    expect(observed.profiles.map((profile) => profile.permissions[0]?.granted)).toEqual([true, false]);
+    runner.version = 2;
+    const next = await android.inspect(target, configured);
+    expect(runner.calls.filter(({ args }) => args.includes('pull'))).toHaveLength(2);
+    expect(next.profiles.map((profile) => profile.packages[0]?.versionCode)).toEqual([2, 2]);
+    const effects = await android.inspectSharedEffects(target, ['org.example.app']);
+    expect(runner.calls.filter(({ args }) => args.includes('pull'))).toHaveLength(3);
+    expect(effects[0]?.users.map((entry) => entry.user.serialNo)).toEqual([0, 42]);
+  });
+  it('preserves per-user package absence even when another profile uses an inspected shared APK', async () => {
+    const runner = new FakeRunner();
+    const run = runner.run.bind(runner);
+    runner.run = (args, options) => {
+      const command = args.slice(args.indexOf('shell') + 1).map(decode);
+      if (command.join(' ') === 'pm list packages --user 0')
+        return Promise.resolve({ code: 0, stdout: 'package:android\n', stderr: '' });
+      return run(args, options);
+    };
+    const observed = await adapter(runner).inspect(target, sharedPolicy());
+    expect(observed.profiles.map((profile) => profile.packages.length)).toEqual([1, 0]);
+    expect(observed.profiles[1]?.permissions[0]?.granted).toBe(false);
+    expect(runner.calls.filter(({ args }) => args.includes('pull'))).toHaveLength(1);
+  });
+  it('does not share package identity across distinct actual APK paths', async () => {
+    const runner = new FakeRunner();
+    const run = runner.run.bind(runner);
+    runner.run = (args, options) => {
+      const command = args.slice(args.indexOf('shell') + 1).map(decode);
+      if (command.slice(0, 2).join(' ') === 'pm path' && command[3] === '0')
+        return Promise.resolve({ code: 0, stdout: 'package:/data/app/owner/base.apk\n', stderr: '' });
+      return run(args, options);
+    };
+    const observed = await adapter(runner).inspect(target, sharedPolicy());
+    expect(observed.profiles.map((profile) => profile.packages.length)).toEqual([1, 1]);
+    expect(runner.calls.filter(({ args }) => args.includes('pull'))).toHaveLength(2);
+  });
+});
 describe('identity-bound Android adapter', () => {
   it('binds modern GrapheneOS named users to redacted dumpsys serial identities', async () => {
     const names =

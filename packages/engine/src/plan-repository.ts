@@ -16,6 +16,7 @@ export interface PreparedDraft {
   osSnapshot?: OsSnapshot;
   refreshedFrom?: ReviewLineage;
   lifecycleGeneration?: string;
+  capabilities?: PreparedOperation['capabilities'];
 }
 export interface PlanReader {
   read(id: string, summary?: string, allowExpired?: boolean): Promise<PreparedOperation>;
@@ -56,6 +57,7 @@ export class PlanRepository implements PlanWriter {
       ...(input.lifecycleGeneration ? { lifecycleGeneration: input.lifecycleGeneration } : {}),
       ...(input.osSnapshot ? { osSnapshot: input.osSnapshot } : {}),
       ...(input.refreshedFrom ? { refreshedFrom: input.refreshedFrom } : {}),
+      ...(input.capabilities ? { capabilities: input.capabilities } : {}),
     };
     const plan = validatePlan({ ...body, digest: preparedDigest(draft, this.project.config.extensions) });
     const prepared = {

@@ -10,6 +10,29 @@ export function sameArtifact(a: ArtifactPolicy, b: ArtifactPolicy): boolean {
   );
 }
 
+function configurationSummary(prepared: Omit<PreparedOperation, 'reviewSummary'>) {
+  if (!prepared.capabilities) return {};
+  return {
+    capabilities: prepared.capabilities,
+    appConfiguration: prepared.plan.actions.flatMap<Record<string, unknown>>((action) => {
+      if (action.kind === 'manual' && action.capability === 'app_setup')
+        return [{ mode: 'assisted', instructions: action.instructions }];
+      if (action.kind !== 'recipe') return [];
+      return [
+        {
+          profileId: action.profileId,
+          recipeId: action.recipe.id,
+          mode:
+            !prepared.capabilities?.uiAutomation &&
+            action.recipe.steps.some((step) => step.action === 'select-staged-file')
+              ? 'assisted'
+              : 'automated',
+        },
+      ];
+    }),
+  };
+}
+
 export function summaryData(prepared: Omit<PreparedOperation, 'reviewSummary'>): Record<string, unknown> {
   const { plan, target, baseline, operation, expiresAt, osSnapshot } = prepared;
   return {
@@ -20,6 +43,7 @@ export function summaryData(prepared: Omit<PreparedOperation, 'reviewSummary'>):
     deviceKind: target.device.kind,
     transport: target.transport,
     policyDigest: plan.policyDigest,
+    ...configurationSummary(prepared),
     ...(prepared.lifecycleGeneration ? { lifecycleGeneration: prepared.lifecycleGeneration } : {}),
     users: baseline.profiles.map((value) => ({ profileId: value.profileId, user: value.user })),
     sharedEffects: prepared.sharedEffects,

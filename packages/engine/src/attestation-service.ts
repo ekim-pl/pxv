@@ -5,6 +5,7 @@ import {
   observationDigest,
   requiredAttestations,
   validateAttestation,
+  type Action,
   type DeviceObservation,
   type OperatorAttestation,
   type SelectedTarget,
@@ -21,6 +22,8 @@ import type {
   EmulatorProvenance,
   WorkflowPort,
   WorkflowState,
+  PreparedOperation,
+  RunRecord,
 } from './workflow-types.js';
 import { normalReceiptMatches } from './setup-evidence.js';
 
@@ -84,13 +87,7 @@ export class AttestationService {
         .map((action) => action.capability) ?? [];
     if (![...requiredAttestations(this.project.policy, target.device.kind), ...manual].includes(check))
       throw new Error('Check does not belong to this workflow');
-    const failures = evaluateObservation(this.project.resolved, live).checks.filter((value) => !value.passed);
-    if (
-      failures.some(
-        (value) => !['normal_credentials', 'app_setup'].includes(check) || !value.key.endsWith('.language'),
-      )
-    )
-      throw new Error('Contradictory measurements cannot be replaced by manual receipts');
+    await this.assertSetupMeasurements(check, state, live, prepared);
     if (check !== 'duress') return;
     const receipts = await this.evidence.receipts(target.device.assetId);
     if (
@@ -98,6 +95,47 @@ export class AttestationService {
       !receipts.some((value) => normalReceiptMatches(value, state.planDigest, live, state.completedSetup))
     )
       throw new Error('Normal credentials and final language must be complete before duress setup');
+  }
+  private async assertSetupMeasurements(
+    check: string,
+    state: WorkflowState,
+    live: DeviceObservation,
+    prepared: PreparedOperation | undefined,
+  ): Promise<void> {
+    const failures = evaluateObservation(this.project.resolved, live).checks.filter((value) => !value.passed);
+    const deferredVpn = await this.deferredVpnChecks(check, state, prepared);
+    if (failures.some((value) => !this.pendingSetupCheck(check, value.key, deferredVpn)))
+      throw new Error('Contradictory measurements cannot be replaced by manual receipts');
+  }
+  private async deferredVpnChecks(
+    check: string,
+    state: WorkflowState,
+    prepared: PreparedOperation | undefined,
+  ): Promise<string[]> {
+    if (check !== 'app_setup' || !state.pending.includes('manual:app_setup') || !prepared) return [];
+    const runId = digest({ project: this.project.config.id, plan: prepared.plan.digest });
+    const run = await this.store.get<RunRecord>('runs', runId);
+    const cursor = this.appSetupCursor(run, prepared);
+    if (cursor === undefined) return [];
+    return prepared.plan.actions
+      .slice(cursor + 1)
+      .filter((action) => action.kind === 'vpn')
+      .map((action) => `${action.profileId}.vpn`);
+  }
+  private appSetupCursor(run: RunRecord | undefined, prepared: PreparedOperation): number | undefined {
+    if (run?.status !== 'pending' || run.manualGate !== 'app_setup' || !Number.isSafeInteger(run.cursor))
+      return undefined;
+    const action = prepared.plan.actions[run.cursor ?? -1];
+    return this.isAppSetupAction(action) ? run.cursor : undefined;
+  }
+  private isAppSetupAction(action: Action | undefined): boolean {
+    return action?.kind === 'recipe' || (action?.kind === 'manual' && action.capability === 'app_setup');
+  }
+  private pendingSetupCheck(check: string, key: string, deferredVpn: string[]): boolean {
+    return (
+      (['normal_credentials', 'app_setup'].includes(check) && key.endsWith('.language')) ||
+      deferredVpn.includes(key)
+    );
   }
   private validateEmulatorPin(evidence: EmulatorImagePin): void {
     const keys = Object.keys(evidence);

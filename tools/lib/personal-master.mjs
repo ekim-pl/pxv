@@ -25,6 +25,17 @@ import {
   validateMasterProfiles,
 } from './personal-validation.mjs';
 
+/** @param {unknown} value */
+export async function normalizedPolicy(value) {
+  const { validatePolicy } = await import('../../packages/contracts/dist/index.js');
+  return validatePolicy(value);
+}
+/** @param {any} policy @param {string} codename */
+export async function selectedOsPolicy(policy, codename) {
+  const { osPolicyForTarget } = await import('../../packages/contracts/dist/index.js');
+  return osPolicyForTarget(policy, codename);
+}
+
 /** @param {string} root */
 export async function installedIdentity(root) {
   const product = await readJson(join(root, 'product.json'));
@@ -85,17 +96,28 @@ export async function copyArtifacts(policy, source, destination) {
     if (copied.sha256 !== artifact.sha256.toLowerCase()) throw new Error('APK changed while copying');
   }
 }
-/** @param {string} project */
-export async function projectSnapshot(project) {
+/** @param {string} project @param {string} deviceSerial */
+export async function projectSnapshot(project, deviceSerial) {
   const config = await readJson(join(project, 'pxv.project.json'));
   if (config.extensions.length) throw new Error('These examples require an extension-free project');
-  const policy = await readJson(contained(project, config.policyFile));
+  const source = await readJson(contained(project, config.policyFile));
+  const policy = await normalizedPolicy(source);
   const lock = await readJson(join(project, 'policy.lock.json'));
-  if (canonical(policy) !== canonical(lock.policy) || canonical(config) !== canonical(lock.project))
+  if (
+    (source.schemaVersion === 1 && canonical(source) !== canonical(lock.policy)) ||
+    canonical(policy) !== canonical(lock.policy) ||
+    canonical(config) !== canonical(lock.project)
+  )
     throw new Error('Review and write a current policy lock before making a master');
-  if (!policy.os?.codename) throw new Error('A reviewed pinned GrapheneOS policy is required');
+  const inventory = await readJson(contained(project, config.inventoryFile));
+  const devices = inventory.devices.filter(
+    (/** @type {any} */ device) => device.kind === 'pixel' && device.canonicalSerial === deviceSerial,
+  );
+  if (devices.length !== 1) throw new Error('Backup report must identify one enrolled physical Pixel');
+  const os = await selectedOsPolicy(policy, devices[0].codename);
+  if (!os) throw new Error('A reviewed pinned GrapheneOS policy is required for the enrolled model');
   localArtifacts(policy);
-  return { config, policy, lock };
+  return { config, policy, lock, os };
 }
 /** @param {any} report @param {string[]} expected */
 export function completedEvidence(report, expected) {
@@ -131,7 +153,7 @@ function profileEvidence(profile) {
 /** @param {{project:string,usb:string,destination:string,report:any,expected:string[],identity:any,coverage:any,adapter:any}} options */
 export async function createMaster(options) {
   await distinctRoots([options.project, options.usb, options.destination]);
-  const snapshot = await projectSnapshot(options.project);
+  const snapshot = await projectSnapshot(options.project, options.report.deviceSerial);
   compatibleIdentity(snapshot.lock, options.identity);
   const profiles = completedEvidence(options.report, options.expected);
   await validateMasterProfiles({ seedvault: { profiles } }, snapshot.policy);
@@ -170,7 +192,7 @@ async function finishMaster(options, snapshot, profiles, pending) {
     restoration: 'untested',
     createdAt: new Date().toISOString(),
     ...options.identity,
-    codename: snapshot.policy.os.codename,
+    codename: snapshot.os.codename,
     sourceProjectId: snapshot.config.id,
     files,
     directories: await treeDirectories(pending),
@@ -193,11 +215,11 @@ export async function verifyMaster(root) {
   const manifest = await readJson(join(root, 'master.json'));
   assertMasterHeader(manifest);
   await verifyRecordedTree(root, manifest);
-  const policy = await readJson(join(root, 'project/policy.json'));
+  const policy = await normalizedPolicy(await readJson(join(root, 'project/policy.json')));
   for (const artifact of localArtifacts(policy))
     if ((await fileHash(contained(join(root, 'project'), artifact.path))) !== artifact.sha256.toLowerCase())
       throw new Error('Master APK differs from its reviewed policy: ' + artifact.path);
-  if (policy.os?.codename !== manifest.codename) throw new Error('Master OS identity differs');
+  if (!(await selectedOsPolicy(policy, manifest.codename))) throw new Error('Master OS identity differs');
   await validateMasterProfiles(manifest, policy);
   await verifyQualification(root, manifest);
   validateCoverageInventory(

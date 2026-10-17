@@ -143,16 +143,24 @@ describe('reviewed workflows, operator and recipient gates', () => {
     expect(prepared.sharedEffects).toEqual([{ packageId: 'org.example.vpn', users: [] }]);
     expect(prepared.reviewSummary).toContain('sharedEffects');
     expect(prepared.plan.actions.map((action) => action.kind)).toEqual([
-      'install-apk',
-      'setting',
-      'permission',
-      'vpn',
       'create-user',
       'install-apk',
+      'install-apk',
       'setting',
       'permission',
+      'setting',
+      'permission',
+      'manual',
+      'manual',
+      'vpn',
       'vpn',
     ]);
+    expect((await engine.execute(run.id)).manualGate).toBe('app_setup');
+    expect(port.calls).not.toContain('vpn');
+    await engine.attest(target, 'app_setup', 'Alice');
+    expect((await engine.execute(run.id)).manualGate).toBe('app_setup');
+    expect(port.calls).not.toContain('vpn');
+    await engine.attest(target, 'app_setup', 'Alice');
     expect((await engine.execute(run.id)).status).toBe('pending');
     expect((await engine.state('all')).status).toBe('verified');
     expect(port.calls).toContain('create-user');
@@ -735,7 +743,10 @@ describe('reviewed workflows, operator and recipient gates', () => {
     expect(prepared.baseline.os.release).toBe('unobserved');
     expect(prepared.osSnapshot?.sha256).toBe(hashA);
     const run = await engine.submit(prepared.plan.id, prepared.reviewSummary, 'Alice');
-    expect((await engine.execute(run.id)).status).toBe('pending');
+    expect(await engine.execute(run.id)).toMatchObject({
+      status: 'pending',
+      pauseReason: { kind: 'reenrollment' },
+    });
     expect(port.calls).toEqual(['install-os']);
     const extension = await engine.prepareExtension(target, [{ kind: 'install-os', os: desired.os }]);
     expect(extension.operation).toBe('install-os');
@@ -745,6 +756,36 @@ describe('reviewed workflows, operator and recipient gates', () => {
         { kind: 'manual', capability: 'operator_signoff', instructions: 'mixed' },
       ]),
     ).rejects.toThrow('separate operation');
+  });
+
+  it('selects the matching GrapheneOS pin for a mixed-model policy', async () => {
+    const desired = basePolicy();
+    const pin = {
+      codename: 'akita',
+      release: '2026100600',
+      url: 'https://example.org/akita.zip',
+      signatureUrl: 'https://example.org/akita.zip.sig',
+      publicKey: 'ssh-ed25519 AAAA',
+      signerPrincipal: 'release@example.org',
+      namespace: 'factory images',
+    };
+    desired.osByCodename = { akita: pin, husky: { ...pin, codename: 'husky' } };
+    await configure(desired);
+    artifacts.snapshotOs = (os, path) =>
+      Promise.resolve({
+        path,
+        signaturePath: `${path}.sig`,
+        sha256: hashA,
+        signatureSha256: hashB,
+        policy: os,
+      });
+    const prepared = await engine.prepare(target, 'install-os');
+    expect(prepared.osSnapshot?.policy.codename).toBe('akita');
+    expect(prepared.plan.actions).toEqual([{ kind: 'install-os', os: pin }]);
+    await expect(
+      engine.prepareExtension(target, [{ kind: 'install-os', os: desired.osByCodename['husky']! }]),
+    ).rejects.toThrow('selected policy');
+    expect(port.calls).toEqual([]);
   });
 
   it('executes bounded fleet jobs under shared project ownership and independent phone leases', async () => {

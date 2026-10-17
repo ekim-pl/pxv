@@ -27,7 +27,7 @@ async function configFile(root: string, value: unknown): Promise<string> {
 function scaffold(config: string, output: string) {
   return spawnSync(
     process.execPath,
-    [join(repo, 'tools/whitelabel-scaffold.mjs'), '--config', config, '--output-dir', output],
+    [join(repo, 'tools/optional/branding/scaffold.mjs'), '--config', config, '--output-dir', output],
     { cwd: repo, encoding: 'utf8' },
   );
 }

@@ -61,6 +61,9 @@ const stringFlags = [
   'seedvault-adapter',
   'output-dir',
   'chromium',
+  'passphrase-file',
+  'new-passphrase-file',
+  'record-revision',
 ] as const;
 const booleanFlags = [
   'help',
@@ -82,20 +85,24 @@ for (const name of booleanFlags) options[name] = { type: 'boolean' };
 function help(product: ProductDescriptor, version: string): string {
   return (
     `${product.command} ${version} — ${product.name}\n\n` +
-    `project init --path NEW_DIRECTORY [--policy FILE]\npolicy validate | policy lock\ninventory list | inventory enroll --asset ID --serial SERIAL --model MODEL --codename CODE --yes\n` +
+    `project init --path NEW_DIRECTORY [--policy FILE]\npolicy validate | policy lock | policy convert --output FILE\ninventory list | inventory enroll --asset ID --serial SERIAL --model MODEL --codename CODE --yes\n` +
     `host doctor | host adb-start | host bootstrap --file APPROVED_ARCHIVE.json --license ID --path NEW_DIRECTORY\nhost build-helper --type probe|setup|e2e\nhost docker-prepare | docker-adb-start --image IMAGE | docker-adb-stop\n` +
     `device inspect | plan | guided | provision | create-users | deploy | install-os | report | attest | finalize | recover\n` +
     `  --project-root DIRECTORY --asset ID [--transport usb|wifi|emulator] [--dry-run] [--yes]\n` +
-    `fleet provision --all|--group GROUP [--jobs 2] [--yes]\nagent runs | status --run ID [--after CURSOR] | cancel --run ID | resume --run ID --yes | refresh --run ID | execute --plan ID --review-file FILE --operator NAME\n` +
-    `seedvault inspect | backup | restore [--file REQUEST.json] [--seedvault-adapter FILE] [--dry-run]\n` +
-    `seedvault report --run ID | connections | connect --endpoint HOST:PORT [--pair-endpoint HOST:PORT]\n` +
-    `seedvault disconnect --endpoint HOST:PORT [--run CONNECTION_ID --inspected]\n` +
-    `mcp serve [--allow-mutations]\nextension install|update --package NAME --version EXACT --registry HTTPS\nextension install --file PACKAGE.tgz | list | inspect | remove | invoke\nextension policy|guide|adapter --extension ID --contribution PATH\n` +
+    `fleet provision --all|--group GROUP [--jobs 2] [--yes]\nfleet inspect | plan | guided | install-os --all|--group GROUP\nagent runs | status --run ID [--after CURSOR] | cancel --run ID | resume --run ID --yes | refresh --run ID | execute --plan ID --review-file FILE --operator NAME\n` +
+    (product.features?.seedvault === false
+      ? `Seedvault backup/restore is an optional feature disabled in this product.\n`
+      : `seedvault inspect | backup | restore [--file REQUEST.json] [--seedvault-adapter FILE] [--dry-run]\nseedvault report --run ID | connections | connect --endpoint HOST:PORT [--pair-endpoint HOST:PORT]\nseedvault disconnect --endpoint HOST:PORT [--run CONNECTION_ID --inspected]\n`) +
+    `mcp serve [--allow-mutations]\n` +
+    `registry init | list | show --asset ID | history --asset ID\nregistry update --asset ID --file PRIVATE.json --record-revision N [--yes]\nregistry reveal --asset ID --output PRIVATE_FILE [--record-revision N] | rekey | reconcile\n  [--passphrase-file PRIVATE_FILE] (otherwise a hidden local prompt)\n` +
+    (product.features?.extensions === false
+      ? `Trusted extensions are an optional feature disabled in this product.\n`
+      : `extension install|update --package NAME --version EXACT --registry HTTPS\nextension install --file PACKAGE.tgz | list | inspect | remove | invoke\nextension policy|guide|adapter --extension ID --contribution PATH\n`) +
     `lifecycle maintenance|policy-change|loss|retirement --asset ID --operator NAME --note TEXT [--erased]\n` +
     `handoff accept --asset ID --recipient NAME --debugging-off --yes\nhandoff export --asset ID --output DIRECTORY [--locale en|pl]\nguide operator|recipient|project [--locale en|pl]\n` +
     `guides rebuild [--output-dir DIR] [--chromium PATH] [--html-only] [--no-render]\n` +
     `Use --execution docker --image EXPLICIT_IMAGE --docker-mode direct|host-adb for container execution.\n` +
-    `All mutations require an enrolled target and explicit review. Physical confirmations remain on the phone.`
+    `Device mutations require an enrolled target and explicit review. Physical confirmations remain on the phone.`
   );
 }
 

@@ -69,12 +69,13 @@ const PUBLIC_EXTENSIONS = new Set([
   '.mjs',
 ]);
 const OMIT_DIRECTORIES = new Set(['build', 'dist', 'node_modules', '.git', '.venv', '__pycache__']);
-const GUIDE_DOCUMENTS = [
+const PUBLIC_DOCUMENTS = [
+  'SECURITY.md',
+  'CONTRIBUTING.md',
   'guides/README.md',
   'guides/index.html',
   'guides/source/BUILD.txt',
   'guides/source/build-manifest.json',
-  'guides/source/release-gates.json',
 ];
 const PRIVATE_PART =
   /(?:^|\/)(?:\.env(?:\.[^/]*)?|\.npmrc|\.aws|\.codex|\.agents|secrets|state|cache|backups|credentials(?:\.[^/]*)?|signing-password(?:\.[^/]*)?)(?:\/|$)|\.(?:keystore|jks|p12|key|pem)$/u;
@@ -207,7 +208,7 @@ async function sourceFiles(root: string): Promise<string[]> {
     'android',
     'guides/source/markdown',
     'guides/assets',
-    ...GUIDE_DOCUMENTS,
+    ...PUBLIC_DOCUMENTS,
     'docs',
     'tools/build-android.mjs',
     'tools/lib/build-command.mjs',
@@ -653,7 +654,7 @@ async function copyPublicResources(context: BuildContext): Promise<void> {
       (path) =>
         path === 'product.json' ||
         path === 'LICENSE' ||
-        GUIDE_DOCUMENTS.includes(path) ||
+        PUBLIC_DOCUMENTS.includes(path) ||
         /^(?:assets|policy-packs|manifests|config\/templates|resources|android|guides\/assets|guides\/source\/markdown|docs)\//u.test(
           path,
         ) ||

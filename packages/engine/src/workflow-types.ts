@@ -84,6 +84,7 @@ export interface CapabilityEvidenceRef {
 }
 
 export interface WorkflowPort {
+  readonly capabilities?: { uiAutomation: boolean };
   inspect(target: SelectedTarget, policy: PolicyPack, signal?: AbortSignal): Promise<DeviceObservation>;
   createUser(
     target: SelectedTarget,
@@ -202,6 +203,7 @@ export interface SetupReceiptRef {
   check: string;
   receiptId: string;
   planDigest: string;
+  actionIndex?: number;
 }
 
 export interface ReviewLineage {
@@ -225,6 +227,7 @@ export interface PreparedOperation {
   sharedEffects: SharedApkEffect[];
   refreshedFrom?: ReviewLineage;
   lifecycleGeneration?: string;
+  capabilities?: { uiAutomation: boolean };
 }
 
 export interface WorkflowState {
@@ -241,6 +244,10 @@ export interface WorkflowState {
   planId?: string;
   capabilityEvidence?: CapabilityEvidenceRef[];
 }
+
+export type RunPauseReason =
+  | { kind: 'manual-step'; gate: string; instructions?: string; profileId?: string; recipeId?: string }
+  | { kind: 'reenrollment' | 'acceptance' | 'inspection'; instructions: string };
 
 export interface RunRecord {
   id: string;
@@ -262,6 +269,7 @@ export interface RunRecord {
   completedSetup?: SetupReceiptRef[];
   capabilityEvidence?: CapabilityEvidenceRef[];
   supersededBy?: string;
+  pauseReason?: RunPauseReason;
 }
 
 export interface EngineOptions {
@@ -305,4 +313,5 @@ export interface RecipeProof {
   configurationDigest: string;
   user: AndroidUserIdentity;
   result: RecipeExecutionResult;
+  previousReceiptId?: string | null;
 }

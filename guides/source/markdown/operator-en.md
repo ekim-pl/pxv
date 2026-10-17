@@ -1,270 +1,221 @@
-# Operator handbook
+# Pixel preparation: operator guide
 
-This edition describes pxv 0.1.0. It is a general guide, not a certificate for a phone. Only the accepted project record identifies the exact policy, software, checks and custody outcome. Release qualification and physical acceptance must be retained separately.
+Prepare one enrolled Google Pixel or an explicitly selected fleet with GrapheneOS, Android user profiles, pinned apps and reviewed settings. Work from a private project and keep the exact plan, run status and handoff evidence together.
 
-![Provisioning and custody workflow](../../assets/diagrams/workflow-en.svg)
+**Start here:** identify the phone, review the policy, install the OS only if separately authorized, provision, complete phone checkpoints, then finalize and transfer custody. OS installation erases data. A completed command does not establish that the phone is ready for handoff.
 
-## First session
+Examples use the installed `pxv` command. Replace placeholders before use. `--yes` confirms a real review or physical check; it does not perform that check.
 
-Use a dedicated authorized phone and an isolated project. Review the selected policy before connecting a recipient's phone. The shipped one-profile, five-profile and custom-layout packs are structural starters: they contain no invented trusted APK hashes or OS signing keys and are not qualified hardening profiles.
+## 1. Prepare the workstation and project
 
-## Prepare the host and project
+Use the reviewed Linux x86_64 portable archive or installed package. The portable archive and Debian package include Node and the native supervisor; Android tools and USB permissions still need setup. Run as the ordinary operator account.
 
-Install a verified portable archive, Debian package or npm package. A portable archive and Debian package include Node and the Linux supervisor; an npm installation requires Node 24.22.0. A source checkout requires pnpm 12.11.2, the pinned compiler and Rust 1.99.1 with the x86_64-unknown-linux-musl target, rustfmt and Clippy. Prepare Java, the Android SDK and host tools as described in the repository host-dependency instructions.
-
-~~~sh
-pnpm install --frozen-lockfile
-pnpm quality:setup
-pnpm build:native
-pnpm build
-pnpm quality
-pnpm pxv --help
-~~~
-
-`pnpm quality:setup` explicitly installs the pinned analysis tools. After dependency and tool setup, `pnpm quality` runs the offline gate: strict type checks, package boundaries, development/production dead-code checks, tests, native process tests and real Android helper checks. Every TypeScript application module, including workers and release tooling, must reach 90% line and 85% branch coverage. TypeScript/JavaScript functions must stay within classic cyclomatic complexity 10, nesting depth 4 and 80 nonblank, noncomment lines. Rust and Java functions have a cyclomatic limit of 10; Rustfmt, Clippy and ShellCheck also run. Current source identity, tool versions and per-module evidence are recorded in `.quality/report.json` and `.quality/report.md`. These checks do not establish live device acceptance.
-
-The remaining examples use an installed command. Create a new directory outside the source checkout:
-
-~~~sh
-P="$HOME/pxv-projects/lab"
+```sh
+pxv version
 pxv host doctor
-pxv project init --path "$P"
-pxv policy validate --project-root "$P"
 pxv host adb-start --yes
-~~~
+```
 
-Doctor inspects tools and the configured ADB endpoint; it does not start a server or bootstrap a toolchain. See [host dependencies](../../../docs/HOST_DEPENDENCIES.md) for verified downloads and explicit SDK license handling.
+Doctor does not start ADB. Resolve missing tools, permissions and native-runtime failures before connecting a production phone. A source checkout uses the pinned toolchain and `pnpm pxv` after building; follow [host dependencies](../../../docs/HOST_DEPENDENCIES.md) for the exact setup and checks.
 
-## Enroll, review and execute
+Create a new project outside the source/resource checkout. Keep one operator control domain for every phone reachable from this workstation.
 
-Enable debugging only for the provisioning session, inspect the phone's USB authorization prompt, and compare the physical asset label, serial, model and codename. Replace the sample serial; never copy one from another phone.
+```sh
+P='/absolute/private/path/to/project'
+ASSET='phone-01'
+OPERATOR='Operator name'
+pxv project init --path "$P" --policy /absolute/path/to/reviewed-policy.json
+```
 
-~~~sh
-pxv inventory enroll --project-root "$P" --asset lab-01 \
-  --serial YOUR_OBSERVED_SERIAL --model 'Pixel 8a' --codename akita --yes
-pxv device inspect --project-root "$P" --asset lab-01
-pxv device plan --project-root "$P" --asset lab-01
-pxv device provision --project-root "$P" --asset lab-01 --operator 'Lab operator'
-~~~
+Back up private project state and inventory consistently. Keep unlock material separately. Never copy another phone's database, approvals or credentials to create a fleet member.
 
-Review every generated plan, including global APK effects and manual checkpoints. `--yes` confirms the displayed review in automation; it does not replace a phone's unlock/relock prompt or a human check. OS installation is a separate destructive workflow and needs a pinned, authenticated OS policy.
+## 2. Define the intended phone, profiles and apps
 
-A pending result means work remains. Perform the exact pending check privately on the phone, record only its named attestation, then use `agent resume --run RUN_ID --yes`. Inspect recovery reservations before retrying a failed or interrupted operation. Finish with fresh signoff, recipient acceptance, debugging shutdown and the custody record described in [operator guide](../../../docs/OPERATOR_GUIDE.md).
+Review the authored policy before enrollment or execution. The bundled five-profile pack is a structural starter: it does not supply approved apps, working VPN accounts or a qualified deployment.
 
-## Responsibilities and working boundaries
+Use policy v2 to define an `apps` catalog once and reference its IDs in each profile's `apps` list. Pin package ID, version code, APK SHA-256, signer SHA-256 and an approved source. Android package versions are shared across users; profiles cannot independently install conflicting versions.
 
-The operator owns the host, project data, device identification and reviewed policy. The recipient owns final passwords, accounts, MFA and recovery material. Agree the intended uses, allowed profiles, support contact, backup destination and erasure authorization before provisioning. Do not record real credentials in a policy, recipe, screenshot, note, extension input or transcript.
+Place device-wide Android `global` settings in `deviceSettings`. Profile `settings` contain `secure` or `system` entries. Define profile names, permissions, VPN and language deliberately; the owner name must match the observed owner. Keep secrets out of policy values and recipe text.
 
-Use the [quickstart](../../../docs/OPERATOR_QUICKSTART.md) to prepare an isolated project. A project contains `pxv.project.json`, `policy.yaml`, `inventory.json`, `policy.lock.json` and a private SQLite database under `state/`. The marker is `format: pxv-ts`. Existing legacy state is retained; this release provides no importer or compatibility execution mode.
+For mixed models, `os` maps each exact Pixel codename to a complete authenticated GrapheneOS image pin. Every model to be flashed needs its own entry. No image is selected by a guessed model or fallback. See [policy format](../../../docs/POLICY_FORMAT.md) for schema and migration.
 
-## Build a policy for this deployment
-
-Choose a starter and explicitly review OS release/codename/signing key, APK versions/content hashes/signer pins, repository trust anchors, profiles, permission grants, settings, VPN behavior, backup transports and required manual checks. Exactly one owner is required; secondary profiles and their names are policy choices. The five-profile example is optional.
-
-Edit the project's policy, validate it and write its lock before planning. The lock binds the product descriptor, engine identity, policy, project configuration and installed extensions. Duplicate keys, unknown fields, duplicate identities and ambiguous selections are rejected. A changed lock or engine invalidates prior reviews. If project configuration, policy, inventory or the executable changes after loading, the engine refuses the stale context. Reload through a new CLI invocation or fresh MCP request, regenerate the lock when its inputs changed, and prepare a new plan for review. A previously saved approval does not approve edited inputs.
-
-~~~sh
+```sh
 pxv policy validate --project-root "$P"
-pxv policy lock --project-root "$P" --yes
+pxv policy lock --project-root "$P"
+pxv guide project --project-root "$P" --kind pixel --locale en
+```
+
+A policy change needs a new lock and fresh review. `policy convert --output NEW_FILE` creates v2 input without changing the original or activating it; select the reviewed file in `pxv.project.json`, validate and lock it before preparing new plans.
+
+## 3. Enroll one exact physical device
+
+Check the physical asset label, hardware serial, model and codename. Keep unrelated phones disconnected where practical. First enrollment uses USB. With Android running, enable USB debugging temporarily and authorize this workstation on the phone.
+
+```sh
+pxv inventory enroll --project-root "$P" --asset "$ASSET" \
+  --serial OBSERVED_SERIAL --model 'ACTUAL PIXEL MODEL' --codename ACTUAL_CODENAME
 pxv inventory list --project-root "$P"
-pxv device inspect --project-root "$P" --asset lab-01
-~~~
+pxv device inspect --project-root "$P" --asset "$ASSET" --transport usb
+```
 
-The exact asset `all` is valid. Select it with `--asset all`. A fleet requires explicit `--all` or a group selector; never substitute an asset string for a fleet selector.
+For a phone already in fastboot, enrollment instead adds `--mode fastboot`; the exact serial and reported codename are checked. Skip the ADB-based `device inspect` command until Android has booted and debugging is authorized. Enrollment does not authorize erasure. A replacement handset requires its own reviewed inventory identity.
 
-## Default locale for each profile
+Use `--asset ID` for one phone. Fleet selection requires `--group GROUP` or `--all`, explicitly; these selectors cannot be combined. An asset named `all` is still selected with `--asset all`.
 
-Set optional `defaultLocale` on every profile that needs an initial language, including the owner. Each value is one BCP 47 language tag with optional region or script, such as `en-US`, `pl-PL`, `de-DE` or `sr-Latn-RS`. Tags are canonicalized. Locale lists, underscores and unspecified languages are rejected. Existing `language` fields remain accepted; when both fields are present they must identify the same canonical locale.
+## 4. Install GrapheneOS as a separate destructive phase
 
-This example supplies a complete minimal `profiles` array; keep the other required fields of the enclosing policy:
+Skip this phase when the intended OS is already installed and verified. Before installation, agree erasure scope, preserve supported phone-data backups and confirm that the selected phone may be wiped. Read [canary, backup and recovery](../../../docs/CANARY_BACKUP_RECOVERY.md).
 
-~~~json
-{
-  "profiles": [
-    {
-      "id": "owner", "name": "Owner", "kind": "owner",
-      "packages": [], "settings": [], "permissions": [],
-      "vpn": { "packageId": null, "alwaysOn": false, "lockdown": false },
-      "defaultLocale": "en-US"
-    },
-    {
-      "id": "work", "name": "Work", "kind": "secondary",
-      "packages": [], "settings": [], "permissions": [],
-      "vpn": { "packageId": null, "alwaysOn": false, "lockdown": false },
-      "defaultLocale": "pl-PL"
-    },
-    {
-      "id": "travel", "name": "Travel", "kind": "secondary",
-      "packages": [], "settings": [], "permissions": [],
-      "vpn": { "packageId": null, "alwaysOn": false, "lockdown": false },
-      "defaultLocale": "de-DE"
-    }
-  ]
-}
-~~~
+Follow the [official GrapheneOS preparation instructions](https://grapheneos.org/install/cli#enabling-oem-unlocking), including enabling OEM unlocking in the running OS when required. Manually enter the bootloader's **Fastboot Mode**, compare its physical identity and keep it in that mode. PXV checks the exact fastboot target; it does not reboot from ADB into fastboot for you. Leave unlock/relock commands to the reviewed PXV operation.
 
-Validate and lock the edited policy before preparing a new plan. Provisioning applies each profile's locale after `normal_credentials` and before optional duress setup. An accepted UI adapter can apply it; otherwise the run pauses for manual configuration in that profile. Inspection reads the primary locale from that Android user's own settings row. The action kind `language` and checkpoint `language:<profileId>` remain unchanged for compatibility.
+```sh
+pxv device install-os --project-root "$P" --asset "$ASSET" --transport usb --dry-run
+```
 
-`defaultLocale` configures the profile's language, region and script. It does not set a time zone. Document and CLI `--locale en|pl` still select the language of guidance or handoff documents independently of profile defaults. Omitting both profile locale fields leaves that profile's locale unmanaged.
+Read the returned `planId`, `reviewSummary` and expiry. Check the exact physical target, codename, release, image/signature identity and destructive scope. For interactive execution, run:
 
-## Optional default lock and duress credentials
+```sh
+pxv device install-os --project-root "$P" --asset "$ASSET" \
+  --transport usb --operator "$OPERATOR"
+pxv agent status --project-root "$P" --run OS_RUN_ID --after 0
+```
 
-A profile can declare `defaultCredential` with `type: pin` or `type: password` and a `secretRef`. PINs require 4–128 digits; passwords require 4–128 printable ASCII characters, including for duress. Only the owner profile can declare `defaultDuress`; GrapheneOS uses one owner-managed duress PIN/password pair for the device, including its other profiles ([official feature description](https://grapheneos.org/features#duress)). Both duress references are required. `ownerCredentialRef` can differ from the initial normal default's `secretRef`; it must contain the current ordinary owner credential when duress runs. It may reuse the normal default reference if that credential is retained and valid for its declared type. For example, add these fields to the existing owner profile, keeping its other required fields:
+This prepares a fresh plan and asks you to review it again before confirmation; the earlier dry run grants no approval. Keep the returned run ID for `agent status`. Attend the physical bootloader unlock and relock confirmations. Do not disconnect the phone or interrupt flashing deliberately. Verify installation and the relocked bootloader through the reported checks and phone prompts. A host-ADB Docker worker cannot flash; direct USB is required.
 
-~~~json
-{
-  "id": "owner",
-  "name": "owner",
-  "kind": "owner",
-  "defaultCredential": { "type": "pin", "secretRef": "owner-lock" },
-  "defaultDuress": {
-    "ownerCredentialRef": "owner-current",
-    "pinRef": "duress-pin",
-    "passwordRef": "duress-password"
-  }
-}
-~~~
+The OS run pauses for re-enrollment/setup. Finish the phone's initial setup, authorize USB debugging again, reconfirm the existing physical enrollment with `device inspect`, then prepare a **new provisioning plan**. Do not rerun flashing to advance this pause or enroll the same unchanged handset twice. Registry bindings affected by flashing are stale even if installation fails.
 
-When a default action will run, store its values only in the private per-device input `$P/secrets/credentials/lab-01.json`, where `lab-01` is the enrolled asset ID. This file is separate from the policy and records. It must belong to the current operating-system user, have mode `0600`, and be a regular file; neither it nor its `secrets`/`credentials` directories may be symlinks. The project, `secrets` and `credentials` directories must belong to the current user and must not allow group or other users to write. Use a private editor, with no secret in a command argument or shell history. Create private directories with `umask 077`, and apply `chmod 600 "$P/secrets/credentials/lab-01.json"` after saving. Replace these placeholders privately; they are not usable credentials:
+## 5. Prepare, review and submit provisioning
 
-~~~json
-{
-  "schemaVersion": 1,
-  "values": {
-    "owner-lock": "<private initial ordinary PIN>",
-    "owner-current": "<current ordinary owner credential>",
-    "duress-pin": "<private duress PIN>",
-    "duress-password": "<private duress password>"
-  }
-}
-~~~
+Provisioning prepares profiles, apps, settings, permissions and declared configuration steps. It does not silently include OS installation. `create-users` and `deploy` are narrower operations when that is the intended scope.
 
-The JSON accepts only `schemaVersion: 1` and a `values` object of secret strings. Do not add values to policy files, reviews, attestation notes, logs or handoff packets. Keep the private file out of version control and release artifacts. Plans review the credential type, references and actions; they contain no secret values, hashes or snapshots. The file is read at execution, so a recipient can update a referenced value privately before resuming without publishing it in a review.
+```sh
+pxv device provision --project-root "$P" --asset "$ASSET" --transport usb --dry-run
+```
 
-Use the normal `device provision` workflow after validating and locking the policy. It applies normal defaults first, then pauses for `normal_credentials`: the recipient must privately unlock every selected profile and verify or replace its default. Final language follows that check; owner duress defaults follow language and still require the manual `duress` check. Before duress runs, `ownerCredentialRef` must resolve to the owner's **current ordinary unlock credential**. If the recipient changed it, privately update `owner-current` before resuming, keeping the initial `owner-lock` value valid for its original declared type, or remove `defaultDuress`, lock and review a new plan, and configure duress manually. GrapheneOS authenticates `ownerCredentialRef`: use the correct current ordinary owner credential, never an existing duress credential, because that authentication can erase the device. Runtime compares supplied values but cannot discover unknown preexisting duress secrets. Both duress values must differ from every configured normal default and the current owner credential. Their references must also differ from every normal default reference and `ownerCredentialRef`. Because runtime cannot know privately replaced secondary credentials, before accepting the `duress` checkpoint the recipient must privately ensure both duress values differ from every actual ordinary profile credential, including replaced secondary credentials.
+Inspect every action and shared-package effect, physical target, stable Android user identity, manual gate and expiry. Start interactive provisioning and inspect its newly prepared review before confirming:
 
-Command-accepted defaults are remembered once per device and stable Android user identity; this records command acceptance, not credential verification. Later provisioning runs and previously approved plans skip them even if references or private values changed, so skipped defaults do not require the private file. A recreated secondary user initializes again; explicit `device install-os` clears this history before flashing.
-
-Normal defaults initialize profiles with no existing screen lock; they do not replace an existing credential or accept an old credential. The installed OS must support the required `locksettings set-pin`/`set-password` and, for duress, GrapheneOS `set-duress-credentials` commands. Root is not required. Unsupported commands or an existing lock fail the automatic action; inspect any failure, remove the applicable defaults and prepare a new reviewed plan for private manual setup. A successful command does not prove an ordinary unlock or a functioning duress wipe. Retain the human checks and never activate destructive duress as a test. Omitting both fields preserves private manual setup.
-
-## Review and provisioning
-
-Prepare a plan with `device plan` or a workflow's `--dry-run`. Plans bind target identity, transport, current observations, artifact snapshots and device-wide APK effects. Review those effects across every Android user: APK code and version replacement can affect users outside the selected profile.
-
-Run `device provision` for the policy, `device create-users` for profile creation or `device deploy` for app deployment. Each route uses the same verified artifact/install path. A digest alone does not establish publisher identity; verify signer pins from trusted material. Authenticated repositories also enforce signer, age and rollback floors.
-
-~~~sh
-pxv device provision --project-root "$P" --asset lab-01 --operator 'Operator'
-pxv agent runs --project-root "$P"
+```sh
+pxv device provision --project-root "$P" --asset "$ASSET" \
+  --transport usb --operator "$OPERATOR"
 pxv agent status --project-root "$P" --run RUN_ID --after 0
-~~~
+```
 
-A pending run names its manual checkpoint. Configure only that checkpoint, record a named check, then resume the same approved run. `normal_credentials` must precede final language and optional `duress`. Complete ordinary app setup before language-sensitive final steps. Recipes bind OS fingerprint and exact package version/signer; an unsupported screen stays manual and does not become verified from a tap attempt. A recipe that selects a private staged file checks for an accepted file-selection adapter before launching the app or transferring the file. If unavailable, complete the full import privately through the approved transfer method; no temporary file is left waiting for a later manual selection. If support changes after transfer, owned temporary files are cleaned; a cleanup failure remains an unresolved recovery obligation.
+Keep the returned run ID and read its status and `pauseReason`. A manual pause leaves work unfinished. Poll with the last event cursor to read new events. For background submission of a retained exact plan, use the byte-exact review-file procedure in [automation](../../../docs/AUTOMATION.md). `device guided` presents policy-derived instructions and executes after confirmation; use `--dry-run` to review first.
 
-~~~sh
-pxv device attest --project-root "$P" --asset lab-01 \
-  --check normal_credentials --operator 'Operator' --yes
-pxv agent resume --project-root "$P" --run RUN_ID --yes
-~~~
+Private initial credential defaults, if selected, come from `secrets/credentials/ASSET.json`: a `schemaVersion: 1` document whose `values` map resolves policy secret references. Use an owned `0600` file and private directories; never put values in commands or notes. Omit default declarations for private manual setup. Defaults initialize a profile with no existing screen lock and are not a password-change mechanism; accepted defaults are skipped on repeat runs for the same stable user.
 
+For automatic duress defaults, `ownerCredentialRef` must resolve to the owner's **current ordinary unlock credential**, updated privately if it changed. Never supply an existing duress credential for authentication. Unsupported commands or existing locks require inspection and a fresh reviewed manual path; a successful default write does not prove a real unlock.
 
-If the remaining work outlives its review, run `agent refresh --run RUN_ID`. It prepares a new plan for unfinished work only and returns `planId`, exact `reviewSummary` and `expiresAt`. Save the decoded reviewSummary string exactly in a private file, inspect the new target/actions, then submit `agent execute --plan NEW_PLAN_ID --review-file FILE --operator NAME`. Refresh does not authorize work or replay completed actions, and it is not approval of a changed policy or executable. Reload changed inputs and prepare a fresh review. Interrupted mutations still require inspection/recovery first.
+## 6. Complete the named phone checkpoints
 
-Read the actual pending check list; a policy can require routes, failure tests, backup restore, app setup, recipient acceptance or other supported capabilities. A note cannot override a contradictory measurement. Network-probe evidence covers the probe app UID and reviewed HTTPS endpoints, not every app's traffic.
+A pending run returns a `pauseReason` and the next gate. Perform only the named work in the correct profile. Configure app accounts, imports, MFA and Android consent privately before attesting.
 
-## Verified OS installation
+App configuration precedes VPN enforcement. A changed always-on/lockdown VPN without a matching recipe pauses for `app_setup`: configure that profile's VPN app, grant VPN consent and check its intended connection before resuming. Separate profile gates need separate fresh confirmations.
 
-Install only on a phone explicitly authorized for erasure. Pin the official release's codename, URL, signature URL, OpenSSH principal/namespace and authenticated public key. Attend physical unlock, unlock-state, relock and first-boot checks. Fastboot needs direct USB and an exact serial. Host-ADB-only Docker mode cannot install an OS.
+Recipes are bound to an exact Android build and app version/signer. Unsupported screens or imports remain assisted/manual. If an accepted file-selection adapter is unavailable, complete the entire import through an approved private method; no temporary staged file is left for later selection. Do not paste sensitive settings into public recipe text.
 
-~~~sh
-pxv device install-os --project-root "$P" --asset lab-01 --operator 'Operator'
-~~~
+```sh
+pxv device attest --project-root "$P" --asset "$ASSET" \
+  --check app_setup --operator "$OPERATOR"
+pxv agent resume --project-root "$P" --run RUN_ID
+```
 
-The reviewed installer verifies image/signature bytes and runs the authenticated script through a serial-forcing fastboot wrapper. Do not bypass an interrupted installation, relock an unverified image or turn an unsigned download into a trusted artifact. Follow the [official GrapheneOS installation instructions](https://grapheneos.org/install/cli) for the device's physical procedure and stop when its state differs from the expected checkpoint.
+Use the actual named gate instead of `app_setup` when different. A `language:PROFILE` pause is completed on the phone and then resumed; do not invent a language attestation. The private sequence is normal locks verified in every profile, final language, then optional duress setup. Both duress values must differ from every actual ordinary profile credential. Never activate erasure as a test.
 
-## Recovery and loss of supervision
+If review expires, `agent refresh --run RUN_ID` prepares the remaining work for a new review. Save its new exact summary and submit its new plan with `agent execute`. Refresh does not approve changes or recover an uncertain interrupted mutation.
 
-Cancellation requests stop future work and clean owned resources where provable; they do not undo an arbitrary flash, account entry or APK change. A native supervisor persists process ownership and completion receipts. An interrupted mutation reserves the physical device and transport across projects, forks and Docker workers.
+## 7. Check, finalize and transfer custody
 
-~~~sh
+Read current requirements and stored readiness, then perform the actual checks on the phone:
+
+```sh
+pxv device report --project-root "$P" --asset "$ASSET"
+pxv guide project --project-root "$P" --kind pixel --locale en
+```
+
+Check reboot persistence, profile separation, app behavior, permissions/settings, languages, expected network behavior and the required representative restore. A network helper checks its own UID and reviewed endpoints; it does not certify all app traffic. Record only checks actually performed; receipts cannot override contradictory measurements.
+
+```sh
+pxv device attest --project-root "$P" --asset "$ASSET" \
+  --check REQUIRED_CHECK --operator "$OPERATOR"
+```
+
+Complete all other required checks, then record the recipient's actual acceptance before fresh `operator_signoff`. This attestation is separate from the later transfer-of-custody record. Signoff and finalization use fresh measurements; finish within the evidence window reported by the application. Outstanding helpers, cleanup, drift or stale policy/build identity block readiness.
+
+```sh
+pxv device attest --project-root "$P" --asset "$ASSET" \
+  --check recipient_acceptance --operator "$OPERATOR"
+pxv device attest --project-root "$P" --asset "$ASSET" \
+  --check operator_signoff --operator "$OPERATOR"
+pxv device finalize --project-root "$P" --asset "$ASSET" \
+  --transport usb --operator "$OPERATOR" --locale en
+```
+
+After finalization, physically verify **USB debugging and Wireless debugging are both off**. Confirm the bootloader remains locked and OEM unlocking is off. Confirm the phone is in the recipient's custody before recording acceptance:
+
+```sh
+pxv handoff accept --project-root "$P" --asset "$ASSET" \
+  --recipient 'Recipient name' --debugging-off
+pxv handoff export --project-root "$P" --asset "$ASSET" \
+  --locale en --output /absolute/path/to/handoff
+```
+
+The handoff packet is Markdown/HTML from its retained policy snapshot. Review it before sharing. Generic guide PDFs are instructions, not device acceptance evidence.
+
+## 8. Run a fleet without hiding individual outcomes
+
+Enroll each physical phone separately. Confirm each codename has its own OS pin and review every device's plan. Start with one target, then increase concurrency deliberately; `--jobs` accepts 1–8.
+
+```sh
+pxv fleet provision --project-root "$P" --group BATCH --jobs 2 --dry-run
+pxv fleet provision --project-root "$P" --group BATCH --jobs 2 --operator "$OPERATOR"
+```
+
+The second command prepares fresh plans and asks for confirmation. Inspect its displayed review before accepting. Track each run independently; one phone's success does not satisfy another's gate or repair its failure. Attestation, finalization, registry updates and recovery use one exact asset. Use the separate OS phase for any fleet flashing and attend every phone's prompts.
+
+## 9. Retain current credentials for authorized support
+
+The local encrypted registry joins asset ID, hardware serial and codename with per-profile stable Android identities. It can retain phone number and device duress PIN/password, plus each profile's PIN/password, Oblivion key, Session messenger ID, Proton VPN username/password and optional phone number. Reused service accounts are recorded explicitly; a Session ID is not an Android user ID.
+
+```sh
+pxv registry init --project-root "$P"
+pxv registry update --project-root "$P" --asset "$ASSET" \
+  --file /private/directory/phone.json --record-revision 0
+pxv registry show --project-root "$P" --asset "$ASSET"
+```
+
+Use revision zero only for the first record; subsequent updates require the revision shown by `show`. Each update replaces the complete current phone record and preserves all previous revisions encrypted. States are `initial`, `current`, `unknown` and `stale`; `current` means last explicitly confirmed by the operator, not automatically read from the phone. Coordinate private credential changes with a registry update.
+
+Unlock uses a hidden local prompt. Private inputs/outputs need an owned `0600` file in a `0700` directory. `list`, `show` and `history` omit values; `reveal --asset ID --output NEW_PRIVATE_FILE` deliberately writes plaintext. `rekey` rotates the unlock passphrase. `reconcile` explicitly accepts a restored/interrupted copy by appending stale revisions; reconfirm current values afterward. Read [registry storage, history and recovery](../../../docs/PHONE_REGISTRY.md) before use.
+
+Flashing, profile creation, credential-default writes and lifecycle changes stale affected bindings; old values remain history. Registry commands are local/offline and do not configure phones or supply provisioning secrets. Per-profile Oblivion notification-wipe behavior is user-described as affecting the whole phone and is unqualified for any exact app/build. Keep its keys separate from GrapheneOS duress values; never place real keys in notifications, logs, ordinary exports or tests.
+
+## 10. Handle interruptions and later maintenance
+
+On pending work, read the gate. On failure, cancellation, lost host/container or `needs-inspection`, stop further mutations and inspect the phone, run events and owned cleanup first.
+
+```sh
+pxv agent status --project-root "$P" --run RUN_ID --after 0
 pxv agent cancel --project-root "$P" --run RUN_ID
-pxv device recover --project-root "$P" --asset lab-01
-pxv device recover --project-root "$P" --asset lab-01 \
-  --run ORIGINAL_RUN_ID --inspected --yes
-~~~
+pxv device recover --project-root "$P" --asset "$ASSET"
+pxv device recover --project-root "$P" --asset "$ASSET" \
+  --run ORIGINAL_OPERATION_ID --inspected
+```
 
-Inspect the phone and retained evidence first. Recovery uses stable Android user serial numbers, not reusable IDs/names. A recreated user must remain unresolved. Child probe cleanup must not release a parent workflow's resources. Unproven native cleanup can require a host reboot; manual acknowledgment cannot bypass a live native owner. A cleanup failure is recorded as `blocked`, keeping the unresolved obligation and any native reservation. After inspecting the phone and ownership evidence, retry explicitly through `device recover` and the recorded recovery lineage. Each retry rechecks the original owner scope, device and stable Android user; resolved obligations are not replayed. Never delete a database, lock or receipt to make a blocked device appear ready.
+Cancellation is a request, not proof of cleanup. Use the original operation ID named by retained recovery evidence. Never delete SQLite state, fences, locks or receipts to retry. Reused Android user IDs/names do not authorize cleanup against a new user serial. Some unresolved native cleanup needs host restart and inspected recovery.
 
-## Signoff and custody
+Record `lifecycle maintenance|policy-change|loss|retirement --asset ID --operator NAME --note TEXT` for the applicable event. Notes contain no secrets. These events invalidate earlier handoff evidence; a new deployment needs fresh review and acceptance. Use `--erased` only after erasure was actually confirmed.
 
-Reboot and check persistence, user isolation, network behavior and a representative restore. Record the policy's checks against fresh observations; the current freshness window is 15 minutes. Finalization remeasures required permissions and settings and refuses drift, outstanding helpers, unresolved cleanup or stale evidence.
+## Offline rehearsal and reference
 
-~~~sh
-pxv device report --project-root "$P" --asset lab-01
-pxv device finalize --project-root "$P" --asset lab-01 --operator 'Operator' --locale en
-pxv handoff accept --project-root "$P" --asset lab-01 \
-  --recipient 'Recipient' --debugging-off --yes
-pxv handoff export --project-root "$P" --asset lab-01 --locale en --output "$P/handoff"
-pxv handoff export --project-root "$P" --asset lab-01 --locale pl --output "$P/handoff"
-~~~
+Without a physical canary, the shortest rehearsal uses a new dedicated project and a synthetic policy:
 
-Handoff export uses the accepted product and resolved-policy snapshot, even if the current editable policy has changed. Keep such a packet as historical evidence; it does not establish current readiness. The CLI exports handoff packets as Markdown and HTML. Generic product, operator, user and business guides are rendered from their Markdown sources with `pxv guides rebuild` into HTML plus A4 office and full-color print PDFs; those generic PDFs do not replace an accepted handoff record.
+```sh
+pxv project init --path /private/path/offline-rehearsal --policy /path/to/synthetic-policy.json
+pxv policy validate --project-root /private/path/offline-rehearsal
+pxv guide project --project-root /private/path/offline-rehearsal --kind pixel --locale en
+```
 
-A report describes stored readiness and is not a fresh device attestation. Read the finalization result. Physically confirm debugging toggles are off, remove temporary helpers and transfer custody only after recipient acceptance. Ready-for-handoff, completed-custody, subset and emulator outcomes remain distinct.
+Initialization records a lock. Source maintainers can also run the fake-port registry/workflow tests. This checks the host-side workflow only; it cannot qualify flashing, UI recipes, VPN behavior, restoration or physical custody. Never substitute a primary phone for an unavailable disposable canary.
 
-## Return visits
-
-Record maintenance, policy changes, loss or retirement through `lifecycle`. These events invalidate prior handoff evidence. Maintenance needs new observations and renewed handoff. Retirement records confirmed erasure and custody; the command does not silently wipe a device. Revoke external accounts/tokens through their owners when a phone is lost.
-
-pxv 0.1.0 is undergoing release qualification. Automated tests, artifact verification and container checks do not certify a policy pack, UI recipe, recipient workflow or physical phone. Verified GrapheneOS emulator evidence, exact-build EN/PL walkthroughs and a physical Pixel 8a acceptance record must be retained before making a deployment claim. A stock Google APIs emulator is useful for compatibility tests and cannot supply GrapheneOS provenance. The current source refactor has offline verification only. Retained Pixel results apply to the candidate named in their record; they do not qualify this refactored build.
-
-
-## Docker session
-
-Use an explicitly built local image and a dedicated isolated project. Install Docker/USB permissions as a host administrator before provisioning; the toolkit does not grant itself host privileges.
-
-~~~sh
-pnpm build:preview --formats oci
-pxv host docker-prepare --yes
-pxv host docker-adb-start --image YOUR_UNIQUE_IMAGE --yes
-pxv host doctor --execution docker --image YOUR_UNIQUE_IMAGE --docker-mode direct
-pxv device inspect --project-root "$P" --asset lab-01 \
-  --execution docker --image YOUR_UNIQUE_IMAGE --docker-mode direct
-pxv device provision --project-root "$P" --asset lab-01 --operator 'Operator' \
-  --execution docker --image YOUR_UNIQUE_IMAGE --docker-mode direct
-~~~
-
-Replace the image placeholder with the builder's unique local tag. The CLI resolves it to an immutable local ID. The first host commands explicitly prepare private control/key directories and start the independently owned ADB service. Workers use port 5038; they do not start a daemon inside the native mutation group.
-
-Connect the Pixel directly over USB, compare its enrolled identity and accept its host-key prompt on the phone. The container runs as the caller and needs access to the USB device through host permissions and the USB bus mount. A group number is host-specific; Compose's optional USB group must match the host rather than being treated as a universal constant.
-
-OS installation still requires a reviewed OS policy, exact serial and explicit erasure authorization. Follow physical unlock/relock prompts; container access does not bypass them. Use `--dry-run` to inspect a plan before a real workflow.
-
-After interrupted work, inspect shared recovery reservations and the phone before retrying. Stop only the service owned by this operator with `host docker-adb-stop --yes`. See [Docker architecture and Compose](../../../docs/DOCKER.md).
-
-
-## Private project and publication boundaries
-
-Keep each customer's inventory, SQLite records, credentials-free review files and custody documents outside the installation and outside version control. Registry credentials and ADB keys belong in their external private locations. Fork assets and policy packs contain public templates only. Never package a working project or a real recipient screenshot into a release candidate.
-
-Use exact asset selection for a single phone and explicit fleet selectors for several. Limit jobs to available USB capacity and operator attention. A plan for one device never authorizes another device. Keep an auditable record of the operator, reviewed policy digest, resulting evidence and handoff.
-
-## Extensions and fork identity
-
-Community is free under MIT. Commercial contributions are trusted compiled extensions installed explicitly from exact private registry versions or local tarballs. Extension workers isolate faults, not hostile code. Commands and integration adapters submit typed core actions for ordinary review and recovery. Selecting a new policy pack requires a fresh policy lock and review. Normal work runs offline after installation; registry access is never an implicit part of provisioning.
-
-White-label products are separate forks with their own product descriptor, assets, policy packs and documentation. Preserve the upstream engine marker, API compatibility and safety tests. A logo or product name does not qualify a policy. See the repository's [extension guide](../../../docs/EXTENSIONS.md) and [fork guide](../../../docs/WHITE_LABEL.md).
-
-## Session close checklist
-
-1. Read every pending/manual item and unresolved cleanup obligation.
-2. Recheck current observations after reboot and representative restore.
-3. Confirm the recipient entered final credentials privately.
-4. Remove temporary helpers; verify debugging shutdown physically.
-5. Retain the accepted EN/PL handoff snapshot and custody result.
-6. Disconnect the phone, stop only the ADB service owned by this operator when appropriate, and protect the private project archive.
-7. Record follow-up maintenance or a failed qualification honestly; never label a pending run complete.
-
-## Guidance from the selected policy
-
-Use `pxv guide project --project-root "$P" --locale en --kind pixel` to print profiles, readiness checks and private setup order derived from the current policy; `--kind emulator` selects emulator-specific requirements. `pxv device guided --project-root "$P" --asset lab-01 --operator 'Operator'` presents that guidance and runs the shared provisioning path, returning concrete pending next steps. Its `--dry-run` form prepares review without mutation. The generic operator/recipient guides remain available separately. Guidance never supplies credentials, overrides measurements or turns a manual step into verified completion.
+Use the [command reference](../../../docs/COMMAND_REFERENCE.md), [automation/MCP](../../../docs/AUTOMATION.md), [Docker operation](../../../docs/DOCKER.md), [security boundaries](../../../SECURITY.md) and [verification status](../../../docs/VERIFICATION.md). Community disables optional extensions and experimental Seedvault automation; supported manual backup/restore remains a separately checked phone procedure. Historical physical records qualify only their recorded candidate, not the current build.

@@ -25,7 +25,7 @@ describe('release command composition', () => {
     await runRelease([], deps);
     expect(deps.createCandidate).toHaveBeenLastCalledWith({ preview: true });
     expect(deps.buildFormats).toHaveBeenLastCalledWith(candidate, {
-      formats: ['portable', 'deb', 'npm', 'oci'],
+      formats: ['portable'],
       loadDockerImage: true,
     });
     await runRelease(

@@ -1,94 +1,90 @@
-# pxv Community 0.1.0
+# pxv Community
 
-A local toolkit for provisioning and managing small fleets of Google Pixel phones with reviewed, project-specific policies. Community is free under the [MIT license](LICENSE). Commercial features are trusted extensions from private repositories and authenticated npm-compatible registries. There is no runtime activation service.
+A local CLI and MCP toolkit for preparing one Google Pixel or a small fleet with
+GrapheneOS, predefined Android user profiles, pinned apps and reviewed configuration.
+Linux x86_64 is the initial platform. Community is free under the [MIT license](LICENSE).
 
-This release replaces the Python implementation with TypeScript. Existing projects are detected and refused without modification; create a new project. Old approvals are never reused.
+A fleet is a local inventory with bounded parallel execution, independent phone
+state and inspected recovery. It does not provide remote MDM or cross-workstation
+locking. OS installation is a separate destructive phase; private app setup and
+physical confirmations remain explicit checkpoints.
+
+## Guides
+
+| Audience | English | Polski |
+| --- | --- | --- |
+| Operator: single phone and fleet | [Operator guide](guides/source/markdown/operator-en.md) | [Instrukcja operatora](guides/source/markdown/operator-pl.md) |
+| Recipient | [User guide](guides/source/markdown/user-en.md) | [Instrukcja użytkownika](guides/source/markdown/user-pl.md) |
+
+Start with the operator guide and a disposable canary. Starter packs describe
+profile layouts; they need deployment-specific OS pins, app trust and configuration.
+They are not certified hardening policies. The [documentation index](docs/README.md)
+links the focused references, recovery procedures and verification boundaries.
 
 ## Build and check
 
-Linux x86_64 is the initial platform. Use exactly **Node 24.22.0 LTS**, **pnpm 12.11.2**, **TypeScript 7.0.2**, and the pinned Rust toolchain in `rust-toolchain.toml`.
+Use **Node 24.22.0**, **pnpm 12.11.2** and the pinned Rust toolchain. Android helper
+and cryptographic checks need Java 17+, Android platform 35, Build Tools 35.0.0 and
+OpenSSH. See [host dependencies](docs/HOST_DEPENDENCIES.md).
 
 ```sh
 pnpm install --frozen-lockfile
 pnpm quality:setup
 pnpm build:native
 PXV_REQUIRE_CRYPTO=1 pnpm quality
-```
-
-The compiler is TypeScript 7.0.2. A separate TypeScript 6.0.2 package supplies the JavaScript compiler API required by typed ESLint rules; it does not compile the application. SQLite uses Node's built-in API in a dedicated worker. Runtime updates require process, storage and concurrency regression checks.
-
-`quality:setup` explicitly downloads checksum-pinned Rust Code Analysis and ShellCheck into the operator's cache; `PXV_QUALITY_TOOLS` selects another directory. `quality` runs production/test/tool typechecks, lint, dependency and cycle checks, native faults, merged worker/subprocess coverage and all Android helper builds/signature checks. It writes source-bound JSON and readable reports under `.quality/`. See [testing](docs/TESTING.md) for prerequisites and individual gates.
-
-Use [development testing](docs/TESTING.md) for focused test/watch loops and coverage diagnosis. The separate [canary, backup and recovery runbook](docs/CANARY_BACKUP_RECOVERY.md) covers physical trials, protected reference/master phones, primary phones with real data, disposable rebuilds and operator-state backups.
-
-For one person's multi-profile phone, the [two personal recovery scripts](scripts/examples/README.md) assist GrapheneOS installation, supervised Seedvault backup and same-device/replacement restoration. Read the [adapter qualification and recovery limits](docs/SEEDVAULT_AUTOMATION.md) first; no production Seedvault UI adapter is currently qualified by the repository.
-
-## Start a project
-
-Host execution needs supported Android platform tools, SDK Build Tools 35.0.0, Java 17 or newer, and OpenSSH signature verification. Portable and Debian distributions bundle Node and the supervisor. The Docker image also includes its Android and Java tools. See [host setup](docs/HOST_DEPENDENCIES.md).
-
-```sh
 pnpm pxv host doctor
-pnpm pxv host adb-start --yes
-pnpm pxv project init --path /absolute/path/to/fleet \
-  --policy policy-packs/simple/policy.json
-pnpm pxv inventory enroll --project-root /absolute/path/to/fleet \
-  --asset phone-001 --serial ACTUAL_SERIAL --model 'Pixel 8a' --codename akita --yes
-pnpm pxv device plan --project-root /absolute/path/to/fleet --asset phone-001
 ```
 
-Starter packs demonstrate one, five and arbitrary profiles. They are structural templates, not certified hardening policies. Select authenticated application versions/signers, OS pins, settings, network requirements and acceptance steps before deployment. Configuration rejects unknown fields, duplicate YAML keys and ambiguous selectors. Asset `all` is a literal name; fleet selection requires `--all`.
+Setup downloads checksum-pinned analysis tools explicitly. The strict quality gate
+retains evidence for the exact source identity; it does not qualify a physical phone
+or production policy. See [testing](docs/TESTING.md) and [verification](docs/VERIFICATION.md).
 
-Use `guide project --project-root DIRECTORY --locale en|pl` for policy-derived checks and `device guided --asset ID` for a guided provisioning run. Review the printed plan before running `device provision`, `device deploy`, `device create-users` or the destructive `device install-os`. Interactive commands ask for confirmation; `--yes` records explicit noninteractive authorization. For agent execution, retain the exact `reviewSummary` as a file and submit it with `agent execute --plan ID --review-file FILE --operator NAME`. Runs survive the submitting client and expose cursor-based events.
+## Prepare a project
 
-Each profile, including the owner, can declare `defaultLocale` such as `en-US`, `pl-PL`, `de-DE` or `sr-Latn-RS`. Provisioning applies that profile’s language and region through an accepted UI adapter or a manual step after normal credentials and before duress. Legacy `language` remains accepted; conflicting aliases are rejected. Time zones and document `--locale en|pl` are separate. See [per-profile locale setup](docs/OPERATOR_GUIDE.md#default-locale-for-each-profile).
-
-Profiles can optionally initialize a normal PIN/password through `defaultCredential`; the owner can also configure the device-wide duress pair through `defaultDuress`. Policies contain references only; values come from a private per-device `secrets/credentials/<assetId>.json` file. See [default credential setup](docs/OPERATOR_GUIDE.md#optional-default-lock-and-duress-credentials) for permissions, initial-only locks and the current-owner-credential requirement. Recipients privately verify or replace every normal default before language and duress setup.
-
-Accounts, MFA and recovery material are entered privately on the phone. Unsupported UI automation pauses with a manual checkpoint. Complete the requested step, record the applicable check, and use `agent resume --run ID --yes`. If a manual checkpoint outlasts its review window, `agent refresh --run ID` prepares a new exact review of the remaining work without replaying completed setup. Language changes follow normal credentials; optional duress setup follows language. Never activate destructive duress as a test.
-
-[Operator guide](docs/OPERATOR_GUIDE.md) · [Recipient guide](docs/USER_GUIDE.md) · [Command reference](docs/COMMAND_REFERENCE.md) · [Architecture](docs/ARCHITECTURE.md)
-
-## Host and Docker
-
-Host and container workers share a per-operator control directory, device leases and durable recovery reservations. Do not run different workstations against the same phone concurrently.
+Keep live projects outside the checkout. This example creates private state and an
+empty inventory; it does not contact or flash a phone:
 
 ```sh
-pnpm pxv host docker-prepare --yes
-pnpm pxv host docker-adb-start --image EXPLICIT_LOCAL_IMAGE --yes
-pnpm pxv device inspect --project-root /absolute/path/to/fleet --asset phone-001 \
-  --execution docker --image EXPLICIT_LOCAL_IMAGE --docker-mode direct
-pnpm pxv host docker-adb-stop --yes
+pnpm pxv project init --path /absolute/private/fleet \
+  --policy policy-packs/reference-five/policy.v2.json
+pnpm pxv policy validate --project-root /absolute/private/fleet
 ```
 
-Direct USB mode uses an explicitly started persistent ADB sidecar on loopback port 5038 and private keys. Host-ADB mode connects to an existing host server on 5037. Fastboot requires direct USB. Workers use the caller's UID/GID and read-only installed extensions. See [Docker workflows](docs/DOCKER.md).
+Version 2 policies define each app once, share app IDs across profiles, separate
+global device settings and map exact GrapheneOS releases by Pixel codename. Version
+1 remains readable; explicit conversion needs a fresh lock and review. Follow the
+[policy reference](docs/POLICY_FORMAT.md) and operator guide to enroll observed
+physical identities, pin artifacts, lock the policy, review OS installation and
+provision profiles/apps. Plans identify automated and assisted steps, complete app
+configuration before VPN lockdown and retain per-phone pause/recovery state.
 
-## Forks and extensions
+The [encrypted phone registry](docs/PHONE_REGISTRY.md) records operator-confirmed
+phone/profile credentials, Session messenger IDs, Oblivion keys, Proton VPN accounts
+and phone numbers. It retains encrypted history, exposes presence/state metadata in
+ordinary views and reveals values only to a chosen private file. It does not read
+live credentials or configure accounts.
 
-White-label products are separate forks. One [product descriptor](product.json) selects the command, package, Debian package, image, assets, starter policy and support identity. Replace example support addresses before distribution. Preserve the upstream engine/API markers and shared safety tests.
+## Automation and distributions
 
-Extensions install only through explicit commands, with exact versions and SHA-512 integrity recorded in the project configuration. Local tarballs support private previews. Installation rejects lifecycle scripts and runtime dependencies; installed bundles execute offline. Extensions are trusted code, and worker isolation is fault isolation rather than a sandbox.
+[CLI jobs and MCP](docs/AUTOMATION.md) use the same engine, exact review text,
+physical-device ownership and durable recovery checks. Fleet selectors are explicit;
+attestation, finalization and recovery require one exact asset. [Docker](docs/DOCKER.md)
+supports direct USB and an existing host ADB server; host-ADB mode cannot flash.
 
 ```sh
-pnpm pxv extension install --project-root /absolute/path/to/fleet --file ./extension.tgz --yes
-pnpm pxv policy lock --project-root /absolute/path/to/fleet --yes
+pnpm build:preview
+pnpm build:preview --formats portable,oci
 ```
 
-Declared extension guides are available with `extension guide --extension ID --contribution PATH`. Select a validated policy explicitly with `extension policy --extension ID --contribution PATH --yes`. Integration adapters and commands produce typed actions for core planning, approval and recovery; `extension adapter` prepares their review. Public authoring packages are `@pxv/extension-sdk` and `@pxv/contracts`. See [extension workflows](docs/EXTENSIONS.md).
+Portable is the supported default. OCI is explicit; Debian/npm and experimental SEA
+are optional compatibility formats. Formats derive from a frozen candidate with
+checksums, provenance and notices. Ordinary builds do not publish or install globally.
+See [publication](docs/PUBLICATION_CHECKLIST.md).
 
-## Local distributions
+Community disables trusted extensions and experimental Seedvault recovery in its
+product descriptor. Explicitly enabled products retain those optional workflows;
+legacy records remain available for inspection and recovery. [Optional source
+tooling](tools/optional/README.md) covers branding and guide publishing.
 
-```sh
-pnpm build
-pnpm build:preview --formats portable,deb,npm,oci
-```
-
-Each build freezes one immutable candidate and derives the selected formats from it. Dirty previews record their source digest, use unique output directories and versions, and have a separate command/Debian identity. Preview launchers default to a separate project. The build never publishes, pushes or installs globally. OCI builds also load a unique local image unless `--no-oci-load` is supplied. `sea` is experimental; the portable archive is the supported standalone baseline.
-
-Artifacts carry checksums, source/toolchain provenance, an SBOM and notices. Stable builds require signing; registry promotion is a separate explicit command. Use the release builder's npm artifact, not a raw workspace CLI tarball. See [publication](docs/PUBLICATION_CHECKLIST.md).
-
-## Evidence and limitations
-
-Offline tests include real cryptographic verification, native crash/fence tests, extension failures, external SDK consumers, two fork identities, and package execution outside the checkout. Every TypeScript application module and package, including release code and workers, must reach 90% lines and 85% branches. TS/JS functions are limited to classic cyclomatic complexity 10, nesting 4 and 80 nonblank, noncomment lines; Rust/Java functions also have a complexity limit of 10.
-
-Physical and GrapheneOS emulator acceptance are tracked separately in [verification](docs/VERIFICATION.md). Passing offline tests does not certify a policy pack, UI adapter, networking configuration or restore. Maintenance creates fresh evidence and renewed handoff; retirement records confirmed erasure and custody without silently wiping a device. Headwind integration and custom OS source builds remain later workflows.
+The [architecture](docs/ARCHITECTURE.md), [security boundaries](SECURITY.md) and
+[contribution guide](CONTRIBUTING.md) describe the controls that changes must preserve.

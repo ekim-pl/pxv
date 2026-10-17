@@ -5,14 +5,14 @@ import {
   RecipeService,
   SeedvaultAdapter,
 } from '@pxv/adapters';
-import { validateArtifact, type SelectedTarget } from '@pxv/contracts';
+import { canonicalJson, osPolicyForTarget, validateArtifact, type SelectedTarget } from '@pxv/contracts';
 import { containedPath, type ExecutionContext, type WorkflowPort } from '@pxv/engine';
 import { relative } from 'node:path';
 import type { ApplicationDependencies } from './dependencies.js';
 function corePort(
   deps: ApplicationDependencies,
 ): Omit<WorkflowPort, 'inspectUser' | 'cleanup' | 'runRecipe' | 'runProbe'> {
-  const { tools, android, artifacts, images, project } = deps;
+  const { tools, android, project } = deps;
   return {
     async inspect(target, policy, signal) {
       await tools.require('adb');
@@ -24,12 +24,7 @@ function corePort(
     sharedEffects: (target, packages, signal) => android.inspectSharedEffects(target, packages, signal),
     async install(target, user, artifact, context) {
       if (!artifact.path) throw new Error('Reviewed immutable APK snapshot missing');
-      await android.install(
-        target,
-        user,
-        await artifacts.inspect(artifact.path, artifact, context.signal),
-        context,
-      );
+      await android.install(target, user, { ...artifact, path: artifact.path }, context);
     },
     applySetting: (target, user, setting, context) => android.applySetting(target, user, setting, context),
     applyPermission: (target, user, permission, context) =>
@@ -39,20 +34,12 @@ function corePort(
     async flash(target: SelectedTarget, policy, context: ExecutionContext) {
       if (process.env['PXV_DOCKER_MODE'] === 'host-adb') throw new Error('Fastboot requires direct USB mode');
       await Promise.all([tools.require('fastboot'), tools.require('ssh-keygen')]);
-      if (!policy.os) throw new Error('Pinned OS policy missing');
+      const os = osPolicyForTarget(policy, target.device.codename);
+      if (!os) throw new Error('Pinned OS policy missing');
       if (!context.osSnapshot) throw new Error('Reviewed OS snapshot missing');
-      const image = await images.verify(
-        context.osSnapshot.path,
-        context.osSnapshot.signaturePath,
-        policy.os,
-        context.signal,
-      );
-      if (
-        image.sha256 !== context.osSnapshot.sha256 ||
-        image.signatureSha256 !== context.osSnapshot.signatureSha256
-      )
-        throw new Error('Reviewed OS bytes changed');
-      await android.flash(target, image, context);
+      if (canonicalJson(os) !== canonicalJson(context.osSnapshot.policy))
+        throw new Error('Reviewed OS snapshot policy differs from the selected target');
+      await android.flash(target, context.osSnapshot, context);
     },
     finalize: (target, context) => android.finalize(target, context),
     verifyEmulatorEvidence: (target, evidence, signal) =>
@@ -135,5 +122,11 @@ function credentialPort(
   };
 }
 export function createWorkflowPort(deps: ApplicationDependencies): WorkflowPort {
-  return { ...corePort(deps), ...recoveryPort(deps), ...recipePort(deps), ...credentialPort(deps) };
+  return {
+    capabilities: { uiAutomation: Boolean(deps.android.ui) },
+    ...corePort(deps),
+    ...recoveryPort(deps),
+    ...recipePort(deps),
+    ...credentialPort(deps),
+  };
 }

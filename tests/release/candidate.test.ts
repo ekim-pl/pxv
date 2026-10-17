@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
+import { createHash } from 'node:crypto';
 import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { CommandRunner, supervisorPath, type Runtime } from '@pxv/runtime';
@@ -31,16 +32,19 @@ describe('candidate input and runtime provenance', () => {
     temporary.push(root);
     const output = await temp('/tmp/pxv-candidate-output-');
     const documents = {
-      'guides/README.md': '[Build instructions](source/BUILD.txt)',
+      'SECURITY.md': '# Security\n\nKeep private inputs and recovery evidence protected.',
+      'CONTRIBUTING.md': '# Contributing\n\nRun source-bound quality before publication.',
+      'docs/README.md': '[Security boundaries](../SECURITY.md)',
+      'guides/README.md': '[Build instructions](source/BUILD.txt) [Contributing](../CONTRIBUTING.md)',
       'guides/index.html': '<a href="source/markdown/operator-en.md">Operator source</a>',
       'guides/source/BUILD.txt': 'Regenerate branded PDFs from the matching source checkout.',
       'guides/source/build-manifest.json': '{"schemaVersion":1}',
-      'guides/source/release-gates.json': '{"liveAcceptance":"pending"}',
     };
     for (const [path, text] of Object.entries({
       ...documents,
       'guides/qa/local-only.txt': 'Local review evidence',
-      'guides/source/rebuild.mjs': 'throw new Error("Source-only guide tooling");',
+      'guides/source/release-gates.json': '{"obsolete":true}',
+      'tools/optional/publishing/rebuild.mjs': 'throw new Error("Source-only guide tooling");',
     })) {
       await mkdir(dirname(join(root, path)), { recursive: true });
       await writeFile(join(root, path), text);
@@ -48,10 +52,15 @@ describe('candidate input and runtime provenance', () => {
     const candidate = await createCandidate({ sourceRoot: root, outputRoot: output });
     for (const [path, text] of Object.entries(documents)) {
       expect(await readFile(join(candidate.directory, path), 'utf8')).toBe(text);
-      expect(candidate.manifest.source.files.some((file) => file.path === path)).toBe(true);
+      expect(candidate.manifest.source.files.find((file) => file.path === path)).toMatchObject({
+        sha256: createHash('sha256').update(text).digest('hex'),
+      });
     }
     expect(candidate.manifest.files.some((file) => file.path.startsWith('guides/qa/'))).toBe(false);
-    await expect(readFile(join(candidate.directory, 'guides/source/rebuild.mjs'))).rejects.toThrow(/ENOENT/);
+    expect(candidate.manifest.files.some((file) => file.path.endsWith('release-gates.json'))).toBe(false);
+    await expect(
+      readFile(join(candidate.directory, 'tools/optional/publishing/rebuild.mjs')),
+    ).rejects.toThrow(/ENOENT/);
     await verifyCandidate(candidate.directory);
   });
   it('records real bundled npm dependencies and their available notices along with clean source revision evidence', async () => {
@@ -143,21 +152,25 @@ describe('candidate input and runtime provenance', () => {
   });
 });
 
-it('refuses to freeze a candidate when public source bytes change during its build', async () => {
-  const root = await fixture('source-drift');
-  temporary.push(root);
-  const output = await temp('/tmp/pxv-candidate-output-');
-  const runner = new CommandRunner();
-  const runtime: Runtime = {
-    run: async (args, options) => {
-      if (args[0] === 'git' && args.includes('status')) {
-        await writeFile(join(root, 'assets/logo.svg'), '<svg>changed during build</svg>');
-        return { code: 0, stdout: '', stderr: '' };
-      }
-      return runner.run(args, options);
-    },
-  };
-  await expect(
-    createCandidate({ sourceRoot: root, outputRoot: output, nodePath: process.execPath, runtime }),
-  ).rejects.toThrow('Source inputs changed during build');
-});
+it.each(['assets/logo.svg', 'SECURITY.md', 'CONTRIBUTING.md'])(
+  'refuses to freeze a candidate when public source bytes change during its build: %s',
+  async (changedPath) => {
+    const root = await fixture('source-drift');
+    temporary.push(root);
+    await writeFile(join(root, changedPath), 'Original public source');
+    const output = await temp('/tmp/pxv-candidate-output-');
+    const runner = new CommandRunner();
+    const runtime: Runtime = {
+      run: async (args, options) => {
+        if (args[0] === 'git' && args.includes('status')) {
+          await writeFile(join(root, changedPath), 'Changed public source during build');
+          return { code: 0, stdout: '', stderr: '' };
+        }
+        return runner.run(args, options);
+      },
+    };
+    await expect(
+      createCandidate({ sourceRoot: root, outputRoot: output, nodePath: process.execPath, runtime }),
+    ).rejects.toThrow('Source inputs changed during build');
+  },
+);

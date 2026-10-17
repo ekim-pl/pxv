@@ -22,7 +22,7 @@ export default tseslint.config(
     rules: { ...js.configs.recommended.rules },
   },
   {
-    files: ['packages/*/src/**/*.ts', 'tools/**/*.mjs', 'guides/source/rebuild.mjs'],
+    files: ['packages/*/src/**/*.ts', 'tools/**/*.mjs'],
     rules: {
       complexity: ['error', { max: 10, variant: 'classic' }],
       'max-depth': ['error', 4],

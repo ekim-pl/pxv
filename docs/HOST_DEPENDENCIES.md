@@ -2,7 +2,7 @@
 
 ## Supported target and developer toolchain
 
-The initial application target is Linux x86_64. Qualification includes Debian 12 and Ubuntu 24.04. Node is pinned to 24.22.0 LTS; TypeScript compiler 7.0.2 and pnpm 12.11.2 are exact workspace pins. TypeScript has stable releases rather than an LTS channel. A compatible TypeScript 6 API package supports type-aware linting while compilation uses the pinned TypeScript 7 tool.
+The application target is Linux x86_64, with Debian 12 and Ubuntu 24.04 as the declared baselines. Exact-candidate runtime evidence is required for a distribution claim; see [verification](VERIFICATION.md). Node is pinned to 24.22.0 LTS; TypeScript compiler 7.0.2 and pnpm 12.11.2 are exact workspace pins. TypeScript has stable releases rather than an LTS channel. A compatible TypeScript 6 API package supports type-aware linting while compilation uses the pinned TypeScript 7 tool.
 
 Portable archives and Debian packages include Node and the compiled Linux supervisor. npm packages require the exact supported Node runtime. Developing/building the supervisor requires Rust/Cargo; ordinary operators do not need a Rust compiler. The application, packaging and guide tooling have no runtime language compatibility layer.
 

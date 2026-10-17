@@ -1,5 +1,13 @@
 import { resolveSelection, validateProject } from '@pxv/contracts';
-import { containedPath, recordLifecycle, type RunRecord, type WorkflowEngine } from '@pxv/engine';
+import {
+  containedPath,
+  recordLifecycle,
+  withRunPauseReason,
+  type Operation,
+  type PreparedOperation,
+  type RunRecord,
+  type WorkflowEngine,
+} from '@pxv/engine';
 import { ExtensionManager } from '@pxv/extensions';
 import type { AgentBackend } from '@pxv/mcp';
 import { commitProjectFile } from '@pxv/runtime';
@@ -18,6 +26,10 @@ function extensionManager(registry?: string): ExtensionManager {
     ...(registry ? { registry } : {}),
     ...(process.env['PXV_REGISTRY_TOKEN'] ? { token: process.env['PXV_REGISTRY_TOKEN'] } : {}),
   });
+}
+function requireExtensions(engine: WorkflowEngine): void {
+  if (engine.project.product.features?.extensions === false)
+    throw new Error('Extensions are outside this core product; use an extension-enabled product');
 }
 function backendContext(engine: WorkflowEngine, allowMutations: boolean) {
   const serials = engine.project.inventory.devices.flatMap((value) => [
@@ -43,10 +55,16 @@ function backendContext(engine: WorkflowEngine, allowMutations: boolean) {
     if (!lock) throw new Error('Extension is not pinned in this project');
     return lock;
   };
-  const review = (prepared: { plan: { id: string }; reviewSummary: string; expiresAt: string }) => ({
+  const review = (prepared: {
+    plan: { id: string };
+    reviewSummary: string;
+    expiresAt: string;
+    capabilities?: PreparedOperation['capabilities'];
+  }) => ({
     planId: prepared.plan.id,
     reviewSummary: prepared.reviewSummary,
     expiresAt: prepared.expiresAt,
+    ...(prepared.capabilities ? { capabilities: prepared.capabilities } : {}),
   });
   const writeConfig = async (extensions: typeof engine.project.config.extensions): Promise<void> => {
     const config = validateProject({ ...engine.project.config, extensions });
@@ -72,6 +90,12 @@ function backendContext(engine: WorkflowEngine, allowMutations: boolean) {
   };
 }
 type BackendContext = ReturnType<typeof backendContext>;
+
+async function runResponse(engine: WorkflowEngine, run: RunRecord | undefined) {
+  if (!run) return undefined;
+  const plan = await engine.store.get<{ operation?: Operation }>('plans', run.planId);
+  return withRunPauseReason(run, plan?.operation);
+}
 
 function workerEnvironment(): Record<string, string> {
   const env: Record<string, string> = { PATH: process.env['PATH'] ?? '/usr/bin:/bin' };
@@ -181,12 +205,17 @@ function readBackend(
     },
     async getRun(runId, after) {
       return publicValue({
-        run: await engine.store.get<RunRecord>('runs', runId),
+        run: await runResponse(engine, await engine.store.get<RunRecord>('runs', runId)),
         events: await engine.store.events(runId, after, 100),
       });
     },
     async listRuns() {
-      return publicValue(await engine.store.entries<RunRecord>('runs'));
+      const records = await engine.store.entries<RunRecord>('runs');
+      return publicValue(
+        await Promise.all(
+          records.map(async (item) => ({ ...item, value: await runResponse(engine, item.value) })),
+        ),
+      );
     },
     async guide(name) {
       return readFile(
@@ -217,11 +246,7 @@ function workflowBackend(
   return {
     async prepareOperation(assetId, operation) {
       const prepared = await engine.prepare(select(assetId), operation);
-      return {
-        planId: prepared.plan.id,
-        reviewSummary: prepared.reviewSummary,
-        expiresAt: prepared.expiresAt,
-      };
+      return review(prepared);
     },
     async executePlan(planId, reviewSummary, operator) {
       if (!allowMutations) throw new Error('Reviewed mutations are disabled');
@@ -231,10 +256,10 @@ function workflowBackend(
         const claimed = await engine.store.compareAndSet('worker-launch', run.id, undefined, {
           claimedAt: new Date().toISOString(),
         });
-        if (!claimed) return publicValue(run);
+        if (!claimed) return publicValue(await runResponse(engine, run));
         await launchWorker(engine, resources, launcher, run);
       }
-      return publicValue(run);
+      return publicValue(await runResponse(engine, run));
     },
     async cancelRun(runId) {
       if (!allowMutations) throw new Error('Explicit cancellation requires mutations enabled');
@@ -291,11 +316,13 @@ function readExtensions(
     },
     async extensionAdapter(assetId, id, contribution, input) {
       requireMutation();
+      requireExtensions(engine);
       const actions = await manager().invokeAdapter(pinned(id), contribution, input);
       return review(await engine.prepareExtension(select(assetId), actions));
     },
     async extensionCommand(assetId, id, command, input) {
       requireMutation();
+      requireExtensions(engine);
       const actions = await manager().invoke(pinned(id), command, input);
       return review(await engine.prepareExtension(select(assetId), actions));
     },
@@ -309,6 +336,7 @@ function writeExtensions(
   return {
     async extensionInstall(source, reviewed, registry) {
       requireReview(reviewed);
+      requireExtensions(engine);
       const installed = await manager(registry).install(source);
       await writeConfig([
         ...engine.project.config.extensions.filter((value) => value.id !== installed.id),
@@ -318,6 +346,7 @@ function writeExtensions(
     },
     async extensionUpdate(id, source, reviewed, registry) {
       requireReview(reviewed);
+      requireExtensions(engine);
       const installed = await manager(registry).update(pinned(id), source);
       await writeConfig([...engine.project.config.extensions.filter((value) => value.id !== id), installed]);
       return publicValue(installed);
@@ -330,6 +359,7 @@ function writeExtensions(
     },
     async extensionPolicy(id, contribution, reviewed) {
       requireReview(reviewed);
+      requireExtensions(engine);
       const policy = await manager().readContribution(pinned(id), 'policyPacks', contribution);
       await commitProjectFile({
         projectId: engine.project.config.id,
@@ -373,10 +403,13 @@ export function liveAgentBackend(
     action: (backend: AgentBackend) => Promise<T>,
     readOnly = false,
     verifyInstalled = true,
+    recovery = false,
   ): Promise<T> => {
-    const app = await application(root, resources, readOnly);
+    const app = recovery
+      ? await application(root, resources, readOnly, true)
+      : await application(root, resources, readOnly);
     try {
-      if (readOnly && verifyInstalled)
+      if (readOnly && verifyInstalled && app.engine.project.product.features?.extensions !== false)
         for (const extension of app.engine.project.config.extensions)
           await extensionManager().inspect(extension);
       return await action(agentBackend(app.engine, resources, launcher, allowMutations));
@@ -394,7 +427,7 @@ export function liveAgentBackend(
       using((backend) => backend.executePlan(planId, summary, operator)),
     getRun: (runId, after) => using((backend) => backend.getRun(runId, after), true),
     listRuns: () => using((backend) => backend.listRuns(), true),
-    cancelRun: (runId) => using((backend) => backend.cancelRun(runId)),
+    cancelRun: (runId) => using((backend) => backend.cancelRun(runId), false, false, true),
     attestDevice: (assetId, check, operator, note, evidence) =>
       using((backend) => backend.attestDevice(assetId, check, operator, note, evidence)),
     finalizeDevice: (assetId, operator, locale) =>
@@ -402,7 +435,7 @@ export function liveAgentBackend(
     confirmCustody: (assetId, recipient, debuggingOff) =>
       using((backend) => backend.confirmCustody(assetId, recipient, debuggingOff)),
     recoverDevice: (assetId, runId, inspected) =>
-      using((backend) => backend.recoverDevice(assetId, runId, inspected)),
+      using((backend) => backend.recoverDevice(assetId, runId, inspected), false, false, true),
     recordLifecycle: (input) => using((backend) => backend.recordLifecycle(input)),
     refreshReview: (runId) => using((backend) => backend.refreshReview(runId)),
     extensionList: () => using((backend) => backend.extensionList(), true, false),

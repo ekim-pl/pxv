@@ -2,6 +2,7 @@ name: validate
 on:
   push:
   pull_request:
+  workflow_dispatch:
 permissions:
   contents: read
 concurrency:
@@ -42,7 +43,13 @@ jobs:
         run: |
           node tools/check-native-baseline.mjs
       - name: Build local distributions without publication
-        run: node packages/release/dist/cli.js --formats portable,deb,npm,oci --output-root "$RUNNER_TEMP/pxv-preview" > "$RUNNER_TEMP/pxv-preview-result.json"
+        shell: bash
+        run: |
+          pxv_formats=portable,oci
+          if [[ "$GITHUB_EVENT_NAME" == workflow_dispatch || "$GITHUB_REF" == refs/tags/* ]]; then
+            pxv_formats=portable,deb,npm,oci
+          fi
+          node packages/release/dist/cli.js --formats "$pxv_formats" --output-root "$RUNNER_TEMP/pxv-preview" > "$RUNNER_TEMP/pxv-preview-result.json"
       - name: Execute a native lease and durable receipt on Debian12
         shell: bash
         run: |

@@ -1,89 +1,102 @@
-# Podręcznik odbiorcy
+# Przygotowany Pixel: przewodnik odbiorcy
 
-Ten przewodnik opisuje pxv 0.1.0. Nie jest certyfikatem telefonu. Dopiero zaakceptowany zapis projektu wskazuje konkretną politykę, oprogramowanie, wyniki sprawdzeń i przekazanie urządzenia. Dowody kwalifikacji wydania oraz testów fizycznego telefonu przechowuje się oddzielnie.
+Ten przewodnik pomaga odebrać i używać Pixela z GrapheneOS oraz kilkoma profilami użytkowników Androida. Pakiet przekazania opisuje profile i kontrole **Twojego telefonu**. Nazwy aplikacji i położenie opcji zależą od sprawdzonej konfiguracji i zainstalowanej kompilacji.
 
-![Prywatna konfiguracja i wsparcie](../../assets/diagrams/recipient-pl.svg)
+**Przed codziennym użyciem:** sprawdź etykietę telefonu, poznaj przeznaczenie profili, zweryfikuj zwykłe blokady, dokończ prywatną konfigurację aplikacji i odbierz instrukcje wsparcia oraz odzyskiwania. Nigdy nie sprawdzaj działania przez użycie kodu lub klucza wymazującego dane.
 
-## Pierwsze spotkanie
+## 1. Sprawdź odbierany telefon
 
-Telefon działa według polityki wybranej przez dostawcę. Nazwy profili, dozwolone aplikacje i usługi mogą się różnić. Pięć profili nie jest obowiązkowym układem. Zachowaj publiczną etykietę urządzenia, kontakt do wsparcia i dokument przekazania właściwy dla tego telefonu.
+Razem z operatorem potwierdź:
 
-1. Ustal przeznaczenie każdego profilu i przećwicz przełączanie użytkowników.
-2. Prywatnie ustaw lub zmień i sprawdź zwykłą blokadę ekranu każdego wybranego profilu. Nie przekazuj operatorowi kodu końcowego, haseł, MFA ani danych odzyskiwania.
-3. Dokończ uzgodnioną konfigurację aplikacji i kont, a potem potwierdź język końcowy w każdym profilu.
-4. Jeśli polityka obejmuje duress, konfiguruj go dopiero po zwykłych danych i języku. Nigdy nie uruchamiaj destrukcyjnego duress jako testu.
-5. Sprawdź zwykłe połączenia i aplikacje oraz zachowanie przy awarii zatwierdzonej sieci.
-6. Potwierdź reprezentatywne odtworzenie kopii i miejsce przechowywania danych odzyskiwania poza telefonem.
-7. Obejrzyj zapis przekazania, brak tymczasowych helperów i fizycznie wyłączone debugowanie.
+1. Fizyczny telefon odpowiada etykiecie w pakiecie przekazania.
+2. Każdy uzgodniony profil istnieje, otwiera się i zawiera właściwe aplikacje oraz język.
+3. Wiesz, jak odblokować każdy profil jego zwykłym PIN-em lub hasłem.
+4. Wymagane konta aplikacji, połączenia VPN i metody odzyskiwania zostały sprawdzone albo ich ograniczenia zapisano.
+5. Po przygotowaniu fizycznie wyłączono debugowanie USB i debugowanie bezprzewodowe.
+6. Masz rzeczywisty kontakt do operatora, uzgodnione miejsce kopii i sposób odzyskania dostępu bez tego telefonu.
 
-Gotowość do przekazania nie jest jeszcze przyjęciem urządzenia. Każdy brak musi być wyjaśniony. Nie przyjmuj telefonu wyłącznie na podstawie zrzutu ekranu, komunikatu o instalacji lub ogólnego drukowanego przewodnika.
+Zgłoś brakujące aplikacje, niedziałające połączenia lub nieoczekiwane dane przed przyjęciem telefonu. Ogólny przewodnik ani dawny wynik testu nie dowodzą, że Twoje urządzenie przeszło kontrole. Operator osobno zapisuje finalizację i potwierdzenie przejęcia telefonu.
 
-## Co zapewnia konfiguracja
+## 2. Korzystaj z właściwego profilu
 
-Polityka może oddzielać działania przez użytkowników Androida, przypinać wersje aplikacji i wymagać ustawień sieci lub kopii. Ogranicza określone ryzyka, ale nie gwarantuje anonimowości, ochrony przed każdym przeciwnikiem ani odzyskania danych bez kopii. Ważne są konkretna wersja OS, aplikacje, polityka i sprawdzenia w zaakceptowanym dokumencie. Pakiety przykładowe Community pokazują strukturę.
+Otwórz przełącznik użytkowników Androida i wybierz profil wskazany w pakiecie przekazania. Poproś operatora o pokazanie przełączania, blokowania i kończenia sesji dodatkowego użytkownika na tej kompilacji.
 
-Zapytaj, jakie zadania wykonuje się w każdym profilu, jakie zmiany wymagają wizyty oraz jak otrzymać pomoc. Aktualizacja kodu aplikacji może dotyczyć kilku użytkowników mimo oddzielenia ich danych. Nie zakładaj, że instrukcja z innego modelu Androida ma identyczne menu.
+Wykonuj czynności osobiste, służbowe, testowe lub inne uzgodnione zadania we właściwych profilach. Dane aplikacji i konfiguracja konta należą do profilu, w którym zostały wprowadzone. Instalacja aplikacji w kilku profilach nie loguje ich automatycznie na to samo konto.
 
-## Sekrety należą do Ciebie
+Wersje pakietów aplikacji są wspólne dla telefonu, a dane użytkowników i wiele ustawień pozostają oddzielne. Aktualizacja lub zmiana pakietu może objąć kilka profili. Przed usunięciem profilu, zastąpieniem zarządzanej aplikacji lub zmianą wymaganego VPN skontaktuj się ze wsparciem.
 
-Ustaw zwykłą blokadę przy zapewnionej prywatności. Jeśli przygotowanie nadało początkowy PIN lub hasło, prywatnie sprawdź zwykłe odblokowanie każdego wybranego profilu i zmień wartość, jeśli nie ma być Twoją końcową blokadą. Konta, MFA i dane odzyskiwania wpisuj na telefonie lub w zatwierdzonym procesie danej usługi. Nie dopisuj ich do przewodnika, notatki operatora, repozytorium, rozmowy ze wsparciem ani niezatwierdzonego zdjęcia. Wsparcie nie powinno potrzebować tych wartości w załączniku projektu.
+Widoczna nazwa profilu nie jest trwałym identyfikatorem konta. Po usunięciu Android może ponownie użyć numeru użytkownika; wsparcie śledzi również jego numer seryjny. Nie odtwarzaj brakującego profilu pod tą samą nazwą z założeniem, że dawny wpis nadal pasuje.
 
-Jeżeli przygotowanie przekazuje Ci ręczne zadanie importu, plik tymczasowy nie pozostaje do późniejszego wyboru. Poproś o pełną zatwierdzoną procedurę prywatnego transferu i importu. Prywatna konfiguracja nie należy do rozmów ze wsparciem ani załączników projektu.
+## 3. Dokończ prywatną konfigurację we właściwej kolejności
 
-Ustal sposób przechowywania danych odzyskiwania poza telefonem. Oddziel informacje pozwalające odblokować urządzenie od samego urządzenia. Jeśli potrzebna jest pomoc w odzyskaniu dostępu, poproś o procedurę chroniącą prywatność.
+Operator może zatrzymać przygotowanie, aby umożliwić Ci prywatne czynności na telefonie. Wykonuj wskazany etap zamiast przypadkowej kolejności działań.
 
-Najpierw kończy się zwykłe dane, potem język, a następnie opcjonalną konfigurację duress. GrapheneOS używa jednej pary PIN/hasło duress zarządzanej przez właściciela dla całego telefonu ([oficjalny opis funkcji](https://grapheneos.org/features#duress)). Jeśli zmienisz zwykłą blokadę właściciela przed automatyczną konfiguracją duress, prywatnie zaktualizuj jej wartość pod odpowiednim odwołaniem zgodnie z zatwierdzoną procedurą prywatnego wejścia przed wznowieniem albo skonfiguruj duress ręcznie według nowego zatwierdzonego planu. Nie ujawniaj wartości operatorowi ani nie zapisuj jej w notatce lub rozmowie. Wartość właściciela używana do ustawienia duress musi odpowiadać aktualnej zwykłej blokadzie.
+1. Na żądanie dokończ zwykłą konfigurację aplikacji: logowanie, import, MFA i zgody Androida. Przed wpisaniem danych sprawdź profil.
+2. Ustaw lub sprawdź **zwykłą blokadę ekranu w każdym uzgodnionym profilu**. Jeśli przekazano początkowy PIN lub hasło, prywatnie je zweryfikuj albo zmień zgodnie z ustaleniami. Sprawdź zwykłe zablokowanie i odblokowanie poprawną wartością.
+3. Po sprawdzeniu zwykłych blokad ustaw i zweryfikuj docelowy język każdego profilu.
+4. Dopiero po blokadach i języku skonfiguruj opcjonalny przymus GrapheneOS. Obie wartości przymusu muszą różnić się od wszystkich rzeczywistych zwykłych PIN-ów i haseł profili, także zmienionych prywatnie.
 
-Duress może mieć destrukcyjne skutki. Nie wpisuj takiego kodu, żeby sprawdzić działanie. Poproś dostawcę o dokładną instrukcję unikania pomyłek oraz bezpiecznej wymiany i wycofania telefonu. Korzystaj z oficjalnych instrukcji GrapheneOS dla rzeczywiście zainstalowanej wersji.
+Nigdy nie wpisuj wartości przymusu w zwykłym ekranie odblokowania ani uwierzytelnienia. Nie uruchamiaj destrukcyjnego przymusu w ramach odbioru. Jeśli nie wiesz, jakiej wartości żąda ekran, zatrzymaj się i zapytaj przed wpisaniem.
 
-## Język każdego profilu
+Wartości początkowe służą tylko do inicjalizacji. Poprawne wykonanie polecenia nie dowodzi, że potrafisz odblokować profil. Zmiana na telefonie nie aktualizuje automatycznie rejestru wsparcia.
 
-Dostawca może ustawić inny początkowy język i region każdego profilu, także właściciela: na przykład właściciel `en-US`, praca `pl-PL`, podróże `de-DE`. Po sprawdzeniu zwykłych blokad i przed opcjonalnym duress potwierdź język w każdym profilu i wykonaj w nim ewentualny oczekujący ręczny krok języka. Te ustawienia nie zmieniają strefy czasowej. Język EN/PL przewodnika i dokumentu przekazania wybiera się oddzielnie.
+Poinformuj operatora o zakończeniu wskazanego etapu bez wypowiadania, pokazywania ani zapisywania sekretów w publicznych notatkach. Jeśli uprawnione wsparcie zachowuje aktualne dane, przekaż zmianę uzgodnionym prywatnym sposobem opisanym poniżej.
 
-## Profile i aplikacje
+## 4. Skonfiguruj aplikacje i VPN w każdym profilu
 
-Naucz się układu właściciela i pozostałych użytkowników, który faktycznie otrzymujesz. Każdy może mieć inne aplikacje i ustawienia. Zakończenie sesji lub restart może zmieniać pracę w tle. Przećwicz normalne odblokowanie, restart, zmianę użytkownika i uruchomienie potrzebnych aplikacji.
+Używaj obsługiwanej przez aplikację metody logowania, importu konfiguracji i odzyskiwania. Wrażliwe importy przekazuj zatwierdzoną prywatną metodą. Jeżeli automatyzacja nie jest obsługiwana, wykonaj całą konfigurację prywatnie; nie szukaj wygasłego pliku tymczasowego z wcześniejszej próby.
 
-Instaluj i usuwaj aplikacje według uzgodnionej polityki. Nowe źródło, podpis lub wersja mogą unieważnić sprawdzenia. Zgłaszaj niespodziewane prośby o uprawnienia, dostępność, administratora urządzenia lub nietypowe działanie aplikacji przed ich zaakceptowaniem.
+VPN wymaga własnej konfiguracji i zgody Androida w każdym profilu, w którym jest potrzebny. Dokończ to przed włączeniem przez operatora stałego VPN lub blokowania połączeń bez VPN. Następnie sprawdź zamierzone połączenie i aplikacje.
 
-## Sieć i kopie
+Gdy sieć przestanie działać, sprawdź profil, konfigurację oczekiwanej aplikacji VPN i dostępność uzgodnionej sieci. Zgłoś profil, aplikację i widoczny błąd bez danych uwierzytelniających. Nie usuwaj VPN ani jego zabezpieczeń tylko po to, aby zaliczyć test.
 
-Ustal, jaka konfiguracja VPN i trasowania obowiązuje w każdym profilu. Ikona VPN nie potwierdza całego ruchu. Poproś o demonstrację właściwej trasy i uzgodnionego zachowania przy awarii w używanych aplikacjach. Wynik sondy operatora ma ograniczony zakres i nie zastępuje tych sprawdzeń.
+Wynik pomocnika obejmuje wyłącznie zapisany zakres kontroli. Nie gwarantuje tej samej trasy całego ruchu aplikacji. Zachowaj ograniczenia w pakiecie przekazania i konsultuj zmiany tras, kopii i uprawnień.
 
-Gdy połączenie przestaje działać, stosuj procedurę wsparcia. Przypadkowe przełączanie ustawień może zmienić politykę. Zapisz sposób kontaktu ze wsparciem, gdy podstawowa ścieżka sieciowa jest niedostępna, bez dopisywania sekretów.
+## 5. Rozróżniaj Session, Oblivion i przymus
 
-Dowiedz się, co jest kopiowane, dokąd, jak jest szyfrowane i jak wyglądało poprawne odtworzenie. Sam włączony transport backup nie gwarantuje dostępnej kopii. Sprawdź reprezentatywne dane przed poleganiem na nowym telefonie lub miejscu kopii. Chroń dane odzyskiwania poza urządzeniem i okresowo potwierdzaj kontynuację kopii.
+**Identyfikator komunikatora Session** wskazuje konto komunikatora. Nie jest identyfikatorem profilu Androida, numerem użytkownika, numerem telefonu ani numerem seryjnym sprzętu. Przed udostępnieniem ID sprawdź, do którego konta i profilu należy.
 
-## Akceptacja i codzienna praca
+**Klucz wymazania przez powiadomienie Oblivion** należy do instalacji aplikacji w konkretnym profilu Androida. Użytkownik opisał wymagane zachowanie jako wymazanie **całego telefonu**, gdy klucz znajdzie się w odebranym powiadomieniu. Projekt nie zakwalifikował tego zachowania dla sprawdzonej, konkretnej aplikacji i kompilacji.
 
-Przed przyjęciem telefonu sprawdź etykietę, język każdego profilu, wymagane profile, oczekiwane aplikacje, dane wsparcia oraz uzgodnione testy. Potwierdź brak tymczasowych aplikacji przygotowawczych i sond oraz wyłączenie debugowania. Dokument EN lub PL nie zawiera haseł ani wartości odzyskiwania.
+Traktuj prawdziwy klucz Oblivion jako destrukcyjny sekret. Przechowuj go oddzielnie od PIN-u i hasła przymusu GrapheneOS. Nie wysyłaj go podczas przygotowania, testów odbiorczych ani zwykłego wsparcia; nie umieszczaj go na zrzutach ekranu, w logach i publicznych eksportach. Celowe wymazanie wymaga osobnej, uzgodnionej procedury. Dostęp do rejestru nie wysyła powiadomienia i nie uruchamia wymazania.
 
-Jeśli konto lub wymagana aplikacja nie są gotowe, poproś o zapisanie braku. Oczekujące przygotowanie nie powinno być nazywane zakończonym przekazaniem. Rozwiązaniem może być kolejna wizyta albo decyzja o polityce, zamiast doraźnej zmiany bez przeglądu.
+Jeżeli nie rozumiesz funkcji usuwania danych lub jej zakresu, pozostaw konfigurację uzgodnionej procedurze nadzorowanej. Odbiór i sprawdzenie telefonu nie wymagają rzeczywistego wymazania.
 
-Na co dzień zachowuj kontrolę nad telefonem, używaj normalnej blokady, stosuj proces aktualizacji i zwracaj uwagę na nowe monity. Umów serwis przed zmianą polityki profili, VPN, kont lub miejsc odzyskiwania. Serwis zbiera nowe dowody i kończy się ponownym przekazaniem.
+## 6. Ustal zasady zachowania danych przez wsparcie
 
-## Częste pytania
+W ramach uprawnionego stałego wsparcia operator może zachowywać ostatnio potwierdzone dane w **lokalnym szyfrowanym rejestrze**. Uzgodnij, kto go odblokowuje, jakie dane pozostają, jak zgłaszać zmiany i jak chronione są prywatne kopie.
 
-**Czy każdy telefon ma pięć profili?** Nie. Układ określa polityka. Dostępne są przykłady z jednym, pięcioma i dowolnym układem.
+Wpis może zawierać:
 
-**Czy poprawne zakończenie polecenia wystarcza?** Nie. Przebieg może oczekiwać na kontrolę, a zapisany raport nie jest świeżym badaniem. Wymagane są pomiary, czynności ręczne, usunięcie helperów, wyłączenie debugowania i przyjęcie urządzenia.
+- Tożsamość telefonu: etykietę zasobu, numer seryjny sprzętu, codename Pixela i numer telefonu.
+- Parę PIN/hasło przymusu GrapheneOS dla urządzenia, oddzielną od Oblivion.
+- PIN/hasło, klucz Oblivion, identyfikator Session, login/hasło Proton VPN i opcjonalny numer telefonu każdego profilu.
+- Trwałe tożsamości profili Androida i zaszyfrowane rewizje historyczne.
 
-**Czy podać operatorowi końcowe hasło?** Nie. Dane blokady, kont, MFA i odzyskiwania wprowadzasz prywatnie.
+`current` oznacza ostatnie jawne potwierdzenie operatora, a nie ciągły odczyt z telefonu. `initial`, `unknown` i `stale` to osobne stany. Po zmianie zachowywanego hasła, kodu lub konta uzgodnij prywatną aktualizację, aby wsparcie nie polegało na starej wartości.
 
-**Czy testować duress?** Nie uruchamiaj destrukcyjnej funkcji. Uzyskaj dokładną zatwierdzoną procedurę.
+Flashowanie, tworzenie profilu, niektóre początkowe zapisy blokady i zdarzenia serwisowe mogą oznaczyć odpowiednie dane jako nieaktualne. Poprzednie rewizje pozostają zaszyfrowaną historią. Dawna pobrana wartość nie jest dowodem, że nadal odblokowuje telefon.
 
-**Czy backup jest gwarantowany?** Nie. Liczy się sprawdzone odtworzenie i chronione dane odzyskiwania.
+Zwykłe raporty i pakiety przekazania pomijają wartości rejestru. Prywatne pobranie celowo tworzy plik jawny, który trzeba chronić i usunąć po użyciu. Kopie rejestru i dane do ich odblokowania wymagają osobnej ochrony; operator może zmienić hasło szyfrowania. Przeczytaj [szczegóły rejestru](../../../docs/PHONE_REGISTRY.md) i [zasady bezpieczeństwa](../../../SECURITY.md).
 
-**Czy Community wymaga serwera licencji?** Nie. Community jest bezpłatne na MIT. Komercyjne rozszerzenia są dystrybuowane prywatnie, bez aktywacji silnika w czasie pracy.
+## 7. Zachowuj dane możliwe do odtworzenia
 
-**Czy operator ma zdalne MDM i wipe?** Sam lokalny toolkit Community ich nie zapewnia. Osobna integracja musi być wyjaśniona i autoryzowana w polityce produktu.
+Uzgodnij zakres kopii **w każdym profilu**, miejsce przechowywania, opiekuna danych odzyskiwania i wyłączenia. Instalacja aplikacji, włączona kopia lub powiadomienie o sukcesie nie stanowią sprawdzonego odtworzenia.
 
-## Utrata, wymiana i wycofanie
+Używaj ustalonej z operatorem metody kopii lub eksportu obsługiwanej przez dany system i aplikację. Zapewnij dostęp do odzyskiwania bez tego telefonu, jego numeru i MFA. Nie zakładaj, że kopia właściciela obejmuje każdy dodatkowy profil i aplikację.
 
-W razie utraty szybko powiadom wsparcie i odwołaj odpowiednie konta lub tokeny u właścicieli usług. Lokalny wpis o utracie nie oznacza zdalnego wymazania. Nie zakładaj, że samo zgłoszenie usunęło dane z telefonu.
+Jeżeli dostępny jest osobny, zatwierdzony telefon testowy, poproś o reprezentatywną próbę odtworzenia. Nie wymazuj podstawowego telefonu, nie usuwaj profilu i nie odblokowuj bootloadera tylko po to, aby sprawdzić kopię. Poznaj zapisane wyłączenia przed poleganiem na odzyskiwaniu.
 
-Przed pozbyciem się starego urządzenia przy wymianie potwierdź odtworzenie danych i akceptację nowego. Przy wycofaniu stosuj osobno zatwierdzoną procedurę wymazania oraz przekazania pieczy i zachowaj potwierdzenie. Sam wpis o wycofaniu nie uruchamia wipe.
+## 8. Zgłaszaj problemy bez ujawniania sekretów
 
-## Zakres tego wydania
+Podaj etykietę zasobu, profil, aplikację, czas i opis problemu. Sekrety przekazuj wyłącznie uzgodnioną prywatną ścieżką aktualizacji rejestru; zwykłe zgłoszenia i zrzuty ekranu powinny je pomijać.
 
-pxv 0.1.0 przechodzi kwalifikację wydania. Testy automatyczne i poprawnie zbudowany kontener nie certyfikują polityki, receptury UI ani fizycznego telefonu. Potrzebne są zapisane dowody GrapheneOS emulatora i autoryzowanego Pixel 8a w EN/PL obejmujące restore, restart, izolację, routing, awarie oraz przekazanie. Zwykły emulator nie stanowi dowodu pochodzenia GrapheneOS.
+Skontaktuj się z operatorem przed naprawą, usunięciem profilu, resetem fabrycznym, ponowną instalacją systemu lub przekazaniem innej osobie. Zmiany wymagają nowych kontroli tożsamości i mogą unieważnić poprzednie przekazanie. Po utracie telefonu zastosuj uzgodnioną procedurę i sprawdź powiązane konta usług; sam wpis rejestru nie odzyska urządzenia.
+
+Podczas serwisu pod nadzorem może być potrzebne tymczasowe debugowanie. Po zakończeniu ponownie sprawdź wyłączenie obu opcji, uzgodnij zmienione dane i odbierz nowe potwierdzenie przekazania, jeśli jest wymagane.
+
+## Dalsze instrukcje i zakres weryfikacji
+
+[Przewodnik operatora](operator-pl.md) opisuje polecenia i odbiór. Dokumentacja techniczna obejmuje [zależności komputera](../../../docs/HOST_DEPENDENCIES.md), [format polityki](../../../docs/POLICY_FORMAT.md), [listę poleceń](../../../docs/COMMAND_REFERENCE.md), [kopie i odzyskiwanie](../../../docs/CANARY_BACKUP_RECOVERY.md), [automatyzację](../../../docs/AUTOMATION.md) i [Dockera](../../../docs/DOCKER.md).
+
+[Stan weryfikacji](../../../docs/VERIFICATION.md) określa granice zachowanych dowodów. Próba offline i historyczny wynik telefonu nie kwalifikują bieżącej konfiguracji. Bez fizycznego telefonu testowego instalacja, aplikacje, VPN i odzyskiwanie pozostają niezakwalifikowane do czasu rzeczywistych kontroli na uprawnionym urządzeniu.

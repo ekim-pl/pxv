@@ -5,8 +5,9 @@ Run `pxv --help` for the installed product's identity and `pxv version` for its 
 | Area | Commands and purpose |
 | --- | --- |
 | Project | `project init --path NEW_DIRECTORY [--policy FILE]` creates distinct project state. |
-| Policy | `policy validate` checks structure; `policy lock --yes` writes the canonical lock. |
+| Policy | `policy validate` checks structure; `policy lock --yes` writes the canonical lock; `policy convert --output NEW_FILE` writes v2 authoring input without activating it. |
 | Inventory | `inventory list`; `inventory enroll --asset ID --serial SERIAL --model MODEL --codename CODE [--kind pixel|emulator] [--mode adb|fastboot] --yes`; `inventory import --file FILE --yes`. |
+| Phone registry | Local encrypted `registry init`, `list`, `show --asset ID`, `history --asset ID`; `update --asset ID --file PRIVATE.json --record-revision N [--yes]`; `reveal --asset ID --output NEW_PRIVATE_FILE [--record-revision N]`; `rekey`; explicit stale-all restore `reconcile [--yes]`. Hidden local unlock or `--passphrase-file PRIVATE_FILE`; rekey also accepts `--new-passphrase-file`. See [private storage and retention](PHONE_REGISTRY.md). |
 | Host | `host doctor`; explicit `host adb-start --yes`; `host bootstrap --file APPROVED_ARCHIVE.json --license ID --path NEW_DIRECTORY --yes`; `host build-helper --type probe|setup|e2e --yes`. |
 | Docker host | `host docker-prepare --yes`; `host docker-adb-start --image IMAGE --yes`; `host docker-adb-stop --yes`. |
 | Read device | `device inspect --asset ID`; `device report --asset ID`. A report is stored readiness. |

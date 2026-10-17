@@ -41,7 +41,6 @@ async function javascriptMetrics(root) {
   const files = await eslint.lintFiles([
     'packages/*/src/**/*.ts',
     'tools/**/*.mjs',
-    'guides/source/rebuild.mjs',
     'eslint.config.mjs',
     'vitest.config.ts',
   ]);

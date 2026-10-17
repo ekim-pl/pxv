@@ -1,6 +1,6 @@
 # Canary testing, backups and device recovery
 
-Use this runbook for physical testing and recovery. For code development without a phone, use [developing and testing pxv](TESTING.md). The release evidence requirements are in [live acceptance](E2E_TESTING.md). This document describes procedures; it does not record a completed test or qualify a device.
+Use this runbook for physical testing, live acceptance and recovery. For code development without a phone, use [developing and testing pxv](TESTING.md). Read the [verification boundaries](VERIFICATION.md) before interpreting results. This document describes procedures; it does not record a completed test or qualify a device.
 
 Here, **master device** is a recorded role: a protected reference phone, a primary phone containing real owner data, or both. Keep the role explicit because a reference can seed reviewed fleet configuration while a primary backup is private to its owner. A phone with both roles receives the primary-data protections; its full backup is not a fleet seed.
 
@@ -21,7 +21,7 @@ The reusable reference is the reviewed policy, assets, configurations and exact 
 | Phone data restore             | The selected OS backup service and each app's supported export/import or account recovery | Only the data and behavior actually restored and checked                                           |
 | Operator project/host recovery | Preserve current evidence and inspect a consistent private backup with a maintainer       | Historical state is available for reconciliation; old approvals do not establish current readiness |
 
-The typed `seedvault inspect|backup|restore` workflow and [personal recovery examples](../scripts/examples/README.md) supervise qualified exact-build Seedvault UI operations across profiles. No production adapter is currently qualified; read [adapter acceptance and recovery limits](SEEDVAULT_AUTOMATION.md). PXV has no general phone cloning or project-state import command. A policy's `backup` requirement measures whether backup is enabled and which transport is selected. The `backup_recovery` check records a witnessed representative restore. Neither observation proves that every app, profile or future backup is recoverable. Android apps may use separate backup APIs and exclusions; see [Android Auto Backup](https://developer.android.com/identity/data/autobackup) and verify the exact app and transport before making a coverage claim.
+In an explicitly Seedvault-enabled product, the typed `seedvault inspect|backup|restore` workflow and [personal recovery tooling](SEEDVAULT_AUTOMATION.md#personal-recovery-tool) supervise qualified exact-build Seedvault UI operations across profiles. Community disables new Seedvault operations, and no production adapter is currently qualified. Read [adapter acceptance and recovery limits](SEEDVAULT_AUTOMATION.md). PXV has no general phone cloning or project-state import command. A policy's `backup` requirement measures whether backup is enabled and which transport is selected. The `backup_recovery` check records a witnessed representative restore. Neither observation proves that every app, profile or future backup is recoverable. Android apps may use separate backup APIs and exclusions; see [Android Auto Backup](https://developer.android.com/identity/data/autobackup) and verify the exact app and transport before making a coverage claim.
 
 For an identified master, use the existing CLI on one enrolled asset at a time. Keep the project, request, adapter evidence, backup destination and report in the access-controlled set for that role:
 
@@ -76,7 +76,7 @@ Stop on any identity mismatch, unknown reservation, missing artifact or unexpect
 
 ## Run the canary workflow
 
-1. Review target identity, measured state, authenticated OS/APK artifacts, required settings and APK effects across all Android users. Retain the exact reviewed plan. Use [operator provisioning](OPERATOR_GUIDE.md#review-and-provisioning) or the supported equivalent MCP route; a CLI-only run does not test MCP.
+1. Review target identity, measured state, authenticated OS/APK artifacts, required settings and APK effects across all Android users. Retain the exact reviewed plan. Use the [operator guide](../guides/source/markdown/operator-en.md) or the supported equivalent MCP route; a CLI-only run does not test MCP.
 2. If this visit includes an authorized OS installation, use the reviewed installer below. Attend the unlock/relock and first-boot checkpoints. Factory flashing and bootloader unlock/relock erase data. Check verified boot and leave OEM unlocking off after installation, following the [official GrapheneOS procedure](https://grapheneos.org/install/cli). Fastboot needs direct USB; host-ADB Docker mode cannot flash.
 
 ```sh
@@ -89,9 +89,25 @@ pxv device install-os --project-root "$P" --asset "$ASSET" \
 4. Reboot and unlock each intended profile. Check distinct synthetic markers, private storage, app behavior and required permissions/settings. Check English and Polish on the exact supported builds. Confirm a profile's content is not visible to the other profiles.
 5. Check expected routes and failure/reconnection in representative apps. A scoped network probe covers its helper UID and reviewed endpoints; it cannot certify all app traffic. Inspect helper removal, private temporary-file cleanup and parent resource lifetime.
 6. Perform the backup/restore drill below. Exercise permission-drift rejection and interruption/recovery only in the explicitly designed disposable test. Do not interrupt flashing to manufacture a failure case. Record pass, fail or pending for each promised capability.
-7. Obtain fresh required attestations, finalize and physically check USB and Wireless debugging are off. Confirm OEM unlocking remains off after installation. Record recipient acceptance and custody separately. Export EN/PL handoff documents when applicable. Follow [signoff and custody](OPERATOR_GUIDE.md#signoff-and-custody); a successful request to disable debugging does not prove the physical toggle state.
+7. Obtain fresh required attestations, finalize and physically check USB and Wireless debugging are off. Confirm OEM unlocking remains off after installation. Record recipient acceptance and custody separately. Export EN/PL handoff documents when applicable. Follow the [operator guide](../guides/source/markdown/operator-en.md); a successful request to disable debugging does not prove the physical toggle state.
 
 A pending manual check is not a failure to hide, and a completed provisioning run is not completed custody. A canary result does not qualify another policy, OS/app build, phone or recipient's data. GrapheneOS emulator provenance and physical-device acceptance remain separate requirements.
+
+## Retain live acceptance separately
+
+Record the actual candidate/product/policy and artifact identities, host tools,
+transport, OS fingerprint, app versions/signers, measured stable users and the
+result of each promised capability. A CLI walkthrough does not test MCP, and an
+OCI tool/lease smoke test does not test live Docker USB or host-ADB provisioning.
+Retain those as separate outcomes when they are advertised.
+
+GrapheneOS emulator provenance must bind the actual image source/path/hash,
+fingerprint and required capabilities through the supported evidence schema. A
+stock Google APIs image or a free-text note cannot supply it. Keep emulator and
+physical results distinct. Exact-build English/Polish recipient walkthroughs,
+actual-app VPN/failure behavior and representative restores remain necessary for
+the corresponding claims. Use the private record template at the end of this
+runbook and preserve failed/pending results, not only successes.
 
 ## Prepare and verify phone backups
 
@@ -124,7 +140,7 @@ Start with synthetic data on the canary. Rehearse the **same method and versions
 1. Create distinguishable data in every in-scope profile: known file bytes plus representative app records and settings. Record expected results without credentials. Open the apps and verify their source data before backing up.
 2. Run the configured backup or app export using its supported UI. Check timestamps, exclusions, repository availability and completeness. Copy/replicate through the approved method and verify independent access. Keep a retained generation so a subsequent empty backup cannot replace the only useful copy.
 3. Restore on an approved clean disposable target/profile, or rebuild this canary only after preserving pxv evidence and resolving its outstanding obligations. A fresh empty phone/profile is a new measured baseline: make a new review; never resume a pre-reset run against it.
-4. Follow the tested OS/app restore order. Check the exact Seedvault build's restore option; upstream documents a Restore menu from Android 15 onward, so restoration is not universally restricted to initial setup. Do not initialize a new backup destination or key over the retained source while preparing restoration. See the [Seedvault restore instructions](https://github.com/seedvault-app/seedvault/wiki/FAQ#how-to-restore-after-passing-through-setup-wizard).
+4. Follow the tested OS/app restore order. Check the exact Seedvault build's supported restore UI instead of assuming restoration is restricted to initial setup. Do not initialize a new backup destination or key over the retained source while preparing restoration. See the [Seedvault restore instructions](https://github.com/seedvault-app/seedvault/wiki/FAQ#how-to-restore-after-passing-through-setup-wizard).
 5. Enter recovery material privately. Restore each required category, check the expected profile, compare file bytes/counts and open the app's actual records. Check attachments, offline content and app functions that depend on recovered data. An installed app icon or a success notification is insufficient.
 6. Re-check user isolation, required permissions/settings, VPN/routing, reboot persistence and helper removal. Coordinate service/account changes: a restored session may affect another device. List missing data or unavailable recovery dependencies explicitly.
 7. Record elapsed time, backup age/data loss, tested categories and gaps. Compare them with the agreed recovery objective. Retain sanitized results and private evidence separately. Repeat after meaningful OS/app/backup-method changes.
@@ -262,4 +278,4 @@ Private evidence location/digest; remaining gaps and next approved action:
 
 Exclude passwords, recovery words, MFA seeds, raw account identifiers and private document contents. Hashes or a backup-enabled observation are not substitutes for the recorded restore comparison. Preserve historical acceptance records unchanged and attach new evidence to the newly tested candidate.
 
-Upstream backup and installation references were checked on 2026-10-16. UI labels, app behavior and restore compatibility must still be verified on the exact builds selected for each visit.
+External backup and installation links are reference material. Verify UI labels, app behavior and restore compatibility on the exact builds selected for each visit; the links do not qualify those builds.

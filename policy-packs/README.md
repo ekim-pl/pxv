@@ -2,6 +2,11 @@
 
 These packs demonstrate one, five and arbitrary profile layouts. They are structural templates, not certified hardening policies. No live device acceptance is claimed.
 
+Use each pack's `policy.v2.json` for new Community projects. Its shared app catalog,
+profile app references and per-codename OS pins follow the [policy format](../docs/POLICY_FORMAT.md).
+The sibling `policy.json` files remain supported v1 examples used by compatibility,
+acceptance and fork-generation tests; they are not duplicate default entry points.
+
 Before using a pack on a phone, a product maintainer must add reviewed OS provenance, APK versions, content digests and signer pins, repository trust anchors, required settings, permission grants and VPN configuration. Empty package lists intentionally avoid presenting invented digests as trusted artifacts. Changing any field changes the resolved policy digest and invalidates the previous reviewed plan.
 
 `reference-five` retains owner, contacts, google, testing and onion roles. `simple` uses only the owner. `custom` demonstrates arbitrary role names and Polish recipient language. Exactly one owner is required; five profiles and the literal name owner are not engine requirements.
@@ -40,7 +45,7 @@ Create `secrets/credentials/<assetId>.json` inside the private project, replacin
 }
 ```
 
-Normal defaults initialize profiles without an existing screen lock. The recipient privately verifies or replaces each default at `normal_credentials`, then confirms each profile's locale through the accepted UI path or the manual `language:<profileId>` checkpoint. Owner duress setup follows locale setup and retains the manual `duress` checkpoint. See [default lock and duress setup](../docs/OPERATOR_GUIDE.md#optional-default-lock-and-duress-credentials) for credential formats, private-file conditions and the current-owner-credential procedure. This starter remains a structural template, with no certified hardening or live-device acceptance claim.
+Normal defaults initialize profiles without an existing screen lock. The recipient privately verifies or replaces each default at `normal_credentials`, then confirms each profile's locale through the accepted UI path or the manual `language:<profileId>` checkpoint. Owner duress setup follows locale setup and retains the manual `duress` checkpoint. See [initial screen locks, language and duress](../docs/POLICY_FORMAT.md#initial-screen-locks-language-and-duress) for credential formats, private-file conditions and the current-owner-credential procedure. This starter remains a structural template, with no certified hardening or live-device acceptance claim.
 
 Select a pack at new-project initialization with `project init --path DIRECTORY --policy FILE`, or explicitly review an installed extension's declared policy contribution. Validate the resulting project policy and write a fresh lock before planning. Copying a file is not policy acceptance.
 

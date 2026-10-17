@@ -7,8 +7,7 @@ import type { CliContext } from './arguments.js';
 const execFileAsync = promisify(execFile);
 const checkoutFiles = [
   'pnpm-workspace.yaml',
-  'guides/rebuild.sh',
-  'guides/source/rebuild.mjs',
+  'tools/optional/publishing/rebuild.mjs',
   'packages/release/src/docs.ts',
   'packages/cli/src/cli.ts',
 ] as const;
@@ -82,6 +81,11 @@ export async function guidesRebuildCommand(
   context.io.out(`Building guide renderer in ${root}`);
   const execute = dependencies.execute ?? run;
   await buildRenderer(root, context, execute);
-  await execute(join(root, 'guides/rebuild.sh'), rebuildArguments(context), root, context);
+  await execute(
+    process.execPath,
+    [join(root, 'tools/optional/publishing/rebuild.mjs'), ...rebuildArguments(context)],
+    root,
+    context,
+  );
   return 0;
 }

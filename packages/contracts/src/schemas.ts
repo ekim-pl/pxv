@@ -11,6 +11,8 @@ import type {
   Inventory,
   OperatorAttestation,
   PolicyPack,
+  PolicyDocument,
+  PolicyDocumentV2,
   ProductDescriptor,
   ProjectConfig,
   RecoveryObligation,
@@ -391,6 +393,18 @@ function policyArtifactReferences(value: z.infer<typeof policyBaseSchema>, conte
       shared.set(artifact.packageId, identity);
     }
 }
+
+function policyGlobalSettings(value: z.infer<typeof policyBaseSchema>, context: z.RefinementCtx): void {
+  const globals = new Map<string, string>();
+  for (const profile of value.profiles)
+    for (const setting of profile.settings) {
+      if (setting.namespace !== 'global') continue;
+      const previous = globals.get(setting.key);
+      if (previous !== undefined && previous !== setting.value)
+        context.addIssue({ code: 'custom', message: `Conflicting device-wide setting ${setting.key}` });
+      globals.set(setting.key, setting.value);
+    }
+}
 function policyCredentialReferences(value: z.infer<typeof policyBaseSchema>, context: z.RefinementCtx): void {
   const normalRefs = new Set(
     value.profiles.flatMap((profile) => [
@@ -419,6 +433,8 @@ const policyBaseSchema = z
       .default([...DEFAULT_ATTESTATIONS]),
     repositories: z.array(repositoryPolicySchema),
     os: osPolicySchema.optional(),
+    osByCodename: z.record(id, osPolicySchema).optional(),
+    sourceSchemaVersion: z.literal(2).optional(),
   })
   .strict();
 export const policyPackSchema = policyBaseSchema.superRefine((value, context) => {
@@ -432,7 +448,85 @@ export const policyPackSchema = policyBaseSchema.superRefine((value, context) =>
     context.addIssue({ code: 'custom', message: 'Duplicate repository ID' });
   policyArtifactReferences(value, context);
   policyCredentialReferences(value, context);
+  policyGlobalSettings(value, context);
+  policyOsPins(value, context);
 });
+
+function policyOsPins(value: z.infer<typeof policyBaseSchema>, context: z.RefinementCtx): void {
+  if (value.os && value.osByCodename)
+    context.addIssue({ code: 'custom', message: 'Choose legacy os or osByCodename, not both' });
+  if (value.osByCodename) {
+    if (!Object.keys(value.osByCodename).length)
+      context.addIssue({ code: 'custom', message: 'OS model pins cannot be empty' });
+    for (const [codename, pin] of Object.entries(value.osByCodename))
+      if (codename !== pin.codename)
+        context.addIssue({ code: 'custom', message: `OS model pin key differs from codename ${codename}` });
+  }
+}
+
+const profileDocumentV2Schema = profileBaseSchema
+  .omit({ packages: true })
+  .extend({
+    apps: z.array(id).refine(uniqueStrings, 'Duplicate profile app'),
+    settings: z.array(
+      settingPolicySchema.refine(
+        (setting) => setting.namespace !== 'global',
+        'Global settings belong in deviceSettings',
+      ),
+    ),
+  })
+  .strict();
+
+const policyDocumentV2Schema = policyBaseSchema
+  .omit({ schemaVersion: true, profiles: true, os: true, osByCodename: true, sourceSchemaVersion: true })
+  .extend({
+    schemaVersion: z.literal(2),
+    apps: z.record(id, artifactPolicySchema),
+    profiles: z.array(profileDocumentV2Schema).min(1),
+    deviceSettings: z
+      .array(
+        settingPolicySchema.refine(
+          (setting) => setting.namespace === 'global',
+          'Device settings must use the global namespace',
+        ),
+      )
+      .refine((settings) => distinct(settings, (setting) => setting.key), 'Duplicate device setting'),
+    os: z.record(id, osPolicySchema).optional(),
+  })
+  .strict();
+
+function normalizePolicyV2(document: PolicyDocumentV2): PolicyPack {
+  const { apps, deviceSettings, os, profiles, ...base } = document;
+  const identities = new Map<string, string>();
+  for (const artifact of Object.values(apps)) {
+    if (
+      artifact.repositoryId &&
+      !base.repositories.some((repository) => repository.id === artifact.repositoryId)
+    )
+      throw new Error(`Unknown repository ${artifact.repositoryId}`);
+    const identity = `${artifact.versionCode}:${artifact.sha256}:${artifact.signerSha256}`;
+    const existing = identities.get(artifact.packageId);
+    if (existing !== undefined && existing !== identity)
+      throw new Error(`Conflicting device-wide APK ${artifact.packageId}`);
+    identities.set(artifact.packageId, identity);
+  }
+  const normalized = {
+    ...base,
+    schemaVersion: 1,
+    sourceSchemaVersion: 2,
+    profiles: profiles.map(({ apps: references, settings, ...profile }) => ({
+      ...profile,
+      packages: references.map((reference) => {
+        const artifact = Object.hasOwn(apps, reference) ? apps[reference] : undefined;
+        if (!artifact) throw new Error(`Unknown app catalog reference ${reference}`);
+        return artifact;
+      }),
+      settings: profile.kind === 'owner' ? [...settings, ...deviceSettings] : settings,
+    })),
+    ...(os ? { osByCodename: os } : {}),
+  };
+  return parseContract(policyPackSchema, normalized);
+}
 
 export const extensionLockSchema = z
   .object({
@@ -473,6 +567,7 @@ export const productDescriptorSchema = z
     engineApi: z.literal(1),
     assets: z.record(z.string(), relativePath),
     defaultPolicy: relativePath,
+    features: z.object({ extensions: z.boolean(), seedvault: z.boolean() }).strict().optional(),
     support: z.object({ name: nonempty, email: z.string().email(), url: https }).strict(),
   })
   .strict();
@@ -666,7 +761,18 @@ function parseContract<T>(schema: z.ZodType, value: unknown): T {
   return output as T;
 }
 
-export const validatePolicy = (value: unknown): PolicyPack => parseContract(policyPackSchema, value);
+export function validatePolicyDocument(value: unknown): PolicyDocument {
+  if (value !== null && typeof value === 'object' && 'schemaVersion' in value && value.schemaVersion === 2) {
+    const document = parseContract<PolicyDocumentV2>(policyDocumentV2Schema, value);
+    normalizePolicyV2(document);
+    return document;
+  }
+  return parseContract(policyPackSchema, value);
+}
+export function validatePolicy(value: unknown): PolicyPack {
+  const document = validatePolicyDocument(value);
+  return document.schemaVersion === 2 ? normalizePolicyV2(document) : document;
+}
 export const validateInventory = (value: unknown): Inventory => parseContract(inventorySchema, value);
 export const validateProject = (value: unknown): ProjectConfig => parseContract(projectConfigSchema, value);
 export const validateProduct = (value: unknown): ProductDescriptor =>

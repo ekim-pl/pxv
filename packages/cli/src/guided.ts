@@ -6,10 +6,13 @@ import {
   type PolicyPack,
   type ProductDescriptor,
 } from '@pxv/contracts';
-import type { RunRecord } from '@pxv/engine';
+import { runPauseReason, type RunPauseReason, type RunRecord } from '@pxv/engine';
 
 function text(value: string): string {
   return value.replace(/[\\`*_[\]{}()#+.!|<>-]/gu, '\\$&');
+}
+function quote(value: string): string {
+  return `'${value.replaceAll("'", "'\\''")}'`;
 }
 /** Policy-derived operator guidance projects only public requirements, never input values. */
 export function renderProjectGuide(
@@ -48,28 +51,47 @@ export function guidedNextSteps(
   projectRoot: string,
   assetId: string,
 ): string[] {
-  const quote = (value: string): string => `'${value.replaceAll("'", "'\\''")}'`;
   const scope = `--project-root ${quote(projectRoot)}`;
-  if (['needs-inspection', 'failed', 'cancelled'].includes(run.status))
+  const pause = runPauseReason(run);
+  if (pause?.kind === 'inspection')
     return [
       locale === 'pl'
         ? 'Sprawdź urządzenie i zachowane zobowiązania odzyskiwania. Nie odtwarzaj przerwanej operacji.'
         : 'Inspect the device and retained recovery obligations. Do not replay the interrupted operation.',
     ];
-  if (run.status === 'pending' && run.manualGate)
+  if (pause?.kind === 'reenrollment')
     return [
-      `${locale === 'pl' ? 'Wykonaj etap na telefonie' : 'Complete the phone checkpoint'}: ${run.manualGate}.`,
-      ...(run.manualGate.startsWith('language:')
-        ? []
-        : [
-            `${product.command} device attest --asset ${quote(assetId)} --check ${quote(run.manualGate)} --operator OPERATOR --yes ${scope}`,
-          ]),
-      `${product.command} agent resume --run ${run.id} --yes ${scope}`,
-      `${locale === 'pl' ? 'Po wygaśnięciu przeglądu przygotuj nowy i zatwierdź dokładnie pozostałe czynności' : 'If the review expires, prepare and approve a new review of the remaining work'}: ${product.command} agent refresh --run ${run.id} ${scope}`,
+      locale === 'pl'
+        ? 'Zakończ konfigurację telefonu, autoryzuj debugowanie USB i sprawdź tożsamość przed nowym planem.'
+        : pause.instructions,
+      `${product.command} device inspect --asset ${quote(assetId)} --transport usb ${scope}`,
+      `${product.command} device provision --asset ${quote(assetId)} --operator OPERATOR ${scope}`,
     ];
+  if (pause?.kind === 'manual-step') return manualNextSteps(product, run.id, pause, locale, scope, assetId);
   return [
     locale === 'pl'
       ? 'Sprawdź aktualny raport, wykonaj wymagane kontrole i potwierdź je osobnymi poleceniami attest przed finalizacją.'
       : 'Read the current report, perform the required checks and record each with attest before finalization.',
+  ];
+}
+
+function manualNextSteps(
+  product: ProductDescriptor,
+  runId: string,
+  pause: Extract<RunPauseReason, { kind: 'manual-step' }>,
+  locale: 'en' | 'pl',
+  scope: string,
+  assetId: string,
+): string[] {
+  return [
+    `${locale === 'pl' ? 'Wykonaj etap na telefonie' : 'Complete the phone checkpoint'}: ${pause.gate}${pause.profileId ? ` (${pause.profileId})` : ''}${pause.recipeId ? ` / ${pause.recipeId}` : ''}.`,
+    ...(pause.instructions ? [pause.instructions] : []),
+    ...(pause.gate.startsWith('language:')
+      ? []
+      : [
+          `${product.command} device attest --asset ${quote(assetId)} --check ${quote(pause.gate)} --operator OPERATOR --yes ${scope}`,
+        ]),
+    `${product.command} agent resume --run ${runId} --yes ${scope}`,
+    `${locale === 'pl' ? 'Po wygaśnięciu przeglądu przygotuj nowy i zatwierdź dokładnie pozostałe czynności' : 'If the review expires, prepare and approve a new review of the remaining work'}: ${product.command} agent refresh --run ${runId} ${scope}`,
   ];
 }

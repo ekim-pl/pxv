@@ -1,7 +1,7 @@
-import { parseDocument, validatePolicy } from '@pxv/contracts';
-import { createProject, writePolicyLock } from '@pxv/engine';
+import { convertPolicyToV2, parseDocument, validatePolicyDocument } from '@pxv/contracts';
+import { assertProjectFresh, createProject, writePolicyLock } from '@pxv/engine';
 import { SqliteStore } from '@pxv/runtime';
-import { readFile } from 'node:fs/promises';
+import { readFile, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import type { CliContext, ProjectCliContext } from './arguments.js';
 import { confirmation } from './arguments.js';
@@ -35,7 +35,7 @@ export async function initializeProject(context: CliContext): Promise<number | u
       typeof values['policy'] === 'string'
         ? resolve(values['policy'])
         : join(resources, product.defaultPolicy);
-    const policy = validatePolicy(parseDocument(await readFile(policyPath, 'utf8')));
+    const policy = validatePolicyDocument(parseDocument(await readFile(policyPath, 'utf8')));
     const project = await createProject(resolve(value('path')), product, policy, resources);
     const store = await SqliteStore.open(join(project.root, 'state/pxv.sqlite3'));
     await store.close();
@@ -62,6 +62,21 @@ export async function policyCommand(context: ProjectCliContext): Promise<number 
   const { io, flag, output, section, command } = context;
   const { project } = context;
   if (section === 'policy') {
+    if (command === 'convert') {
+      await assertProjectFresh(project);
+      const destination = resolve(context.value('output'));
+      await writeFile(destination, `${JSON.stringify(convertPolicyToV2(project.policy), null, 2)}\n`, {
+        flag: 'wx',
+        mode: 0o600,
+      });
+      output({
+        output: destination,
+        schemaVersion: 2,
+        sourceUnchanged: true,
+        next: 'Review the converted file, select it in pxv.project.json, then run policy lock and prepare a fresh reviewed plan. Existing approvals are not reused.',
+      });
+      return 0;
+    }
     if (command === 'lock') {
       await confirmation(io, 'Record the current policy and extension lock?', flag('yes'));
       await writePolicyLock(project);

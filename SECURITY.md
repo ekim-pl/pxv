@@ -1,21 +1,86 @@
-# Security
+# Security and privacy
 
-pxv Community is a local provisioning toolkit. Its security boundaries include enrolled physical identity, stable Android user serials, authenticated immutable artifacts, exact reviewed plans, kernel-owned device leases, durable recovery obligations and fresh shared observations.
+pxv is a local provisioning toolkit. It trusts the operator's operating system,
+selected toolchain, product fork and explicitly installed extension code. It cannot
+protect its files from a malicious local account or replace physical custody.
+Concurrent control of a phone from multiple workstations is unsupported.
 
-A lost Node process never proves cleanup completed. Inspect the affected device and retained evidence before explicit recovery; interrupted mutations are never replayed automatically. A recreated Android user is a different identity even if its numeric ID and name match.
+## Device changes and recovery
 
-Recovery capabilities bind each child to its own obligations. Failed cleanup remains blocked for an explicit owned retry; resolved resources are not replayed. Shared project/device ownership rejects stale configuration or executable context before state-changing workflows. Expected-state SQLite transitions commit evidence, custody/lifecycle records and audit events together; a failed commit cannot silently consume newer evidence.
+Enrolled physical identity, stable Android user serials, authenticated artifacts,
+exact reviews, kernel-owned leases, durable obligations and fresh observations form
+the core boundary. APKs bind package/version/content/signer; OS images bind their
+reviewed OpenSSH signing identity. HTTPS alone is not a publisher identity.
+Repository inputs also require authenticated, fresh index evidence and rollback
+checks.
 
-Private extensions execute trusted code. Worker separation contains faults but is not a security sandbox. Install exact approved bundles from configured registries or reviewed tarballs. Credentials stay outside project records, logs, images and release artifacts. Installed extensions run offline without implicit updates or activation checks.
+Mutating subprocess inputs cross private IPC; command specifications do not persist
+secret argv/environment/stdin. Cancellation or process loss does not prove reversal
+or cleanup. Native reservations and application obligations remain until inspected,
+owner-scoped recovery proves the relevant cleanup. A recreated user is a different
+identity even when its numeric ID/name match. A child cannot release parent or
+sibling obligations. Never delete evidence or change control roots to bypass a fence.
 
-Optional profile defaults are an explicit private-input exception to phone-only entry: policies contain references, while the per-device `secrets/credentials/<assetId>.json` file holds values. The file must be a regular file owned by the executing user with mode `0600`; the file and its secret directories must not be symlinks. Keep it private and out of version control. Reviews bind the credential type, references and action, without values, hashes or secret snapshots; values are read only at execution and can change privately before resume. Never put them in attestation text, notes or support attachments.
+Use the same per-operator control directory across native installations, previews,
+forks and containers. Project ownership rechecks source revisions and executable
+identity before state changes. Expected-state SQLite transitions commit related
+records and audit events together; mismatches preserve newer evidence. Manual
+receipts cannot override contradictory measurements.
 
-Core extension boundaries enforce input, archive and IPC limits before transfer, validate output in the worker and parent, and invoke only an authored own-property command handler. These resource checks do not make trusted executable extensions a security sandbox. Commercial contributions still produce policy-constrained core actions for normal review, ownership and recovery.
+ADB authorization and USB access remain operator responsibilities. Debugging is
+provisioning access: physically verify both debugging toggles are off and helpers
+are removed before separate recipient custody confirmation. Lifecycle changes
+invalidate prior readiness; a retirement record does not erase a phone.
 
-Keep projects private and share the same per-operator control directory across native installations, forks, previews and containers. Concurrent control of a phone from multiple workstations is unsupported. ADB authorization and USB access are operator responsibilities. End debugging only after final signoff; confirm both debugging toggles physically during custody transfer.
+## Private information
 
-Recipient credentials, accounts, MFA and recovery material default to private phone entry. Configured ordinary defaults are initial-only and still require private recipient verification or replacement. Optional owner duress setup requires the current ordinary owner credential and both duress values, distinct from configured ordinary defaults and that current credential. If the recipient changes the owner lock before duress, privately update its referenced value or prepare a new plan for manual duress setup. Automatic command acceptance is not credential verification or a functional wipe test. Handoff documents project only accepted nonsecret fields. Do not include credentials or recovery values in notes or attestation text. Never activate destructive duress to verify setup.
+Keep projects, backups, helper signing keys, private inputs and raw device evidence
+outside source/release assets. Do not put real credentials, account IDs, recovery
+words, wipe keys, MFA seeds, private signing keys, inventories or signed-in screenshots
+in public issues, notes or attestation text. Candidate allowlists and secret-sentinel
+checks supplement careful review; they do not replace it.
 
-Report vulnerabilities privately to the repository maintainer through the hosting provider's private reporting mechanism when available. Include affected version, a minimal disposable fixture, impact and retained redacted evidence. Do not include real recipient secrets or private fleet inventories in public issues. Fork maintainers must replace example support identities in `product.json` before distribution.
+Final credentials, accounts, MFA and recovery material normally use private phone
+entry. Optional initialization defaults are a separate explicit input mechanism:
+policies hold references; `secrets/credentials/<assetId>.json` holds values in a
+current-user-owned regular `0600` file with no symlink file/secret directories.
+Reviews contain references and action types, without values, hashes or secret
+snapshots. Values are read only during execution and can change privately before
+resume. Defaults remain initial-only and require recipient verification/replacement.
 
-Offline passing tests do not establish production acceptance. Policy packs and UI adapters require retained GrapheneOS emulator and authorized physical EN/PL evidence; networking and restores require representative live checks. See [verification](docs/VERIFICATION.md).
+Authorized support retention uses the separate [encrypted phone registry](docs/PHONE_REGISTRY.md).
+Its last-confirmed operator claims are not live credential measurements. Values and
+history stay encrypted at rest; ordinary outputs project only presence/state
+metadata, and explicit retrieval writes a new private file. Secrets never enter
+normal SQLite records, plans, audit events, MCP outputs or handoff artifacts.
+Provisioning invalidates affected registry bindings before credential-changing
+attempts; private on-phone changes still require an operator update. Retain encrypted
+backups and unlock material separately. The trusted local OS and JavaScript memory
+remain outside guaranteed erasure.
+
+Private staged configuration is declared and digest-bound to its recipe. Without an
+accepted file-picker capability, the workflow requests complete manual import before
+launch/staging, so recipients are not directed to files already removed by cleanup.
+Keep ordinary lock setup, language and optional duress in the reviewed order. Never
+activate destructive duress or send a real Oblivion wipe key to test setup.
+
+## Optional code and qualification
+
+Extensions execute trusted code. Worker/archive/input/IPC bounds contain accidental
+faults; they are not a security sandbox. Install only exact approved bundles and keep
+registry authentication external. Optional Seedvault automation needs exact-build
+qualification and demonstrated restore scope. Neither feature is enabled by default
+in Community.
+
+Offline tests, a successful command and copied backup bytes do not establish
+production acceptance. Retain exact-build GrapheneOS provenance, authorized physical
+and localized workflow evidence, representative network/failure checks and witnessed
+restores for advertised capabilities. See [verification](docs/VERIFICATION.md) and
+[recovery](docs/CANARY_BACKUP_RECOVERY.md).
+
+## Report a vulnerability
+
+Use the repository host's private reporting mechanism when available. Include the
+affected version, a minimal disposable fixture, impact and redacted evidence.
+Never attach real recipient secrets or private fleet inventories to a public issue.
+Fork maintainers must replace example support identities before distribution.

@@ -1,6 +1,6 @@
 import type { EmulatorImagePin } from '@pxv/adapters';
 import { parseDocument, type SelectedTarget } from '@pxv/contracts';
-import type { Operation, PreparedOperation, RunRecord } from '@pxv/engine';
+import { withRunPauseReason, type Operation, type PreparedOperation, type RunRecord } from '@pxv/engine';
 import { hostControlRoot, readBounded, recoveryReservations } from '@pxv/runtime';
 import type { ApplicationCliContext } from './arguments.js';
 import { confirmation } from './arguments.js';
@@ -10,6 +10,11 @@ function selectedTargets(context: ApplicationCliContext): SelectedTarget[] {
   if (context.section !== 'device' && context.section !== 'fleet')
     throw new Error('Unknown command; use --help');
   const selected = context.targets();
+  if (
+    ['attest', 'finalize', 'recover'].includes(context.command ?? '') &&
+    (context.flag('all') || context.values['group'] !== undefined)
+  )
+    throw new Error('Attestation, finalization and recovery require one exact --asset');
   if (context.section === 'device' && selected.length !== 1)
     throw new Error('Device commands require exactly one asset');
   if (!selected[0]) throw new Error('No enrolled targets');
@@ -20,7 +25,10 @@ async function observationCommand(
   selected: SelectedTarget[],
 ): Promise<number | undefined> {
   if (context.command === 'inspect') {
-    context.output(await context.app.engine.observe(selected[0]!));
+    const observations = [];
+    for (const target of selected)
+      observations.push(await context.app.engine.observe(target, context.signal));
+    context.output(context.section === 'fleet' ? observations : observations[0]);
     return 0;
   }
   if (context.command === 'report') {
@@ -113,6 +121,7 @@ async function preparePlans(
       planId: prepared.plan.id,
       reviewSummary: prepared.reviewSummary,
       expiresAt: prepared.expiresAt,
+      ...(prepared.capabilities ? { capabilities: prepared.capabilities } : {}),
     });
   }
   return plans;
@@ -138,7 +147,7 @@ function showResults(
           })),
         }
       : {};
-  context.output({ runs: results, ...next });
+  context.output({ runs: results.map((run) => withRunPauseReason(run)), ...next });
 }
 async function provision(context: ApplicationCliContext, selected: SelectedTarget[]): Promise<number> {
   const { value, command, flag, app, signal, io, product, project } = context;
@@ -176,6 +185,8 @@ export async function deviceCommand(context: ApplicationCliContext): Promise<num
   const observed = await observationCommand(context, selected);
   if (observed !== undefined) return observed;
   const target = selected[0]!;
+  if (['attest', 'finalize', 'recover'].includes(context.command ?? '') && selected.length !== 1)
+    throw new Error('Attestation, finalization and recovery require one exact asset');
   if (context.command === 'attest') return attest(context, target);
   if (context.command === 'finalize') return finalize(context, target);
   if (context.command === 'recover') return recover(context, target);

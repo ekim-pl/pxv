@@ -16,6 +16,7 @@ import type {
   Inventory,
   ObservationCheck,
   ObservationReport,
+  OsPolicy,
   PolicyPack,
   ProfilePolicy,
   ProductDescriptor,
@@ -96,6 +97,16 @@ export function verifyResolvedPolicy(value: unknown): ResolvedPolicy {
   const resolved = resolvePolicy(retained.policy, retained.project, retained.product, retained.engineDigest);
   if (resolved.digest !== retained.digest) throw new Error('Retained policy snapshot digest mismatch');
   return resolved;
+}
+
+/** Resolve only the enrolled model's exact pin; never substitute another model. */
+export function osPolicyForTarget(
+  policy: Pick<PolicyPack, 'os' | 'osByCodename'>,
+  codename: string,
+): OsPolicy | undefined {
+  if (policy.osByCodename)
+    return Object.hasOwn(policy.osByCodename, codename) ? policy.osByCodename[codename] : undefined;
+  return policy.os?.codename === codename ? policy.os : undefined;
 }
 
 function chooseTransport(device: DeviceTarget, preferred?: Transport['kind']): Transport {
@@ -229,9 +240,13 @@ export function evaluateObservation(
     });
   };
   check('device.codename', measured.device.codename, measured.os.codename);
-  if (policy.os) {
-    check('os.codename', policy.os.codename, measured.os.codename);
-    check('os.release', policy.os.release, measured.os.release);
+  const os = osPolicyForTarget(policy, measured.device.codename);
+  if (policy.os || policy.osByCodename) {
+    check('os.supported', true, os !== undefined);
+    if (os) {
+      check('os.codename', os.codename, measured.os.codename);
+      check('os.release', os.release, measured.os.release);
+    }
   }
   if (measured.device.kind === 'pixel') check('os.verified_boot', true, measured.os.bootVerified);
   for (const profile of policy.profiles) {

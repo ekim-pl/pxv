@@ -48,7 +48,7 @@ function help(mode) {
         ? `          --files-root DIR (local APK paths default to the policy's directory); --finalize (fresh setup only)\n`
         : '') +
       `\n--dry-run only reads/validates inputs and prints steps; it creates no files or PXV plans.\n` +
-      `PXV_BIN selects one executable path; PXV_NODE selects the pinned Node executable.\n` +
+      `PXV_BIN selects one executable path. Run this command with the pinned Node executable.\n` +
       `Use a new master destination and a separate USB drive. Never enter recovery words or PINs in shell flags.\n`,
   );
 }

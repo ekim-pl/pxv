@@ -43,8 +43,10 @@ describe('isolated project data', () => {
     const before = await readdir(context.root);
     await loadProject(context.root, product);
     expect(await readdir(context.root)).toEqual(before);
-    expect(await loadProduct('config/templates/product-community.json')).toEqual({
+    expect(await loadProduct('product.json')).toEqual({
       ...product,
+      features: { extensions: false, seedvault: false },
+      defaultPolicy: 'policy-packs/reference-five/policy.v2.json',
       assets: { logo: 'assets/logo.svg' },
       support: { name: 'pxv Community', email: 'support@example.org', url: 'https://example.org/pxv' },
     });

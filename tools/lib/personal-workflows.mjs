@@ -18,7 +18,9 @@ import {
   createMaster,
   installedIdentity,
   localArtifacts,
+  normalizedPolicy,
   projectSnapshot,
+  selectedOsPolicy,
   verifyMaster,
   workingUsb,
 } from './personal-master.mjs';
@@ -39,8 +41,7 @@ export async function preflight(options, root) {
   if (!usb.isDirectory()) throw new Error('--usb-root must be the mounted USB drive directory');
   if (options['dry-run']) return;
   const pinned = (await readFile(join(root, '.node-version'), 'utf8')).trim();
-  if (process.versions.node !== pinned)
-    throw new Error('Use Node ' + pinned + ' (set PXV_NODE to its executable)');
+  if (process.versions.node !== pinned) throw new Error('Run this command with Node ' + pinned);
   await access(process.env['PXV_BIN'] ?? join(root, 'bin/pxv'), constants.X_OK);
   await readJson(option(options, 'seedvault-adapter'));
 }
@@ -307,9 +308,8 @@ export async function createPersonalMaster(session, options) {
 /** @param {any} session @param {Options} options */
 async function createInputs(session, options) {
   if (options['backup-only']) {
-    const { policy } = await projectSnapshot(session.project);
     const device = await enrolledDevice(session.project, session.asset);
-    if (device.codename !== policy.os.codename) throw new Error('Enrolled device and OS policy differ');
+    const { policy } = await projectSnapshot(session.project, device.canonicalSerial);
     if (options['codename'] && options['codename'] !== device.codename)
       throw new Error('--codename differs from reviewed OS policy');
     return { policy, device, source: '', policyFile: '' };
@@ -318,17 +318,18 @@ async function createInputs(session, options) {
   const policyFile = resolve(option(options, 'policy'));
   const source = resolve(option(options, 'source-root', dirname(policyFile)));
   await distinctRoots([source, session.project, option(options, 'usb-root'), option(options, 'backup-dir')]);
-  const policy = await readJson(policyFile);
-  if (!policy.os?.codename || !Array.isArray(policy.profiles))
-    throw new Error('Provide a reviewed JSON policy with a pinned GrapheneOS release');
+  const policy = await normalizedPolicy(await readJson(policyFile));
+  const codenames = policy.os ? [policy.os.codename] : Object.keys(policy.osByCodename ?? {});
+  if (!codenames.length) throw new Error('Provide a reviewed JSON policy with a pinned GrapheneOS release');
+  const codename = option(options, 'codename', codenames.length === 1 ? codenames[0] : undefined);
+  if (!(await selectedOsPolicy(policy, codename)))
+    throw new Error('--codename differs from reviewed OS policy');
   await checkArtifacts(policy, source);
   const device = {
     canonicalSerial: option(options, 'serial'),
     model: option(options, 'model'),
-    codename: policy.os.codename,
+    codename,
   };
-  if (options['codename'] && options['codename'] !== device.codename)
-    throw new Error('--codename differs from reviewed OS policy');
   return { policy, device, source, policyFile };
 }
 /** @param {any} session @param {Options} options */
@@ -455,7 +456,7 @@ async function recoveryDevice(session, options, manifest, policy) {
   }
   const device = await enrolledDevice(session.project, session.asset);
   assertOriginalDevice(device, serial, model, manifest);
-  const snapshot = await projectSnapshot(session.project);
+  const snapshot = await projectSnapshot(session.project, device.canonicalSerial);
   if (snapshot.config.id !== manifest.sourceProjectId)
     throw new Error('Same-device recovery requires the original retained project identity and history');
   if (canonical(snapshot.policy) !== canonical(policy))

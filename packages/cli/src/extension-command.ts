@@ -102,8 +102,16 @@ async function invoke(
   }
   return 0;
 }
+function assertExtensionCommand(context: ProjectCliContext): void {
+  if (
+    context.product.features?.extensions === false &&
+    !['list', 'inspect', 'guide', 'remove'].includes(context.command ?? '')
+  )
+    throw new Error('Extensions are outside this core product; use an extension-enabled product');
+}
 export async function extensionCommand(context: ProjectCliContext): Promise<number> {
   const { value, command, project, output, io } = context;
+  assertExtensionCommand(context);
   const manager = extensionManager(context);
   if (command === 'list') {
     output(await manager.list());

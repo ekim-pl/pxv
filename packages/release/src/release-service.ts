@@ -64,7 +64,7 @@ function candidateOptions(args: ReleaseArguments): CandidateOptions {
   };
 }
 function formatOptions(args: ReleaseArguments): BuildFormatsOptions {
-  const formats = (args.value('formats') ?? 'portable,deb,npm,oci').split(',');
+  const formats = (args.value('formats') ?? 'portable').split(',');
   if (formats.some((format) => !['portable', 'deb', 'npm', 'oci', 'sea'].includes(format)))
     throw new Error('Formats: portable,deb,npm,oci,sea');
   const signingKey = args.value('signing-key'),
@@ -79,7 +79,7 @@ function formatOptions(args: ReleaseArguments): BuildFormatsOptions {
 export async function runRelease(argv: string[], dependencies: ReleaseServices = services): Promise<void> {
   if (argv.includes('--help')) {
     dependencies.write(
-      'Build preview: --formats portable,deb,npm,oci[,sea] [--source-root PATH] [--output-root PATH] [--signing-key KEY] [--no-oci-load]\nStable artifacts: --release --signing-key KEY\nPublish verified npm artifact: promote --artifacts PATH --package FILE.tgz --registry HTTPS --allowed-signers FILE --signer ID [--dry-run]\n',
+      'Build preview (portable by default): --formats portable[,oci] [--source-root PATH] [--output-root PATH] [--signing-key KEY] [--no-oci-load]\nOptional compatibility formats: deb,npm,sea (experimental; explicit opt-in only)\nStable artifacts: --release --signing-key KEY\nPublish verified npm artifact: promote --artifacts PATH --package FILE.tgz --registry HTTPS --allowed-signers FILE --signer ID [--dry-run]\n',
     );
     return;
   }

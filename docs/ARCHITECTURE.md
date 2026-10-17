@@ -8,6 +8,20 @@ The façade's retained public port, plan, run/state and emulator-evidence type e
 
 ## Core data flow
 
+Version 2 authoring policies normalize a shared app catalog, owner-scoped device
+settings and per-codename OS pins into the existing action contracts. Legacy v1
+normalization preserves historical lock identities. Converted input carries its
+version in the resolved identity and requires a new review. See [policy format](POLICY_FORMAT.md).
+
+Project-local `state/artifacts` stores verified content by digest. Per-plan immutable
+paths retain shared bytes and repository evidence. Concurrent publication is atomic;
+same-process acquisition coalesces requests sharing the same cancellation signal.
+Independent cancellation contexts and separate processes can transiently download
+the same identity before deduplicating publication. Cache corruption refuses
+reuse, and no automatic garbage collection removes historical references. Execution
+still makes and authenticates private staging copies. APK observations deduplicate
+only within one measurement; user membership and permission checks remain separate.
+
 1. Resolve a versioned policy, product descriptor, project marker, inventory, engine identity and extension locks.
 2. Read a live target observation and authenticated artifact metadata.
 3. Freeze artifact bytes and an exact reviewed plan; bind global APK effects and manual checkpoints.
@@ -26,6 +40,45 @@ Project ownership serializes cooperating configuration writes and operations. Su
 
 Physical serial, transport selector, asset ID and Android user identity are distinct. Android user recovery binds userId, name and serialNo, because user IDs can be reused. The shared per-operator host control directory is independent of product/fork/project and also mounted into containers. Simultaneous ownership from several workstations is unsupported.
 
+## Provisioned-phone registry
+
+The [local registry](PHONE_REGISTRY.md) joins inventory by asset ID, canonical
+hardware serial and codename with a separate encrypted JSON database at
+`secrets/phone-registry.pxv`. Device fields hold duress credentials/phone number;
+profile fields hold normal credentials, the Oblivion notification wipe key,
+Session messenger ID, Proton VPN credentials and phone number. Android user IDs and
+serials remain distinct from service-account identifiers. Several profiles may use
+the same service account.
+
+The runtime uses authenticated AES-256-GCM, a fixed bounded scrypt configuration,
+fresh salts/nonces and project-bound authenticated headers. It writes ciphertext
+atomically with file/directory synchronization. Command-scoped unlock has no
+persistent unlocked cache. Metadata-only CLI views use explicit projections;
+private values/history never enter ordinary SQLite rows, reviews, audit events,
+MCP responses or handoff exports. Explicit reveal writes a new private plaintext
+file.
+
+Native project ownership serializes registry writes with provisioning. Ciphertext
+revision checks and a final identity/generation guard reject stale updates. A public
+SQLite anchor transitions to pending before ciphertext publication and ready after
+durable publication; pending or mismatched copies fail closed. Explicit restore
+reconciliation preserves encrypted history and appends stale snapshots.
+
+Fields distinguish initial, current, unknown and stale values. Current means an
+explicit last-confirmed operator claim, not a live phone measurement. Flash,
+profile creation and credential-default attempts rotate affected public generation
+tokens before mutation; lifecycle records also invalidate device bindings. Stable
+user identities from sufficiently fresh workflow observations reject known profile
+mismatches. Profile-specific observation floors preserve unrelated profile evidence.
+Private changes on the phone still require a private operator update.
+
+History is append-only within bounded storage; historical retrieval never promotes
+values to current. Registry data does not supply initialization defaults, configure
+accounts, send notifications or activate erasure. The Oblivion trigger remains a
+user-described integration requiring exact-app qualification before automation.
+The operator retains the passphrase and encrypted backups; there is no escrow or
+reset service.
+
 ## Native ownership
 
 The Rust Linux supervisor owns nonblocking kernel locks, child-subreaper adoption, pidfd-based process termination, a private IPC authorization gate and durable receipts. Command arguments/environment/stdin cross private IPC and are never persisted in command specifications. A command's durable record contains redacted ownership/effect status. Owner death, failed mutation and uncertain cleanup preserve recovery reservations; interrupted mutations are never automatically replayed.
@@ -38,6 +91,25 @@ Native completion events retain their first-observation timestamp, including tim
 
 ## Product and extension boundaries
 
-Community ships the local workflow without runtime activation. White-label products are forks with one product descriptor, specific assets, packs, templates and documentation. Commercial repositories provide compiled extensions from an authenticated private registry. Extension bundles are trusted executable code; worker isolation is fault isolation, not a sandbox. Device-changing contributions become typed core actions and use the normal review, lease and recovery path.
+Community ships the local workflow without runtime activation. Its descriptor
+explicitly disables extensions and experimental Seedvault recovery. Descriptors
+without the optional `features` object preserve legacy behavior. A separately reviewed
+product can explicitly enable either optional feature. Unsupported extension-dependent projects refuse execution,
+while historical reporting, cancellation and inspected recovery retain their records.
+Changing product features requires a new reviewed identity.
 
-Public contracts and the extension SDK use API version 1. Schema/engine changes require translated regressions and new acceptance evidence. Portable, Debian, npm and OCI outputs derive from one frozen candidate; previews have isolated identities and projects. Release tooling cannot publish through an ordinary build.
+Experimental Seedvault orchestration lives under `experimental/seedvault` and is
+composed on demand. Ordinary submissions inspect the retained plan kind without
+constructing recovery services. Backup reports remain independent of provisioning
+acceptance. Trusted extensions and authoring APIs are compatibility components;
+device-changing contributions still use typed actions, review, leases and recovery.
+Extension worker isolation is fault isolation, not a sandbox.
+
+Brand scaffolding and guide publishing are [optional source tooling](../tools/optional/README.md),
+with compatibility entry points. They do not run during device provisioning.
+
+Public action contracts and the extension SDK use API version 1. Schema/engine
+changes require translated regressions and new acceptance evidence. Portable is the
+default output; optional formats derive from the same frozen candidate. Previews
+have isolated identities and projects. Release tooling cannot publish through an
+ordinary build.

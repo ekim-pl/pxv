@@ -1,5 +1,3 @@
-#!/usr/bin/env node
-import { releaseFailure } from './errors.js';
 import { marked } from 'marked';
 import { chromium, type Page } from 'playwright';
 import { PDFDocument } from 'pdf-lib';
@@ -28,7 +26,7 @@ const defaultBrand = {
   colors: { primary: '#17324D', secondary: '#2F6873', accent: '#D9952B' },
   fontFamily: 'DejaVu Sans',
 };
-type GuideKind = 'product' | 'operator' | 'user' | 'b2b' | 'generic';
+type GuideKind = 'operator' | 'user' | 'generic';
 const printModes = ['office', 'print'] as const;
 
 function escapeHtml(value: string): string {
@@ -109,30 +107,25 @@ function brandColor(palette: Record<string, unknown>, key: string): string {
 
 function editionKind(output: string): GuideKind {
   const name = output.slice(output.lastIndexOf('/') + 1);
-  if (name.startsWith('product-')) return 'product';
   if (name.startsWith('operator-')) return 'operator';
   if (name.startsWith('user-')) return 'user';
-  return name.startsWith('b2b-') ? 'b2b' : 'generic';
+  return 'generic';
 }
 
 function coverLabel(kind: GuideKind, locale: string): string {
   const labels = {
-    product: ['PRODUCT GUIDE', 'PRZEWODNIK PRODUKTOWY'],
     operator: ['OPERATOR GUIDE', 'PRZEWODNIK OPERATORA'],
     user: ['DEVICE USER GUIDE', 'PRZEWODNIK UŻYTKOWNIKA'],
-    b2b: ['BUSINESS FLEET GUIDE', 'PRZEWODNIK FLOTY FIRMOWEJ'],
-    generic: ['PRODUCT GUIDE', 'PRZEWODNIK PRODUKTOWY'],
+    generic: ['GUIDE', 'PRZEWODNIK'],
   } as const;
   return labels[kind][locale === 'pl' ? 1 : 0];
 }
 
 function coverSubtitle(kind: GuideKind, locale: string): string {
   const subtitles = {
-    product: ['Product and deployment overview', 'Opis produktu i wdrożenia'],
     operator: ['Technical deployment and operations', 'Wdrożenie techniczne i obsługa'],
     user: ['Everyday use and handoff', 'Codzienne użytkowanie i odbiór'],
-    b2b: ['Business decisions and fleet operations', 'Decyzje biznesowe i obsługa floty'],
-    generic: ['Product and deployment overview', 'Opis produktu i wdrożenia'],
+    generic: ['Setup and use', 'Przygotowanie i użytkowanie'],
   } as const;
   return subtitles[kind][locale === 'pl' ? 1 : 0];
 }
@@ -149,11 +142,7 @@ function guideCover(
   const image =
     kind === 'generic' ? '' : `<img class="cover-photo" src="assets/photos/cover-${kind}.png" alt="">`;
   const logo = brand.logo ? `<img class="cover-logo" src="${escapeHtml(brand.logo)}" alt="">` : '';
-  const draft =
-    locale === 'pl'
-      ? 'WERSJA ROBOCZA · NIE JEST CERTYFIKATEM URZĄDZENIA'
-      : 'QUALIFICATION DRAFT · NOT A DEVICE CERTIFICATE';
-  return `<section class="guide-cover">${image}<div class="cover-shade"></div><div class="cover-copy">${logo}<p class="cover-brand">${escapeHtml(productName)}</p><p class="cover-label">${coverLabel(kind, locale)}</p><h1>${title}</h1><p class="cover-subtitle">${coverSubtitle(kind, locale)}</p><p class="cover-meta">${version} · ${locale.toUpperCase()} · ${draft}</p></div></section>`;
+  return `<section class="guide-cover">${image}<div class="cover-shade"></div><div class="cover-copy">${logo}<p class="cover-brand">${escapeHtml(productName)}</p><p class="cover-label">${coverLabel(kind, locale)}</p><h1>${title}</h1><p class="cover-subtitle">${coverSubtitle(kind, locale)}</p><p class="cover-meta">${version} · ${locale.toUpperCase()}</p></div></section>`;
 }
 
 function guideStyles(brand: GuideBrand): string {
@@ -161,7 +150,61 @@ function guideStyles(brand: GuideBrand): string {
   const fontFace = brand.fontAsset
     ? `@font-face{font-family:'${escapeHtml(brand.fontFamily)}';src:url('${escapeHtml(brand.fontAsset)}');font-style:normal;font-weight:100 900}`
     : '';
-  return `${fontFace}:root{--brand-primary:${brand.primary};--brand-secondary:${brand.secondary};--brand-accent:${brand.accent}}@page{size:A4;margin:0}@page pxvoffice{size:A4;margin:15mm 18mm 25mm}html[data-print-mode="office"]{page:pxvoffice}@page pxvprint{size:216mm 303mm;margin:0}html[data-print-mode="print"]{page:pxvprint}*{box-sizing:border-box}html{font-family:${family};color:#17222d}body{margin:0;font:12px/1.55 ${family};overflow-wrap:anywhere;-webkit-print-color-adjust:exact;print-color-adjust:exact}h1{font-size:25px;line-height:1.16;margin:0 0 10mm}h2{font-size:17px;line-height:1.25;margin:22px 0 9px;color:var(--brand-primary);break-after:avoid}h3{font-size:13px;color:var(--brand-secondary);break-after:avoid}p{orphans:3;widows:3}img{max-width:100%}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#edf1f3;padding:10px;break-inside:avoid;font:9px/1.5 'DejaVu Sans Mono',monospace}code{font:10px 'DejaVu Sans Mono',monospace}table{border-collapse:collapse;width:100%;font-size:10px;table-layout:fixed;margin:8px 0 12px}td,th{padding:6px;border-bottom:1px solid #b5bcc4;text-align:left;vertical-align:top;overflow-wrap:anywhere}th{background:#e8eef0;color:var(--brand-primary)}thead{display:table-header-group}a{color:var(--brand-secondary)}li,figure,tr{break-inside:avoid}.guide-content{max-width:800px}.guide-cover{position:relative;overflow:hidden;background:var(--brand-primary);color:white;min-height:340px;margin:0 0 24px}.cover-photo,.cover-shade{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}.cover-shade{background:linear-gradient(90deg,rgba(12,28,42,.9),rgba(12,28,42,.24))}.cover-copy{position:absolute;z-index:1;left:8%;right:8%;top:10%;bottom:10%;display:flex;flex-direction:column;justify-content:flex-end}.cover-brand{font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase}.cover-label{font-size:10px;letter-spacing:.14em;color:#fff;margin:0 0 12px}.cover-copy h1{max-width:88%;font-size:31px;margin:0 0 14px;color:white}.cover-subtitle{margin:0 0 20px;font-size:14px}.cover-meta{font-size:9px;letter-spacing:.08em}.cover-logo{position:absolute;top:0;left:0;max-width:42mm;max-height:24mm;object-fit:contain;background:#fff;border-radius:4px;padding:5px}.print-opener{break-before:page;position:relative;width:calc(100% + 36mm);margin:0 -18mm 12mm;padding:18mm 24mm 16mm;background:var(--brand-secondary);color:white}.print-opener::after{content:'';position:absolute;left:0;bottom:0;width:100%;height:4mm;background:var(--brand-accent)}.print-opener h2{font-size:26px;color:white;margin:0}.html-edition{font-size:10px;color:#526374;margin:0 0 16px}@media screen{body{max-width:850px;margin:30px auto;padding:0 20px}.guide-cover{height:58vh;min-height:380px;border-radius:4px}.guide-content{padding:0 6px}}html[data-print-mode="office"] body{font-size:11px;color:#17222d;background:#fff}html[data-print-mode="office"] .guide-cover{height:72mm;min-height:72mm;border-radius:0;margin:0 0 10mm;background:#eef2f4}html[data-print-mode="office"] .cover-photo{height:72mm}html[data-print-mode="office"] .cover-shade{height:72mm;background:linear-gradient(90deg,rgba(12,28,42,.88),rgba(12,28,42,.15))}html[data-print-mode="office"] .cover-copy{top:8mm;bottom:8mm;left:12mm;right:12mm}html[data-print-mode="office"] .cover-copy h1{font-size:21px;max-width:100%;margin:0 0 5mm}html[data-print-mode="office"] .cover-subtitle{font-size:11px;margin:0 0 7mm}html[data-print-mode="office"] .cover-brand{font-size:9px;margin:0 0 6mm}html[data-print-mode="office"] .cover-label{font-size:8px;margin:0 0 5mm}html[data-print-mode="office"] .cover-meta{font-size:8px;margin:0}html[data-print-mode="office"] .cover-logo{max-width:28mm;max-height:14mm}html[data-print-mode="office"] .guide-content{margin:0}html[data-print-mode="office"] .print-opener{break-before:auto;width:auto;margin:18px 0 10px;padding:6px 10px;background:#eef2f4;color:var(--brand-primary);border-left:4px solid var(--brand-accent)}html[data-print-mode="office"] .print-opener h2{font-size:16px;color:var(--brand-primary)}html[data-print-mode="office"] .print-opener::after{display:none}html[data-print-mode="print"] body{background:#f0f4f6;color:#17222d}html[data-print-mode="print"] body::before{content:'';position:fixed;z-index:-1;inset:-18mm;background:linear-gradient(135deg,#f8fafb,#eaf0f2)}html[data-print-mode="print"] .guide-cover{height:303mm;min-height:303mm;width:calc(100% + 36mm);margin:-18mm -18mm 0;break-after:page;border-radius:0}html[data-print-mode="print"] .cover-shade{background:linear-gradient(120deg,rgba(12,28,42,.9),rgba(12,28,42,.22))}html[data-print-mode="print"] .cover-copy{left:24mm;right:24mm;top:26mm;bottom:26mm}html[data-print-mode="print"] .cover-copy h1{font-size:34px;max-width:85%}html[data-print-mode="print"] .cover-subtitle{font-size:16px}html[data-print-mode="print"] .cover-brand{font-size:15px}html[data-print-mode="print"] .cover-label{font-size:11px}html[data-print-mode="print"] .cover-meta{font-size:10px}html[data-print-mode="print"] .cover-logo{max-width:48mm;max-height:26mm}html[data-print-mode="print"] .guide-content{margin:0;padding-bottom:14mm}html[data-print-mode="print"] h2:not(.print-opener){background:#e1eaed;border-left:3mm solid var(--brand-primary);padding:4mm 5mm;margin-top:14mm}html[data-print-mode="print"] h3{border-bottom:1px solid var(--brand-accent);padding-bottom:2mm}html[data-print-mode="print"] th{background:var(--brand-primary);color:white}html[data-print-mode="print"] pre{background:#e1eaed;border-left:2mm solid var(--brand-accent)}html[data-print-mode="print"] .print-opener{width:calc(100% + 36mm);margin:-18mm -18mm 12mm;padding:30mm 24mm 18mm;min-height:115mm;background:linear-gradient(125deg,var(--brand-primary),var(--brand-secondary));color:white;break-before:page}html[data-print-mode="print"] .print-opener h2{color:white;background:transparent;border:0;padding:0;margin:0;font-size:28px}html[data-print-mode="print"] .guide-cover{width:100%;margin:0}html[data-print-mode="print"] .guide-content{max-width:none;padding:18mm;box-decoration-break:clone;-webkit-box-decoration-break:clone}html[data-print-mode="print"] .html-edition{display:none}html[data-print-mode="print"] .guide-content h2.print-opener:first-of-type{break-before:auto}`;
+  return `${fontFace}
+:root{--brand-primary:${brand.primary};--brand-secondary:${brand.secondary};--brand-accent:${brand.accent}}
+@page{size:A4;margin:0}
+@page pxvoffice{size:A4;margin:15mm 18mm 20mm}
+@page pxvprint{size:216mm 303mm;margin:18mm}
+html[data-print-mode="office"]{page:pxvoffice}
+html[data-print-mode="print"]{page:pxvprint}
+*{box-sizing:border-box}
+html{font-family:${family};color:#17222d}
+body{margin:0;font:12px/1.45 ${family};overflow-wrap:anywhere;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+h1{font-size:25px;line-height:1.18;margin:0 0 10mm}
+h2{font-size:17px;line-height:1.25;margin:18px 0 9px;color:var(--brand-primary);break-after:avoid}
+h3{font-size:13px;color:var(--brand-secondary);break-after:avoid}
+p{orphans:3;widows:3}
+img{max-width:100%}
+pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#edf1f3;padding:10px;break-inside:avoid;font:9px/1.5 monospace}
+code{font:10px monospace}
+table{border-collapse:collapse;width:100%;font-size:10px;table-layout:fixed;margin:8px 0 12px}
+td,th{padding:6px;border-bottom:1px solid #b5bcc4;text-align:left;vertical-align:top;overflow-wrap:anywhere}
+th{background:#e8eef0;color:var(--brand-primary)}
+thead{display:table-header-group}
+a{color:var(--brand-secondary)}
+li,figure,tr{break-inside:avoid}
+.guide-cover{position:relative;overflow:hidden;background:var(--brand-primary);color:white;min-height:240px;margin:0 0 24px}
+.cover-photo,.cover-shade{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.cover-shade{background:linear-gradient(90deg,rgba(12,28,42,.94),rgba(12,28,42,.45))}
+.cover-copy{position:relative;padding:28px 32px}
+.cover-brand{font-size:12px;font-weight:700;letter-spacing:.05em}
+.cover-label{font-size:10px;letter-spacing:.1em;margin:0 0 12px}
+.cover-copy h1{font-size:29px;margin:0 0 14px;color:white}
+.cover-subtitle{margin:0 0 16px;font-size:13px}
+.cover-meta{font-size:10px;margin:0}
+.cover-logo{max-width:42mm;max-height:20mm;object-fit:contain;background:#fff;padding:5px;margin-bottom:12px}
+.html-edition{font-size:10px;color:#526374;margin:0 0 16px}
+@media screen{body{max-width:850px;margin:30px auto;padding:0 20px}.guide-content{padding:0 6px}}
+html[data-print-mode="office"] body{font-size:11px}
+html[data-print-mode="office"] .guide-cover{min-height:0;background:white;color:var(--brand-primary);border-bottom:2px solid var(--brand-primary);margin:0 0 8mm}
+html[data-print-mode="office"] .cover-photo,html[data-print-mode="office"] .cover-shade{display:none}
+html[data-print-mode="office"] .cover-copy{padding:0 0 6mm}
+html[data-print-mode="office"] .cover-copy h1{font-size:23px;color:var(--brand-primary)}
+html[data-print-mode="office"] .cover-brand{font-size:10px}
+html[data-print-mode="office"] .cover-label{font-size:9px}
+html[data-print-mode="office"] .cover-subtitle{font-size:11px}
+html[data-print-mode="office"] .cover-logo{max-width:30mm;max-height:14mm;padding:0}
+html[data-print-mode="print"] body{font-size:12px}
+html[data-print-mode="print"] .guide-cover{min-height:65mm;margin:0 0 10mm;border-bottom:3mm solid var(--brand-accent)}
+html[data-print-mode="print"] .cover-copy{padding:9mm}
+html[data-print-mode="print"] body[data-guide-kind="user"] .guide-cover{min-height:50mm}
+html[data-print-mode="print"] body[data-guide-kind="user"] .cover-copy{padding:6mm}
+html[data-print-mode="print"] body[data-guide-kind="user"] .cover-brand{margin:0 0 2mm}
+html[data-print-mode="print"] body[data-guide-kind="user"] .cover-label{margin-bottom:2mm}
+html[data-print-mode="print"] body[data-guide-kind="user"] .cover-copy h1{margin-bottom:2mm}
+html[data-print-mode="print"] body[data-guide-kind="user"] .cover-subtitle{margin-bottom:2mm}
+html[data-print-mode="print"] th{background:var(--brand-primary);color:white}
+html[data-print-mode="print"] .html-edition{display:none}`;
 }
 
 function guideHtml(
@@ -175,22 +218,18 @@ function guideHtml(
   const heading = /<h1(?:\s[^>]*)?>(.*?)<\/h1>/isu.exec(rendered);
   const title = heading?.[1] ?? escapeHtml(productName);
   const body = heading ? rendered.replace(heading[0], '') : rendered;
-  const content = body.replace(
-    /<!--\s*print:opener\s*-->\s*<h2>(.*?)<\/h2>/gsu,
-    '<h2 class="print-opener">$1</h2>',
-  );
   const cover = guideCover(output, locale, title, productName, version, brand);
   const language = locale === 'pl' ? 'pl' : 'en';
-  const draft =
+  const context =
     locale === 'pl'
-      ? 'Wersja do kwalifikacji - nie jest certyfikatem urządzenia'
-      : 'Qualification draft - not a device certificate';
-  return `<!doctype html><html lang="${language}"><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src file: data:; font-src file: data:"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(productName)} - ${escapeHtml(title.replace(/<[^>]*>/gu, ''))}</title><style>${guideStyles(brand)}</style></head><body>${cover}<main class="guide-content"><p class="html-edition">${escapeHtml(productName)} | ${version} | ${locale.toUpperCase()} | ${draft}</p>${content}</main></body></html>`;
+      ? 'Instrukcja ogólna. Stan konkretnego telefonu potwierdza jego raport przekazania.'
+      : 'General instructions. Use the handoff report for the status of a specific phone.';
+  return `<!doctype html><html lang="${language}"><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src file: data:; font-src file: data:"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(productName)} - ${escapeHtml(title.replace(/<[^>]*>/gu, ''))}</title><style>${guideStyles(brand)}</style></head><body data-guide-kind="${editionKind(output)}">${cover}<main class="guide-content"><p class="html-edition">${escapeHtml(productName)} | ${version} | ${locale.toUpperCase()} | ${context}</p>${body}</main></body></html>`;
 }
 
 function indexLabel(name: string): string {
   const locale = name.endsWith('-pl') ? 'PL' : 'EN';
-  const labels = { product: 'Product', operator: 'Operator', user: 'User', b2b: 'Business fleet' };
+  const labels = { operator: 'Operator', user: 'User' };
   const label = labels[editionKind(name) as Exclude<GuideKind, 'generic'>] ?? 'Guide';
   return `${label} (${locale})`;
 }
@@ -210,7 +249,7 @@ function guideIndex(
       return `<li>${indexLabel(name)}: <a href="${name}.html">HTML</a>${pdfs} · <a href="source/markdown/${name}.md">Markdown</a></li>`;
     })
     .join('');
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(productName)} ${version} guides</title><style>body{font:16px/1.6 system-ui,sans-serif;max-width:900px;margin:3rem auto;padding:0 1rem;color:#17222d}h1{color:${brand.primary}}a{color:${brand.secondary}}li{margin:.8rem 0}small{color:#526374}</style></head><body><h1>${escapeHtml(productName)} ${version} guides</h1><p>Four guide types in English and Polish. General qualification drafts; these guides are not device certificates. Read the accepted handoff record for a specific phone.</p><p>PDFs and HTML are generated from the source checkout with <code>pxv guides rebuild</code>.</p><ul>${rows}</ul></body></html>`;
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(productName)} ${version} guides</title><style>body{font:16px/1.6 system-ui,sans-serif;max-width:900px;margin:3rem auto;padding:0 1rem;color:#17222d}h1{color:${brand.primary}}a{color:${brand.secondary}}li{margin:.8rem 0}small{color:#526374}</style></head><body><h1>${escapeHtml(productName)} ${version} guides</h1><p>Operator and device user guides in English and Polish. Use the accepted handoff report for the status of a specific phone.</p><p>PDFs and HTML are generated from the source checkout with <code>pxv guides rebuild</code>.</p><ul>${rows}</ul></body></html>`;
 }
 
 async function setPrintPageBoxes(path: string): Promise<void> {
@@ -271,13 +310,21 @@ async function renderGuidePdfs(
         }, mode);
         const pdf = output.slice(0, -extname(output).length) + `-${mode}.pdf`;
         if (mode === 'office') await renderOfficePdf(page, pdf, productName, brand);
-        else await renderPrintPdf(page, pdf);
+        else await renderPrintPdf(page, pdf, productName, brand);
       }
     }
     await context.close();
   } finally {
     await browser.close();
   }
+}
+
+function footerOptions(productName: string, brand: GuideBrand) {
+  return {
+    displayHeaderFooter: true,
+    headerTemplate: '<span></span>',
+    footerTemplate: `<div style="font-family:Arial,sans-serif;font-size:8px;color:${brand.secondary};width:100%;padding:0 18mm;display:flex;justify-content:space-between"><span>${escapeHtml(productName)}</span><span><span class="pageNumber"></span> / <span class="totalPages"></span></span></div>`,
+  };
 }
 
 async function renderOfficePdf(
@@ -290,13 +337,16 @@ async function renderOfficePdf(
     path,
     printBackground: true,
     preferCSSPageSize: true,
-    displayHeaderFooter: true,
-    headerTemplate: '<span></span>',
-    footerTemplate: `<div style="font-family:Arial,sans-serif;font-size:8px;color:${brand.secondary};width:100%;padding:0 18mm;display:flex;justify-content:space-between"><span>${escapeHtml(productName)}</span><span><span class="pageNumber"></span> / <span class="totalPages"></span></span></div>`,
+    ...footerOptions(productName, brand),
   });
 }
 
-async function renderPrintPdf(page: Page, path: string): Promise<void> {
+async function renderPrintPdf(
+  page: Page,
+  path: string,
+  productName: string,
+  brand: GuideBrand,
+): Promise<void> {
   await page.pdf({
     path,
     width: '216mm',
@@ -304,7 +354,7 @@ async function renderPrintPdf(page: Page, path: string): Promise<void> {
     margin: { top: '0', right: '0', bottom: '0', left: '0' },
     printBackground: true,
     preferCSSPageSize: false,
-    displayHeaderFooter: false,
+    ...footerOptions(productName, brand),
   });
   try {
     await setPrintPageBoxes(path);
@@ -375,19 +425,4 @@ async function renderGuideHtmlSources(
     outputs.push(output);
   }
   return outputs;
-}
-
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  const chromiumExecutable = process.env['PXV_CHROMIUM'];
-  buildDocumentation(process.cwd(), resolve('dist/guides'), {
-    pdf: !process.argv.includes('--html-only'),
-    ...(chromiumExecutable ? { chromiumExecutable } : {}),
-  })
-    .then((outputs) => {
-      process.stdout.write(`${outputs.join('\n')}\n`);
-    })
-    .catch((error: unknown) => {
-      process.stderr.write(`${releaseFailure(error, 'Documentation build failed')}\n`);
-      process.exitCode = 1;
-    });
 }

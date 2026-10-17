@@ -1,7 +1,13 @@
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createProject, loadProject, saveInventory, WorkflowEngine } from '@pxv/engine';
+import {
+  createProject,
+  loadProject,
+  readRegistryGeneration,
+  saveInventory,
+  WorkflowEngine,
+} from '@pxv/engine';
 import type { WorkflowPort } from '@pxv/engine';
 import { SqliteStore } from '@pxv/runtime';
 import { device, hashA, hashB, product } from '../contracts/fixtures.js';
@@ -52,6 +58,7 @@ describe('credential defaults and private recipient checkpoints', () => {
       name: 'Work',
       kind: 'secondary',
       defaultCredential: { type: 'password', secretRef: 'work-lock' },
+      vpn: { packageId: null, alwaysOn: false, lockdown: false },
     });
     delete policy.profiles[1]!.defaultDuress;
     const code = join(root, 'code');
@@ -87,11 +94,15 @@ describe('credential defaults and private recipient checkpoints', () => {
       'default-credential:11',
     ]);
     expect(port.setDuressDefault).not.toHaveBeenCalled();
+    const normalGeneration = await readRegistryGeneration(store, device);
+    expect(normalGeneration.profileEpochs['admin']).toBeTruthy();
+    expect(normalGeneration.profileEpochs['work']).toBeTruthy();
     await expect(engine.attest(target, 'duress', 'Operator')).rejects.toThrow('Contradictory');
     await engine.attest(target, 'normal_credentials', 'Operator');
     const duress = await engine.execute(run.id);
     expect(duress).toMatchObject({ status: 'pending', manualGate: 'duress' });
     expect(port.calls.slice(-3)).toEqual(['language', 'language', 'default-duress:0']);
+    expect((await readRegistryGeneration(store, device)).deviceEpoch).not.toBe(normalGeneration.deviceEpoch);
     expect((await engine.readiness(target)).missing).toContain('duress');
     await engine.attest(target, 'duress', 'Operator');
     await engine.execute(run.id);
@@ -200,6 +211,7 @@ describe('credential defaults and private recipient checkpoints', () => {
     await engine.execute(run.id);
     expect(port.setCredentialDefault).toHaveBeenCalledOnce();
     expect(port.setDuressDefault).not.toHaveBeenCalled();
+    expect((await readRegistryGeneration(store, device)).profileEpochs['admin']).toBeTruthy();
   });
 
   it('rejects contributed owner duress before private normal verification and final language', async () => {

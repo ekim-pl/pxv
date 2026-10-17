@@ -1,9 +1,15 @@
 import { runExitCode } from './device-command.js';
-import type { RunRecord } from '@pxv/engine';
+import { withRunPauseReason, type Operation, type RunRecord } from '@pxv/engine';
 import { readBounded } from '@pxv/runtime';
 import type { ApplicationCliContext } from './arguments.js';
 import { confirmation } from './arguments.js';
 import { agentBackend } from './backend.js';
+
+async function runResponse(context: ApplicationCliContext, run: RunRecord | undefined) {
+  if (!run) return undefined;
+  const plan = await context.app.store.get<{ operation?: Operation }>('plans', run.planId);
+  return withRunPauseReason(run, plan?.operation);
+}
 
 export async function internalWorker(context: ApplicationCliContext): Promise<number> {
   const { value } = context;
@@ -38,17 +44,23 @@ export async function agentCommand(context: ApplicationCliContext): Promise<numb
       planId: prepared.plan.id,
       reviewSummary: prepared.reviewSummary,
       expiresAt: prepared.expiresAt,
+      ...('capabilities' in prepared && prepared.capabilities ? { capabilities: prepared.capabilities } : {}),
     });
     return 0;
   }
   if (command === 'runs') {
-    output(await app.store.entries<RunRecord>('runs'));
+    const runs = await app.store.entries<RunRecord>('runs');
+    output(
+      await Promise.all(
+        runs.map(async (item) => ({ ...item, value: await runResponse(context, item.value) })),
+      ),
+    );
     return 0;
   }
   if (command === 'status') {
     const cursor = Number(value('after', '0'));
     output({
-      run: await app.store.get('runs', value('run')),
+      run: await runResponse(context, await app.store.get<RunRecord>('runs', value('run'))),
       events: await app.store.events(value('run'), cursor, 100),
     });
     return 0;
@@ -64,7 +76,8 @@ export async function agentCommand(context: ApplicationCliContext): Promise<numb
       'Resume the approved run after completing its explicit manual checkpoint?',
       flag('yes'),
     );
-    output(await app.engine.execute(value('run'), signal));
+    const run = await app.engine.execute(value('run'), signal);
+    output(await runResponse(context, run));
     return 0;
   }
   if (command === 'execute') return executePlan(context);
@@ -80,7 +93,7 @@ async function executePlan(context: ApplicationCliContext): Promise<number> {
     // durable manual pause; detaching would orphan it when PID 1 exits.
     const submitted = await app.engine.submit(value('plan'), summary, value('operator'));
     const run = await app.engine.execute(submitted.id, signal);
-    output(run);
+    output(await runResponse(context, run));
     return runExitCode([run]);
   }
   const run = await agentBackend(app.engine, resources, launcher, true).executePlan(
@@ -88,6 +101,6 @@ async function executePlan(context: ApplicationCliContext): Promise<number> {
     summary,
     value('operator'),
   );
-  output(run);
+  output(withRunPauseReason(run as RunRecord));
   return 0;
 }

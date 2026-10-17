@@ -1,0 +1,62 @@
+{
+  "id": "field-team",
+  "version": "0.1.0",
+  "name": "Custom Polish field-team structural starter",
+  "capabilities": [
+    "normal_credentials",
+    "backup"
+  ],
+  "requiredAttestations": [
+    "backup_recovery",
+    "recipient_acceptance",
+    "operator_signoff"
+  ],
+  "repositories": [],
+  "schemaVersion": 2,
+  "apps": {},
+  "profiles": [
+    {
+      "id": "administration",
+      "name": "Administration",
+      "kind": "owner",
+      "settings": [],
+      "permissions": [],
+      "vpn": {
+        "packageId": null,
+        "alwaysOn": false,
+        "lockdown": false
+      },
+      "defaultLocale": "pl-PL",
+      "apps": []
+    },
+    {
+      "id": "field",
+      "name": "Praca w terenie",
+      "kind": "secondary",
+      "settings": [],
+      "permissions": [],
+      "vpn": {
+        "packageId": null,
+        "alwaysOn": false,
+        "lockdown": false
+      },
+      "defaultLocale": "pl-PL",
+      "apps": []
+    },
+    {
+      "id": "research",
+      "name": "Badania",
+      "kind": "secondary",
+      "settings": [],
+      "permissions": [],
+      "vpn": {
+        "packageId": null,
+        "alwaysOn": false,
+        "lockdown": false
+      },
+      "defaultLocale": "pl-PL",
+      "apps": []
+    }
+  ],
+  "deviceSettings": []
+}

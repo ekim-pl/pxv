@@ -1,7 +1,7 @@
-import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import type * as FileSystemModule from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { join, relative, resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type {
   ObligationWriter,
@@ -203,7 +203,10 @@ describe('production dependency wiring and evidence boundaries', () => {
   });
 
   it('locates explicit/environment/fallback product resources and refuses an unavailable installed build', async () => {
-    expect(await resourceRoot('relative/resources')).toBe(resolve('relative/resources'));
+    expect(await resourceRoot(relative(process.cwd(), resources))).toBe(resources);
+    const resourceAlias = join(root, 'resource-alias');
+    await symlink(resources, resourceAlias);
+    expect(await resourceRoot(resourceAlias)).toBe(resources);
     process.env['PXV_RESOURCE_ROOT'] = resources;
     expect(await resourceRoot()).toBe(resources);
     delete process.env['PXV_RESOURCE_ROOT'];
@@ -244,6 +247,41 @@ describe('production dependency wiring and evidence boundaries', () => {
     expect(mocks.extensionInspect).not.toHaveBeenCalled();
   });
 
+  it('refuses extension-dependent core execution while retaining reports and recovery-safe access', async () => {
+    await writeFile(
+      join(resources, 'product.json'),
+      JSON.stringify({ ...product, features: { extensions: false, seedvault: false } }),
+    );
+    const configPath = join(projectRoot, 'pxv.project.json');
+    const config = JSON.parse(await readFile(configPath, 'utf8')) as Record<string, unknown>;
+    const extension = {
+      id: '@private/retained',
+      version: '0.1.0',
+      integrity: 'sha512-' + Buffer.alloc(64).toString('base64'),
+      apiVersion: 1,
+      entry: 'index.js',
+      installPath: 'a'.repeat(64),
+    };
+    await writeFile(configPath, JSON.stringify({ ...config, extensions: [extension] }));
+    await expect(application(projectRoot, resources)).rejects.toThrow(
+      'cannot execute projects with extensions',
+    );
+    const reportApp = await openApp(true);
+    const recoveryApp = await application(projectRoot, resources, false, true);
+    apps.push(recoveryApp);
+    await recoveryApp.store.set('runs', 'retained-run', {
+      id: 'retained-run',
+      planId: 'retained-plan',
+      status: 'running',
+      createdAt: '2026-10-17T10:00:00Z',
+      operator: 'Operator',
+    });
+    await recoveryApp.engine.cancel('retained-run');
+    expect(await reportApp.store.get('cancellation', 'retained-run')).toEqual({ requested: true });
+    expect(mocks.extensionInspect).not.toHaveBeenCalled();
+    expect(await readFile(configPath, 'utf8')).toContain('@private/retained');
+  });
+
   it('wires every ordinary device action through validated adapter ports and prerequisite discovery', async () => {
     mocks.discover.mockResolvedValue(undefined);
     const app = await openApp();
@@ -259,8 +297,8 @@ describe('production dependency wiring and evidence boundaries', () => {
     await app.engine.port.createUser(target, profile, execution);
     await app.engine.port.sharedEffects?.(target, ['org.example.vpn']);
     await app.engine.port.install(target, user, artifact, execution);
-    expect(mocks.artifactInspect).toHaveBeenCalledWith('app.apk', artifact, undefined);
-    expect(mocks.android.install).toHaveBeenCalled();
+    expect(mocks.artifactInspect).not.toHaveBeenCalled();
+    expect(mocks.android.install).toHaveBeenCalledWith(target, user, artifact, execution);
     const noPath = { ...artifact };
     delete noPath.path;
     await expect(app.engine.port.install(target, user, noPath, execution)).rejects.toThrow(
@@ -360,6 +398,17 @@ describe('production dependency wiring and evidence boundaries', () => {
     });
     await configured.engine.artifacts.validateBeforeExecution?.({ ...approved, path: destination }, target);
     expect(mocks.validateEvidence).toHaveBeenCalledWith(repository, evidence);
+    const nextDestination = `${destination}.next.apk`;
+    const nextEvidence = { ...evidence, timestamp: 2, indexSha256: hashA };
+    mocks.repositoryIndex.mockResolvedValue({ evidence: nextEvidence, packages: {} });
+    await configured.engine.artifacts.snapshot(approved, nextDestination, undefined, target);
+    await configured.engine.artifacts.validateBeforeExecution?.({ ...approved, path: destination }, target);
+    expect(mocks.validateEvidence).toHaveBeenLastCalledWith(repository, evidence);
+    await configured.engine.artifacts.validateBeforeExecution?.(
+      { ...approved, path: nextDestination },
+      target,
+    );
+    expect(mocks.validateEvidence).toHaveBeenLastCalledWith(repository, nextEvidence);
     await expect(configured.engine.artifacts.snapshot(approved, destination)).rejects.toThrow(
       'measured target',
     );
@@ -426,10 +475,14 @@ describe('production dependency wiring and evidence boundaries', () => {
     mocks.imageVerify.mockResolvedValue(snapshot);
     await app.engine.port.flash(target, { ...policy, os }, { ...execution, osSnapshot: snapshot });
     expect(mocks.android.flash).toHaveBeenCalled();
-    mocks.imageVerify.mockResolvedValue({ ...snapshot, sha256: hashB });
     await expect(
-      app.engine.port.flash(target, { ...policy, os }, { ...execution, osSnapshot: snapshot }),
-    ).rejects.toThrow('bytes changed');
+      app.engine.port.flash(
+        target,
+        { ...policy, os: { ...os, release: '2026100700' } },
+        { ...execution, osSnapshot: snapshot },
+      ),
+    ).rejects.toThrow('snapshot policy differs');
+    expect(mocks.imageVerify).not.toHaveBeenCalled();
   });
 
   it('passes private input references and durable ownership into recipes/probes without retaining plaintext', async () => {

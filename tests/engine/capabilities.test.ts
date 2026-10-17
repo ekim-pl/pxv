@@ -167,6 +167,8 @@ describe('scoped recipe, network and recovery evidence', () => {
         ],
       },
     ];
+    Object.assign(port, { capabilities: { uiAutomation: false } });
+    port.observation.profiles[0]!.vpn = { packageId: null, alwaysOn: false, lockdown: false };
     const calls: string[] = [];
     port.runRecipe = (_target, _user, configured) => {
       calls.push(configured.id);
@@ -178,14 +180,135 @@ describe('scoped recipe, network and recovery evidence', () => {
       });
     };
     const engine = await configure(policy);
-    const run = await approve(engine);
-    expect((await engine.execute(run.id)).manualGate).toBe('app_setup');
+    const prepared = await engine.prepare(target);
+    expect(prepared.capabilities).toEqual({ uiAutomation: false });
+    expect((JSON.parse(prepared.reviewSummary) as Record<string, unknown>)['appConfiguration']).toEqual([
+      { profileId: profile.id, recipeId: 'manual-import', mode: 'assisted' },
+    ]);
+    expect(prepared.plan.actions.map((action) => action.kind)).toEqual(['recipe', 'vpn']);
+    const run = await engine.submit(prepared.plan.id, prepared.reviewSummary, 'Alice');
+    expect((await engine.execute(run.id)).pauseReason).toMatchObject({
+      kind: 'manual-step',
+      gate: 'app_setup',
+      profileId: profile.id,
+      recipeId: 'manual-import',
+      instructions: 'Complete setup privately.',
+    });
+    expect(port.calls).not.toContain('vpn');
     expect((await engine.execute(run.id)).manualGate).toBe('app_setup');
     expect(calls).toEqual(['manual-import']);
     await engine.attest(target, 'app_setup', 'Alice');
     expect((await engine.execute(run.id)).manualGate).toBeUndefined();
+    expect(port.calls).toContain('vpn');
     expect(calls).toEqual(['manual-import']);
     expect((await engine.state('all')).capabilityEvidence?.[0]?.status).toBe('manual-completed');
+  });
+
+  it('plans every profile app and configuration before VPN lockdown and network measurements', async () => {
+    const policy = basePolicy();
+    const owner = policy.profiles[0]!;
+    owner.recipes = [recipe];
+    owner.networkProbe = probe;
+    policy.profiles.push({ ...structuredClone(owner), id: 'work', name: 'Work', kind: 'secondary' });
+    const observed = port.observation.profiles[0]!;
+    observed.packages = [];
+    observed.settings = [];
+    observed.permissions = [];
+    observed.vpn = { packageId: null, alwaysOn: false, lockdown: false };
+    port.runRecipe = (_target, _user, configured) =>
+      Promise.resolve({
+        status: 'manual-pending',
+        capability: 'app-setup',
+        recipeDigest: digest(configured),
+      });
+    port.runProbe = () => Promise.reject(new Error('Planning must not run a network probe'));
+    const engine = await configure(policy);
+    const prepared = await engine.prepare(target);
+    const kinds = prepared.plan.actions.map((action) => action.kind);
+    expect(kinds).toEqual([
+      'create-user',
+      'install-apk',
+      'install-apk',
+      'setting',
+      'permission',
+      'setting',
+      'permission',
+      'recipe',
+      'recipe',
+      'vpn',
+      'vpn',
+      'network-probe',
+      'network-probe',
+    ]);
+    expect(port.calls).toEqual([]);
+  });
+
+  it('requires a fresh receipt for each named manual recipe even when measured policy state is identical', async () => {
+    const policy = basePolicy();
+    policy.profiles[0]!.recipes = [recipe, { ...recipe, id: 'second-setup' }];
+    port.runRecipe = (_target, _user, configured) =>
+      Promise.resolve({
+        status: 'manual-pending',
+        capability: 'app-setup',
+        recipeDigest: digest(configured),
+      });
+    const engine = await configure(policy);
+    const run = await approve(engine);
+    expect((await engine.execute(run.id)).pauseReason).toMatchObject({ recipeId: recipe.id });
+    await engine.attest(target, 'app_setup', 'Alice');
+    expect((await engine.execute(run.id)).pauseReason).toMatchObject({ recipeId: 'second-setup' });
+    expect((await engine.execute(run.id)).pauseReason).toMatchObject({ recipeId: 'second-setup' });
+    await engine.attest(target, 'app_setup', 'Alice');
+    expect((await engine.execute(run.id)).manualGate).toBeUndefined();
+    expect((await engine.state('all')).capabilityEvidence).toHaveLength(2);
+  });
+
+  it('requires named VPN setup and consent before a changed lockdown policy without a matching recipe', async () => {
+    Object.assign(port, { capabilities: { uiAutomation: false } });
+    port.observation.profiles[0]!.vpn = { packageId: null, alwaysOn: false, lockdown: false };
+    const engine = await configure(basePolicy());
+    const prepared = await engine.prepare(target);
+    expect(prepared.plan.actions.map((action) => action.kind)).toEqual(['manual', 'vpn']);
+    const setup = prepared.plan.actions[0];
+    if (setup?.kind !== 'manual') throw new Error('Expected a named VPN setup checkpoint');
+    expect(setup.capability).toBe('app_setup');
+    expect(setup.instructions).toContain('org.example.vpn in profile admin');
+    expect(prepared.reviewSummary).toContain('assisted');
+    const run = await engine.submit(prepared.plan.id, prepared.reviewSummary, 'Alice');
+    const pause = (await engine.execute(run.id)).pauseReason;
+    if (pause?.kind !== 'manual-step') throw new Error('Expected a manual setup pause');
+    expect(pause.gate).toBe('app_setup');
+    expect(pause.instructions).toContain('Android VPN consent');
+    expect(port.calls).toEqual([]);
+    await expect(engine.attest(target, 'operator_signoff', 'Alice')).rejects.toThrow('Contradictory');
+    await engine.attest(target, 'app_setup', 'Alice');
+    expect((await engine.execute(run.id)).pauseReason?.kind).toBe('acceptance');
+    expect(port.calls).toEqual(['vpn']);
+    expect((await engine.state('all')).status).toBe('verified');
+    expect((await engine.prepare(target)).plan.actions).toEqual([]);
+  });
+
+  it('does not excuse drift in a VPN action that completed before the current app configuration gate', async () => {
+    const policy = basePolicy();
+    const profile = policy.profiles[0]!;
+    profile.recipes = [recipe];
+    port.runRecipe = (_target, _user, configured) => {
+      port.observation.profiles[0]!.vpn = { packageId: null, alwaysOn: false, lockdown: false };
+      return Promise.resolve({
+        status: 'manual-pending',
+        capability: 'app-setup',
+        recipeDigest: digest(configured),
+      });
+    };
+    const engine = await configure(policy);
+    const prepared = await engine.prepareExtension(target, [
+      { kind: 'vpn', profileId: profile.id, vpn: profile.vpn },
+      { kind: 'recipe', profileId: profile.id, recipe },
+    ]);
+    const run = await engine.submit(prepared.plan.id, prepared.reviewSummary, 'Alice');
+    expect((await engine.execute(run.id)).manualGate).toBe('app_setup');
+    await expect(engine.attest(target, 'app_setup', 'Alice')).rejects.toThrow('Contradictory');
+    await expect(engine.attest(target, 'operator_signoff', 'Alice')).rejects.toThrow('Contradictory');
   });
 
   it('refuses unavailable adapters, false recipe claims and incomplete helper-UID measurements', async () => {

@@ -357,7 +357,7 @@ describe('capability-based readiness and private setup', () => {
     ).toEqual(['normal_credentials', 'default-duress', 'duress']);
   });
 
-  it('loads the five-profile, simple and arbitrary-layout starter packs and fork identities', () => {
+  it('loads starter packs, the project template and the active Community product', () => {
     for (const name of ['reference-five', 'simple', 'custom']) {
       const loaded = validatePolicy(parseDocument(readFileSync(`policy-packs/${name}/policy.json`, 'utf8')));
       expect(loaded.profiles.filter((profile) => profile.kind === 'owner')).toHaveLength(1);
@@ -366,10 +366,15 @@ describe('capability-based readiness and private setup', () => {
     expect(validateProject(parseDocument(readFileSync('config/templates/project.json', 'utf8'))).format).toBe(
       'pxv-ts',
     );
-    for (const name of ['community', 'field'])
-      expect(
-        validateProduct(parseDocument(readFileSync(`config/templates/product-${name}.json`, 'utf8')))
-          .engineApi,
-      ).toBe(1);
+    const activeProduct = validateProduct(parseDocument(readFileSync('product.json', 'utf8')));
+    expect(activeProduct).toMatchObject({
+      id: 'pxv',
+      name: 'pxv Community',
+      engineApi: 1,
+      features: { extensions: false, seedvault: false },
+      defaultPolicy: 'policy-packs/reference-five/policy.v2.json',
+    });
+    const defaultPolicy = validatePolicy(parseDocument(readFileSync(activeProduct.defaultPolicy, 'utf8')));
+    expect(defaultPolicy.profiles).toHaveLength(5);
   });
 });

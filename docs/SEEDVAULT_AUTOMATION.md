@@ -1,6 +1,11 @@
 # Personal Seedvault recovery automation
 
-The two [personal recovery examples](../scripts/examples/README.md) coordinate one person's phone and all persistent full Android users. Run these examples from the matching source checkout. They use reviewed PXV installation/provisioning, temporary TLS wireless ADB while a USB drive occupies the phone's port, and supervised Seedvault UI operations. They support rebuilding the original phone with its existing project or enrolling a replacement in a fresh project.
+This is an optional experimental recovery module. Community disables new recovery
+operations through `features.seedvault: false`; a reviewed recovery-enabled product
+can opt in. Historical reports, connection listing/disconnection and inspected cleanup
+remain available. Ordinary provisioning does not construct the recovery services.
+
+The [personal recovery tool](#personal-recovery-tool) coordinates one person's phone and all persistent full Android users. Run it from the matching source checkout. It uses reviewed PXV installation/provisioning, temporary TLS wireless ADB while a USB drive occupies the phone's port, and supervised Seedvault UI operations. It supports rebuilding the original phone with its existing project or enrolling a replacement in a fresh project.
 
 **No production Seedvault UI adapter is qualified or shipped by this change.** The runtime requires external exact-build qualification before it can measure an automated backup or restore. Offline fixtures test the safeguards; they do not establish GrapheneOS, app, file or physical-device acceptance. Use the schemas and qualification procedure below with at least two disposable profiles before relying on an adapter for personal data.
 
@@ -21,9 +26,9 @@ Pairing is optional when this host is already paired. PXV requires the endpoint 
 
 `inspect` reports full-user identities, backup transport configuration, foreground/unlock state and unsupported user types. Preparation reconciles this inventory with the policy and refuses omitted, ambiguous or renamed profiles. An operation binds every profile's Android `userId + serialNo`, the physical phone, endpoint, OS fingerprint, Seedvault version and signing certificate. Numeric user IDs from a master are source metadata, never target-user creation instructions.
 
-`backup` and `restore` prepare an immutable review. `--dry-run` prepares and stores this review but performs no device mutation. The **example scripts'** `--dry-run` is stricter: it only reads inputs and prints phases, without preparing plans, creating files or contacting a phone. To execute a retained review, save the decoded `reviewSummary` bytes exactly and use the normal `agent execute --plan ID --review-file FILE --operator NAME` workflow. Readiness, signoff and backup-recovery attestations remain separate.
+`backup` and `restore` prepare an immutable review. `--dry-run` prepares and stores this review but performs no device mutation. The **personal recovery tool's** `--dry-run` is stricter: it only reads inputs and prints phases, without preparing plans, creating files or contacting a phone. To execute a retained review, save the decoded `reviewSummary` bytes exactly and use the normal `agent execute --plan ID --review-file FILE --operator NAME` workflow. Readiness, signoff and backup-recovery attestations remain separate.
 
-A restore request uses `--file REQUEST.json` and contains `operation: "restore"`, the qualified `adapter`, and `sources`. Every source supplies its policy `profileId`, public hexadecimal application restore token, and exact resource-ID/text selectors for the application restore set (`selector`) and file snapshot (`filesSelector`). Missing or duplicate mappings are rejected before execution. `--seedvault-adapter FILE` can supply the adapter separately; its acceptance path resolves relative to that file. The examples validate the request and qualification evidence before erasure and retain the reviewed definition for the session.
+A restore request uses `--file REQUEST.json` and contains `operation: "restore"`, the qualified `adapter`, and `sources`. Every source supplies its policy `profileId`, public hexadecimal application restore token, and exact resource-ID/text selectors for the application restore set (`selector`) and file snapshot (`filesSelector`). Missing or duplicate mappings are rejected before execution. `--seedvault-adapter FILE` can supply the adapter separately; its acceptance path resolves relative to that file. The personal tool validates the request and qualification evidence before erasure and retains the reviewed definition for the session.
 
 Runs expose the existing durable agent status/events and a per-profile report:
 
@@ -34,6 +39,87 @@ pxv agent resume --project-root "$P" --run "$RUN" --yes
 ```
 
 Profiles run sequentially. PXV switches to the selected full user, pauses for private unlocking, verifies foreground identity and opens `com.android.settings.BACKUP_SETTINGS`. Recognized public Seedvault screens use resource selectors and measured postconditions. Recovery words, lock screens, biometrics, secure windows, external storage consent and unknown screens remain private checkpoints. Do not attest a Seedvault checkpoint as an unrelated provisioning check. If the review expires, resolve remote-work obligations before `agent refresh`; the new review preserves completed profile evidence and requires new approval.
+
+## Personal recovery tool
+
+The canonical source entry point is [tools/personal-recovery.mjs](../tools/personal-recovery.mjs).
+Use the pinned Node runtime and matching reviewed checkout/build. Invoke `node`
+through its reviewed executable path when it is not on `PATH`; `PXV_BIN` selects
+one built PXV executable. `create --help` and
+`recover --help` list the accepted flags. There are no shell wrapper prerequisites.
+
+With an explicitly recovery-enabled product and a qualified adapter, create a new
+personal phone/master generation:
+
+```sh
+node tools/personal-recovery.mjs create \
+  --project-root /private/phone/project --policy /private/reviewed/policy.json \
+  --files-root /private/reviewed --asset personal-phone --serial PIXEL_SERIAL \
+  --model 'Pixel 8a' --operator 'My name' --usb-root /media/me/BACKUP \
+  --backup-dir /private/masters/generation-01 --endpoint 192.0.2.10:37123 \
+  --seedvault-adapter /private/reviewed/seedvault-adapter.json \
+  --coverage-file /private/reviewed/coverage.json
+```
+
+The new-phone flow erases the selected phone. `create --backup-only` instead uses
+existing enrollment and never flashes, provisions or finalizes; it still requires
+a new backup destination, endpoint, adapter and coverage file. Optional
+`--pair-endpoint HOST:PORT` obtains a pairing code interactively. Use an already
+mounted drive and trusted local network. Each exact dry-run review is displayed and
+submitted only after explicit confirmation; interruption retains inspectable state
+and never automatically repeats flashing.
+
+The required private coverage file includes every policy profile and its important
+apps, file scope and exclusions. An owner-only example is:
+
+```json
+{
+  "schemaVersion": 1,
+  "profiles": [{
+    "profileId": "owner",
+    "apps": [{ "packageId": "org.example.app", "status": "unknown" }],
+    "files": "Selected documents and photos; inspect after restore",
+    "exclusions": ["Service activation and hardware-backed keys need separate recovery"]
+  }]
+}
+```
+
+App statuses are `seedvault`, `exported`, `excluded` or `unknown`. This is the owner's
+coverage inventory, not measured universal app recoverability. Keep recovery words,
+account/MFA recovery and required exports separately accessible.
+
+Recover from a retained master into the same phone or an approved replacement:
+
+```sh
+node tools/personal-recovery.mjs recover \
+  --master-dir /private/masters/generation-01 --project-root /private/phone/project \
+  --mode same-device --asset personal-phone --serial PIXEL_SERIAL --model 'Pixel 8a' \
+  --operator 'My name' --usb-root /media/me/WORKING_BACKUP \
+  --endpoint 192.0.2.10:37123 --seedvault-adapter /private/reviewed/seedvault-adapter.json
+```
+
+`same-device` requires the original project identity, enrollment/history and matching
+physical serial/policy; it archives prior readiness through maintenance. Resolve
+active/uninspected work before erasure. `replacement` requires a new project path
+and the replacement's observed identity, with the source master's codename. Numeric
+source Android user IDs are never adopted as target identities. Both paths verify
+retained hashes and exact profile sources, copy to a new working backup tree and
+leave the retained source unchanged. They require acknowledging unverified encrypted
+generation correspondence before erasure and private representative content checks
+after restore. Fresh provisioning rechecks the policy; drift/downgrade requests stop.
+
+Every destination must be new. Failed copies retain incomplete state rather than
+publishing a complete master. The tool does not copy project SQLite state, previous
+approvals, inventory, registry credentials, recovery words or helper signing keys.
+It refuses installed extensions and staged-file recipes; those need separately
+reviewed installation/private inputs. Back up operator projects and the encrypted
+registry separately as described in [recovery](CANARY_BACKUP_RECOVERY.md).
+
+Fresh creation finalizes only with `--finalize`; recovery finalizes by default unless
+`--no-finalize` is explicit. `--locale en|pl` selects finalization language. Finalization
+still requires real current checks, physical debugging-off confirmation and separate
+self-acceptance. A backup does not establish `backup_recovery`; witness a representative
+restore. Without finalization, disable debugging physically and make no custody claim.
 
 ## Qualified adapter format
 
@@ -77,10 +163,10 @@ This cleanup selects the recorded endpoint and native recovery lineage; it disco
 
 ## What a master establishes
 
-The examples copy the entire host-mounted encrypted `.SeedVaultAndroidBackup` tree, including hidden/binary files, to a new private generation and verify copied hashes. They retain policy, pinned local dependencies, per-profile identities/tokens and an explicit owner coverage/exclusion inventory. They leave earlier generations and the recovery source unchanged. They do not copy secondary-user data through raw `/sdcard`: ADB storage remains in user 0's context after a user switch. See [AOSP's multi-user ADB behavior](https://source.android.com/docs/devices/admin/multi-user-testing#adb-interactions-across-users).
+The personal tool copies the entire host-mounted encrypted `.SeedVaultAndroidBackup` tree, including hidden/binary files, to a new private generation and verifies copied hashes. It retains policy, pinned local dependencies, per-profile identities/tokens and an explicit owner coverage/exclusion inventory. It leaves earlier generations and the recovery source unchanged. It does not copy secondary-user data through raw `/sdcard`: ADB storage remains in user 0's context after a user switch. See [AOSP's multi-user ADB behavior](https://source.android.com/docs/devices/admin/multi-user-testing#adb-interactions-across-users).
 
 Copy integrity cannot prove that a directory contains the report's encrypted generation. Seedvault v2 names app snapshots using a hash of encrypted bytes; its restore token is inside the encrypted snapshot. See [Seedvault's snapshot implementation](https://github.com/GrapheneOS/platform_packages_apps_Seedvault/blob/7cfffed7ceeda60a10bf2a6d9818d6fda81828ba/app/src/main/java/com/stevesoltys/seedvault/repo/SnapshotManager.kt). The master therefore records `copyIntegrityVerified: true`, `allProfileJobsCompleted: true`, `generationCorrespondence: "unverified"`, `restoration: "untested"` and `complete: false`. A wrong or old drive cannot receive a complete-recovery claim merely because it is nonempty. Recovery requires acknowledging this distinction before erasure and produces a separate private representative-restore record after the exact selected sources and owner content checks succeed.
 
-Application completion does not enumerate all exclusions or establish every app's recoverability. Per-profile evidence explicitly marks representative UI coverage and owner verification requirements. The private coverage inventory records Seedvault-covered, exported, excluded and unknown apps plus file scope and exclusions. Keep app exports, account/MFA recovery and Seedvault recovery words independently accessible; the examples ask only whether that material is available, never for its value.
+Application completion does not enumerate all exclusions or establish every app's recoverability. Per-profile evidence explicitly marks representative UI coverage and owner verification requirements. The private coverage inventory records Seedvault-covered, exported, excluded and unknown apps plus file scope and exclusions. Keep app exports, account/MFA recovery and Seedvault recovery words independently accessible; the personal tool asks only whether that material is available, never for its value.
 
 Normal Seedvault UI is used because file and application backups are separate operations and `bmgr backupnow` has special finalization behavior. Scoped `bmgr --user ID` inspection parses semantic results, transport and restore sets; shell success alone is insufficient. See [Seedvault's app backup implementation](https://github.com/GrapheneOS/platform_packages_apps_Seedvault/blob/7cfffed7ceeda60a10bf2a6d9818d6fda81828ba/app/src/main/java/com/stevesoltys/seedvault/repo/AppBackupManager.kt) and [protected component declarations](https://github.com/GrapheneOS/platform_packages_apps_Seedvault/blob/7cfffed7ceeda60a10bf2a6d9818d6fda81828ba/app/src/main/AndroidManifest.xml). These upstream references explain the implementation boundary; they do not qualify a live build.

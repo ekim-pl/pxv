@@ -1,240 +1,221 @@
-# Podręcznik operatora
+# Przygotowanie Pixela: przewodnik operatora
 
-Ten przewodnik opisuje pxv 0.1.0. Nie jest certyfikatem telefonu. Dopiero zaakceptowany zapis projektu wskazuje konkretną politykę, oprogramowanie, wyniki sprawdzeń i przekazanie urządzenia. Dowody kwalifikacji wydania oraz testów fizycznego telefonu przechowuje się oddzielnie.
+Przygotuj jeden zarejestrowany telefon Google Pixel albo jawnie wybraną flotę: GrapheneOS, profile użytkowników Androida, przypięte aplikacje i sprawdzone ustawienia. Pracuj w prywatnym projekcie i zachowuj razem plan, stan operacji oraz potwierdzenia przekazania.
 
-![Przygotowanie i przekazanie telefonu](../../assets/diagrams/workflow-pl.svg)
+**Zacznij tutaj:** ustal tożsamość telefonu, sprawdź politykę, zainstaluj system tylko po osobnym zatwierdzeniu, wykonaj konfigurację i etapy na telefonie, a następnie zakończ przygotowanie i przekaż urządzenie. Instalacja systemu usuwa dane. Samo zakończenie polecenia nie oznacza gotowości do przekazania.
 
-## Odpowiedzialność i prywatność
+Przykłady używają zainstalowanego polecenia `pxv`. Zastąp wszystkie symbole zastępcze. `--yes` potwierdza rzeczywisty przegląd lub kontrolę fizyczną; nie wykonuje tej kontroli.
 
-Operator odpowiada za host, identyfikację telefonu, dane projektu i przegląd polityki. Odbiorca sam wprowadza końcową blokadę ekranu, konta, MFA oraz dane odzyskiwania. Przed rozpoczęciem uzgodnij zastosowania telefonu, układ profili, wsparcie, kopie zapasowe i zgodę na ewentualne wymazanie. Nie wpisuj sekretów do manifestu, receptury, notatki, zrzutu ekranu, wejścia rozszerzenia ani protokołu sesji.
+## 1. Przygotuj komputer i projekt
 
-Korzystaj z wydzielonego autoryzowanego telefonu. Gotowe pakiety z jednym, pięcioma i dowolnie nazwanymi profilami pokazują strukturę; nie stanowią zatwierdzonych polityk utwardzania. Nie zawierają zmyślonych zaufanych skrótów APK ani kluczy OS.
+Użyj sprawdzonego archiwum przenośnego lub pakietu dla Linuksa x86_64. Archiwum przenośne i pakiet Debian zawierają Node oraz natywny proces nadzorujący; narzędzia Androida i uprawnienia USB wymagają osobnej konfiguracji. Pracuj na zwykłym koncie operatora.
 
-## Host i nowy projekt
-
-Pierwszą platformą jest Linux x86_64. Weryfikacja obejmuje Debian 12 i Ubuntu 24.04. Wersje narzędzi są przypięte: Node 24.22.0 LTS, kompilator TypeScript 7.0.2 i pnpm 12.11.2. Archiwum przenośne oraz pakiet Debian zawierają Node i nadzorcę Linux; pakiet npm wymaga obsługiwanej instalacji Node. Kod źródłowy wymaga również Rust 1.99.1 z targetem x86_64-unknown-linux-musl oraz komponentami rustfmt i Clippy. Przygotuj Java, Android SDK i narzędzia hosta zgodnie z instrukcją zależności w repozytorium.
-
-~~~sh
-pnpm install --frozen-lockfile
-pnpm quality:setup
-pnpm build:native
-pnpm build
-pnpm quality
-pnpm pxv --help
-~~~
-
-`pnpm quality:setup` jawnie instaluje przypięte narzędzia analizy. Po przygotowaniu zależności i narzędzi `pnpm quality` wykonuje bramkę offline: ścisłe sprawdzanie typów, granice pakietów, wykrywanie nieużywanego kodu w trybie deweloperskim i produkcyjnym, testy, testy procesów natywnych oraz rzeczywiste sprawdzenia helperów Android. Każdy moduł aplikacji TypeScript, także workery i narzędzia wydania, musi osiągnąć 90% pokrycia linii oraz 85% gałęzi. Funkcje TypeScript/JavaScript mają limit klasycznej złożoności cyklomatycznej 10, zagnieżdżenia 4 i 80 niepustych linii bez komentarzy. Funkcje Rust i Java mają limit złożoności cyklomatycznej 10; działają też Rustfmt, Clippy i ShellCheck. Tożsamość bieżących źródeł, wersje narzędzi i dowody dla modułów zapisują się w `.quality/report.json` oraz `.quality/report.md`. Te sprawdzenia nie potwierdzają akceptacji urządzenia na żywo.
-
-Dalsze przykłady używają zainstalowanego polecenia `pxv`. W drzewie źródłowym użyj `pnpm pxv`. Utwórz prywatny projekt poza instalacją i repozytorium:
-
-~~~sh
-P="$HOME/pxv-projects/lab"
+```sh
+pxv version
 pxv host doctor
-pxv project init --path "$P"
-pxv policy validate --project-root "$P"
 pxv host adb-start --yes
-~~~
+```
 
-`host doctor` sprawdza narzędzia i istniejący punkt ADB. Nie uruchamia serwera i niczego nie pobiera. Jawne polecenie `host bootstrap` wymaga zatwierdzonego opisu archiwum HTTPS, skrótu SHA-256, identyfikatora zaakceptowanej licencji i nowego katalogu docelowego. Budowanie helperów Android jest także jawne i wymaga SDK. Prywatne klucze podpisujące helperów pozostają w projekcie.
+Diagnostyka nie uruchamia ADB. Usuń problemy z narzędziami, uprawnieniami i natywnym środowiskiem przed podłączeniem telefonu użytkownika. W repozytorium po zbudowaniu używa się `pnpm pxv`; dokładne wersje i kontrole opisują [zależności komputera](../../../docs/HOST_DEPENDENCIES.md).
 
-Projekt zawiera `pxv.project.json` z formatem `pxv-ts`, `policy.yaml`, `inventory.json`, `policy.lock.json` oraz bazę SQLite w `state/`. Stary format jest wykrywany i odrzucany bez modyfikacji. Nie ma importera zatwierdzeń ani warstwy zgodności starej aplikacji.
+Utwórz nowy projekt poza repozytorium kodu i zasobów. Wszystkie telefony dostępne z tego komputera powinny korzystać ze wspólnego obszaru kontroli operatora.
 
-## Polityka i tożsamość urządzenia
+```sh
+P='/bezwzgledna/prywatna/sciezka/projektu'
+ASSET='telefon-01'
+OPERATOR='Imię operatora'
+pxv project init --path "$P" --policy /bezwzgledna/sciezka/sprawdzonej-polityki.json
+```
 
-Sprawdź oficjalny obraz OS, kod urządzenia, podpis i zaufany klucz, wersje APK, skróty treści, przypięte podpisy aplikacji i repozytoriów, profile, uprawnienia, ustawienia, VPN, transport kopii oraz wymagane kontrole ręczne. Wymagany jest dokładnie jeden profil właściciela. Liczba i nazwy pozostałych profili zależą od wdrożenia.
+Wykonuj spójne kopie prywatnego stanu projektu i ewidencji urządzeń. Dane do odblokowania kopii przechowuj osobno. Nie twórz telefonu we flocie przez kopiowanie bazy, zatwierdzeń ani danych uwierzytelniających innego urządzenia.
 
-Blokada polityki wiąże produkt, silnik, konfigurację, artefakty i rozszerzenia. Zmiana któregokolwiek z tych elementów wymaga nowego przeglądu. Powtórzone klucze i nieznane pola są błędami. Jeżeli po załadowaniu zmienią się konfiguracja projektu, polityka, inwentarz lub kod wykonywalny, silnik odrzuci nieaktualny kontekst. Załaduj projekt ponownie przez nowe wywołanie CLI lub świeże żądanie MCP, odtwórz blokadę po zmianie jej danych wejściowych i przygotuj nowy plan do przeglądu. Zapisana zgoda nie zatwierdza edytowanych danych.
+## 2. Określ system, profile i aplikacje
 
-~~~sh
+Sprawdź politykę przed rejestracją i wykonaniem operacji. Dołączony zestaw pięciu profili jest szkieletem: nie zapewnia zatwierdzonych aplikacji, działających kont VPN ani kwalifikacji wdrożenia.
+
+W polityce v2 definiuj katalog `apps` raz, a w listach `apps` profili wskazuj jego identyfikatory. Przypnij identyfikator pakietu, kod wersji, SHA-256 pliku APK, SHA-256 podpisującego i zatwierdzone źródło. Wersje pakietów Androida są wspólne dla użytkowników; profile nie mogą instalować sprzecznych wersji niezależnie.
+
+Ustawienia Androida `global`, wspólne dla telefonu, umieść w `deviceSettings`. W `settings` profilu stosuj wpisy `secure` lub `system`. Świadomie ustal nazwy profili, uprawnienia, VPN i języki; nazwa właściciela musi odpowiadać zmierzonej nazwie. Wartości tajne nie należą do polityki ani tekstu receptur.
+
+Dla różnych modeli mapa `os` wiąże dokładny codename Pixela z kompletem danych uwierzytelnionego obrazu GrapheneOS. Każdy model przeznaczony do instalacji wymaga własnego wpisu. Nie ma zgadywania ani obrazu zastępczego. Schemat i migrację opisuje [format polityki](../../../docs/POLICY_FORMAT.md).
+
+```sh
 pxv policy validate --project-root "$P"
-pxv policy lock --project-root "$P" --yes
-pxv inventory enroll --project-root "$P" --asset lab-01 \
-  --serial YOUR_OBSERVED_SERIAL --model 'Pixel 8a' --codename akita --yes
-pxv device inspect --project-root "$P" --asset lab-01
-pxv device plan --project-root "$P" --asset lab-01
-~~~
+pxv policy lock --project-root "$P"
+pxv guide project --project-root "$P" --kind pixel --locale pl
+```
 
-Zastąp przykładowy numer rzeczywiście odczytanym numerem tego telefonu. Porównaj etykietę, model, kod urządzenia i monit autoryzacji USB. Pierwsza rejestracja używa USB albo dedykowanego emulatora. Tryb `--mode fastboot` pozwala zarejestrować sprawdzony telefon w fastboot do instalacji OS.
+Zmiana polityki wymaga nowej blokady wersji i nowego przeglądu. `policy convert --output NOWY_PLIK` zapisuje format v2 bez zmiany oryginału i bez aktywacji. Wybierz sprawdzony plik w `pxv.project.json`, zweryfikuj i zablokuj politykę przed przygotowaniem nowych planów.
 
-Zasób nazwany `all` wybiera się dokładnie przez `--asset all`. Flota wymaga `--all` lub `--group`; nazwa zasobu nie jest symbolem wieloznacznym. Nie używaj planu jednego telefonu do innego.
+## 3. Zarejestruj dokładnie wskazany telefon
 
-## Domyślny język i region każdego profilu
+Porównaj fizyczną etykietę, numer seryjny sprzętu, model i codename. W miarę możliwości odłącz inne telefony. Pierwsza rejestracja odbywa się przez USB. Gdy działa Android, tymczasowo włącz debugowanie USB i zatwierdź ten komputer na telefonie.
 
-Opcjonalne pole `defaultLocale` określa początkowy język każdego profilu, także właściciela. Wartość jest jednym znacznikiem BCP 47 z opcjonalnym regionem lub alfabetem, na przykład `en-US`, `pl-PL`, `de-DE` albo `sr-Latn-RS`. Znaczniki są normalizowane do postaci kanonicznej. Listy, podkreślenia i nieokreślone języki są odrzucane. Starsze pole `language` nadal działa; jeśli podano oba pola, muszą wskazywać ten sam kanoniczny język i region.
+```sh
+pxv inventory enroll --project-root "$P" --asset "$ASSET" \
+  --serial ODCZYTANY_NUMER --model 'RZECZYWISTY MODEL PIXELA' --codename WLASCIWY_CODENAME
+pxv inventory list --project-root "$P"
+pxv device inspect --project-root "$P" --asset "$ASSET" --transport usb
+```
 
-Przykład zawiera kompletną minimalną tablicę `profiles`; zachowaj pozostałe wymagane pola polityki:
+Jeżeli telefon jest już w fastboot, dodaj do rejestracji `--mode fastboot`; sprawdzane są dokładny numer i zgłoszony codename. Pomiń polecenie ADB `device inspect` do czasu uruchomienia Androida i autoryzacji debugowania. Rejestracja nie zezwala na usunięcie danych. Telefon zastępczy wymaga własnej, sprawdzonej tożsamości w ewidencji.
 
-~~~json
-{
-  "profiles": [
-    {
-      "id": "owner", "name": "Owner", "kind": "owner",
-      "packages": [], "settings": [], "permissions": [],
-      "vpn": { "packageId": null, "alwaysOn": false, "lockdown": false },
-      "defaultLocale": "en-US"
-    },
-    {
-      "id": "work", "name": "Work", "kind": "secondary",
-      "packages": [], "settings": [], "permissions": [],
-      "vpn": { "packageId": null, "alwaysOn": false, "lockdown": false },
-      "defaultLocale": "pl-PL"
-    },
-    {
-      "id": "travel", "name": "Travel", "kind": "secondary",
-      "packages": [], "settings": [], "permissions": [],
-      "vpn": { "packageId": null, "alwaysOn": false, "lockdown": false },
-      "defaultLocale": "de-DE"
-    }
-  ]
-}
-~~~
+Jeden telefon wybieraj przez `--asset ID`. Flota wymaga jawnego `--group GRUPA` albo `--all`; selektorów nie można łączyć. Urządzenie o identyfikatorze `all` nadal wybiera się przez `--asset all`.
 
-Po edycji zweryfikuj i zablokuj politykę przed przygotowaniem nowego planu. Konfiguracja języka każdego profilu następuje po `normal_credentials`, a przed opcjonalnym duress. Może ją wykonać zaakceptowany adapter UI; w przeciwnym razie przebieg czeka na ręczne ustawienie w tym profilu. Inspekcja odczytuje główny język z wiersza ustawień danego użytkownika Androida. Typ akcji `language` i punkt `language:<profileId>` pozostają zgodne z dotychczasowymi przebiegami.
+## 4. Zainstaluj GrapheneOS w osobnym etapie destrukcyjnym
 
-`defaultLocale` ustawia język, region i alfabet profilu. Nie zmienia strefy czasowej. Opcja dokumentów i CLI `--locale en|pl` niezależnie wybiera język wskazówek lub dokumentu przekazania. Pominięcie obu pól języka pozostawia te ustawienia profilu poza zarządzaniem polityki.
+Pomiń ten etap, jeżeli właściwy system jest już zainstalowany i zweryfikowany. Przed instalacją uzgodnij zakres usunięcia danych, zachowaj obsługiwane kopie danych telefonu i potwierdź zgodę na wymazanie wskazanego urządzenia. Przeczytaj [procedury testów, kopii i odzyskiwania](../../../docs/CANARY_BACKUP_RECOVERY.md).
 
-## Opcjonalna domyślna blokada i dane duress
+Wykonaj [oficjalne przygotowanie GrapheneOS](https://grapheneos.org/install/cli#enabling-oem-unlocking), w tym włączenie odblokowania OEM w działającym systemie, gdy jest wymagane. Ręcznie przejdź do **Fastboot Mode** bootloadera, porównaj tożsamość fizycznego telefonu i pozostaw go w tym trybie. PXV sprawdza dokładny cel fastboot; nie przełącza sam telefonu z ADB. Polecenia odblokowania i ponownego zablokowania pozostaw sprawdzonej operacji PXV.
 
-Profil może zawierać `defaultCredential` z `type: pin` lub `type: password` oraz `secretRef`. PIN wymaga 4–128 cyfr, a hasło 4–128 drukowalnych znaków ASCII; te same ograniczenia dotyczą duress. Tylko profil właściciela może zawierać `defaultDuress`; GrapheneOS używa jednej pary PIN/hasło duress zarządzanej przez właściciela dla całego telefonu, w tym pozostałych profili ([oficjalny opis funkcji](https://grapheneos.org/features#duress)). Wymagane są oba odwołania duress. `ownerCredentialRef` może różnić się od `secretRef` początkowej zwykłej blokady; w chwili ustawiania duress musi zawierać aktualne zwykłe dane odblokowania właściciela. Może korzystać z odwołania blokady domyślnej, jeśli została zachowana i nadal odpowiada zadeklarowanemu typowi. Przykładowe pola istniejącego profilu właściciela, z zachowaniem pozostałych wymaganych pól:
+```sh
+pxv device install-os --project-root "$P" --asset "$ASSET" --transport usb --dry-run
+```
 
-~~~json
-{
-  "id": "owner",
-  "name": "owner",
-  "kind": "owner",
-  "defaultCredential": { "type": "pin", "secretRef": "owner-lock" },
-  "defaultDuress": {
-    "ownerCredentialRef": "owner-current",
-    "pinRef": "duress-pin",
-    "passwordRef": "duress-password"
-  }
-}
-~~~
+Sprawdź zwrócone `planId`, `reviewSummary` i czas ważności. Porównaj fizyczny telefon, codename, wydanie, tożsamość obrazu i podpisu oraz zakres usuwania danych. Aby wykonać instalację interaktywnie, uruchom:
 
-Gdy krok ustawienia wartości domyślnych ma być wykonany, przechowuj jego wartości wyłącznie w prywatnym pliku wejściowym danego telefonu `$P/secrets/credentials/lab-01.json`, gdzie `lab-01` jest identyfikatorem zarejestrowanego zasobu. Plik jest oddzielony od polityki i zapisów. Musi należeć do bieżącego użytkownika systemu, mieć tryb `0600` i być zwykłym plikiem; on ani katalogi `secrets` i `credentials` nie mogą być dowiązaniami symbolicznymi. Katalog projektu oraz katalogi `secrets` i `credentials` muszą należeć do bieżącego użytkownika i nie mogą zezwalać na zapis grupie ani innym użytkownikom. Użyj prywatnego edytora; sekret nie może trafić do argumentu polecenia ani historii powłoki. Twórz prywatne katalogi z `umask 077`, a po zapisie wykonaj `chmod 600 "$P/secrets/credentials/lab-01.json"`. Poniższe znaczniki zastąp prywatnie; nie są działającymi danymi blokady:
+```sh
+pxv device install-os --project-root "$P" --asset "$ASSET" \
+  --transport usb --operator "$OPERATOR"
+pxv agent status --project-root "$P" --run OS_RUN_ID --after 0
+```
 
-~~~json
-{
-  "schemaVersion": 1,
-  "values": {
-    "owner-lock": "<prywatny początkowy zwykły PIN>",
-    "owner-current": "<aktualne zwykłe dane odblokowania właściciela>",
-    "duress-pin": "<prywatny PIN duress>",
-    "duress-password": "<prywatne hasło duress>"
-  }
-}
-~~~
+Polecenie przygotowuje nowy plan i wymaga ponownego przeglądu przed potwierdzeniem; wcześniejszy dry-run nie udziela zgody. Zachowaj zwrócony identyfikator operacji dla `agent status`. Obsłuż fizyczne potwierdzenia odblokowania i ponownego zablokowania bootloadera. Nie odłączaj telefonu ani nie przerywaj celowo instalacji. Sprawdź instalację i zablokowany bootloader zgodnie z wynikami kontroli i komunikatami telefonu. Kontener Docker w trybie host-ADB nie instaluje systemu; wymagane jest bezpośrednie USB.
 
-JSON przyjmuje wyłącznie `schemaVersion: 1` i obiekt `values` z sekretami jako ciągami znaków. Nie dodawaj wartości do polityki, przeglądu, notatek poświadczeń, logów ani dokumentu przekazania. Plik nie należy do kontroli wersji ani artefaktów wydania. Plan pokazuje typ blokady, odwołania i działania; nie zawiera wartości sekretów, ich skrótów ani snapshotów. Plik jest odczytywany przy wykonaniu, więc odbiorca może prywatnie zmienić wartość pod odwołaniem przed wznowieniem bez ujawniania jej w przeglądzie.
+Operacja systemowa zatrzymuje się na konfigurację i ponowne potwierdzenie urządzenia. Dokończ konfigurację telefonu, ponownie autoryzuj debugowanie USB, potwierdź istniejącą rejestrację przez `device inspect` i przygotuj **nowy plan konfiguracji**. Nie uruchamiaj ponownego flashowania, aby przejść dalej, ani nie rejestruj tego samego telefonu drugi raz. Powiązania rejestru objęte flashowaniem stają się nieaktualne także po niepowodzeniu instalacji.
 
-Po walidacji i zablokowaniu polityki użyj zwykłego `device provision`. Najpierw ustawia on zwykłe blokady domyślne, potem zatrzymuje się na `normal_credentials`: odbiorca prywatnie odblokowuje każdy wybrany profil i sprawdza lub zmienia blokadę. Następnie wybiera się język końcowy, a potem ustawia domyślne dane duress właściciela i nadal wykonuje ręczną kontrolę `duress`. Przed ustawieniem duress `ownerCredentialRef` musi wskazywać **aktualne zwykłe dane odblokowania właściciela**. Jeśli odbiorca je zmienił, prywatnie zaktualizuj `owner-current` przed wznowieniem, zachowując początkową wartość `owner-lock` zgodną z pierwotnie zadeklarowanym typem albo usuń `defaultDuress`, zablokuj politykę, zatwierdź nowy plan i skonfiguruj duress ręcznie. GrapheneOS uwierzytelnia wartość `ownerCredentialRef`: używaj poprawnej aktualnej zwykłej blokady właściciela, nigdy istniejących danych duress, ponieważ to uwierzytelnienie może wymazać telefon. Silnik porównuje podane wartości, lecz nie wykrywa nieznanych wcześniej ustawionych sekretów duress. Obie wartości duress muszą różnić się od wszystkich skonfigurowanych zwykłych blokad domyślnych oraz aktualnej blokady właściciela. Ich odwołania również muszą różnić się od wszystkich odwołań zwykłych blokad domyślnych i od `ownerCredentialRef`. Ponieważ silnik nie zna prywatnie zmienionych blokad pozostałych profili, przed potwierdzeniem punktu `duress` odbiorca musi prywatnie upewnić się, że obie wartości duress różnią się od wszystkich rzeczywistych zwykłych danych blokady każdego profilu, także prywatnie zmienionych blokad profili dodatkowych.
+## 5. Przygotuj, sprawdź i zatwierdź konfigurację
 
-Przyjęte przez polecenie wartości domyślne są zapamiętywane jednorazowo dla urządzenia i stabilnej tożsamości użytkownika Androida; zapis potwierdza przyjęcie polecenia, nie sprawdzenie blokady. Kolejne przebiegi i wcześniej zatwierdzone plany pomijają je nawet po zmianie odwołań lub prywatnych wartości, więc pominięte kroki nie wymagają prywatnego pliku. Odtworzony użytkownik dodatkowy jest inicjalizowany ponownie; jawne `device install-os` usuwa tę historię przed flashowaniem.
+Konfiguracja obejmuje profile, aplikacje, ustawienia, uprawnienia i zadeklarowane etapy konfiguracji aplikacji. Nie dołącza automatycznie instalacji systemu. `create-users` i `deploy` służą do świadomie węższego zakresu.
 
-Zwykłe blokady domyślne służą wyłącznie do inicjalizacji profilu bez istniejącej blokady; nie zastępują obecnych danych i nie przyjmują poprzedniego hasła. Zainstalowany OS musi obsługiwać wymagane polecenia `locksettings set-pin`/`set-password`, a dla duress także GrapheneOS `set-duress-credentials`. Root nie jest wymagany. Brak obsługi lub istniejąca blokada kończy automatyczny krok błędem; sprawdź przyczynę, usuń odpowiednie pola domyślne i przygotuj nowy zatwierdzony plan prywatnej konfiguracji ręcznej. Powodzenie polecenia nie dowodzi zwykłego odblokowania ani działania wymazania duress. Zachowaj kontrole odbiorcy i nigdy nie aktywuj destrukcyjnego duress jako testu. Pominięcie obu pól zachowuje prywatną konfigurację ręczną.
+```sh
+pxv device provision --project-root "$P" --asset "$ASSET" --transport usb --dry-run
+```
 
-## Przegląd i wykonanie
+Sprawdź wszystkie czynności, skutki dla wspólnych pakietów, telefon, trwałe tożsamości użytkowników Androida, etapy ręczne i czas ważności. Uruchom konfigurację interaktywnie i przeczytaj jej nowy plan przed potwierdzeniem:
 
-Plan opisuje tożsamość, transport, aktualne obserwacje, utrwalone artefakty i skutki dotyczące innych użytkowników Androida. Kod i wersja APK mogą zmienić się globalnie mimo osobnych danych użytkowników. Sprawdź te skutki przed zatwierdzeniem. `--yes` potwierdza konkretny przegląd w automatyzacji; nie zastępuje sprawdzenia telefonu.
-
-~~~sh
-pxv device provision --project-root "$P" --asset lab-01 --operator 'Operator'
-pxv agent runs --project-root "$P"
+```sh
+pxv device provision --project-root "$P" --asset "$ASSET" \
+  --transport usb --operator "$OPERATOR"
 pxv agent status --project-root "$P" --run RUN_ID --after 0
-~~~
+```
 
-Pełny przebieg, `device deploy` i tworzenie użytkowników korzystają ze wspólnych usług. Instalacja aplikacji ma jedną ścieżkę weryfikacji. Sam skrót pliku nie dowodzi tożsamości wydawcy: potrzebne są zaufane przypięcia podpisów. Repozytoria sprawdzają również aktualność i próby cofnięcia wersji.
+Zachowaj identyfikator operacji i sprawdź jej stan oraz `pauseReason`. Ręczny etap oznacza, że praca nie jest zakończona. Przy kolejnych odczytach podawaj ostatni kursor zdarzeń. Zatwierdzanie zachowanego planu w tle opisuje [automatyzacja](../../../docs/AUTOMATION.md), wraz z dokładnym zapisem pliku przeglądu. `device guided` pokazuje instrukcje z polityki i wykonuje zadanie po potwierdzeniu; `--dry-run` służy do wcześniejszego przeglądu.
 
-Wynik oczekujący nie oznacza ukończenia. Wykonaj dokładnie wskazaną kontrolę ręczną, zapisz nazwane poświadczenie i wznów ten sam przebieg. Normalne dane uwierzytelniające poprzedzają język końcowy, a opcjonalny duress jest później. Nie uruchamiaj destrukcyjnego duress w ramach testu.
+Opcjonalne początkowe dane blokady pochodzą z `secrets/credentials/ASSET.json`: dokumentu `schemaVersion: 1`, którego mapa `values` rozwiązuje odwołania do sekretów z polityki. Użyj własnego pliku `0600` i prywatnych katalogów; nie wpisuj wartości do poleceń ani notatek. Usuń deklaracje domyślne, jeżeli konfiguracja ma być ręczna. Wartości te inicjalizują profil bez istniejącej blokady; nie służą do zmiany hasła. Przyjęta inicjalizacja jest pomijana w kolejnych operacjach dla tej samej trwałej tożsamości użytkownika.
 
-~~~sh
-pxv device attest --project-root "$P" --asset lab-01 \
-  --check normal_credentials --operator 'Operator' --yes
-pxv agent resume --project-root "$P" --run RUN_ID --yes
-~~~
+Przy automatycznej inicjalizacji przymusu `ownerCredentialRef` musi wskazywać **aktualny zwykły kod lub hasło właściciela**, zaktualizowane prywatnie po zmianie. Nigdy nie używaj istniejącego kodu przymusu do uwierzytelnienia. Nieobsługiwane polecenia lub istniejąca blokada wymagają inspekcji i nowego planu z konfiguracją ręczną. Przyjęcie polecenia nie dowodzi rzeczywistego odblokowania.
 
-Receptura UI jest związana z odciskiem OS i dokładną wersją/podpisem aplikacji. Nieobsługiwany ekran pozostaje zadaniem ręcznym. Próba kliknięcia nie dowodzi wykonania konfiguracji. Receptura wybierająca prywatny plik tymczasowy sprawdza zaakceptowany adapter wyboru pliku przed uruchomieniem aplikacji i transferem. Bez takiej obsługi wykonaj cały import prywatnie zatwierdzoną metodą transferu; plik tymczasowy nie czeka na późniejszy ręczny wybór. Jeżeli obsługa zmieni się po transferze, własne pliki tymczasowe są usuwane; nieudane sprzątanie pozostaje zobowiązaniem do odzyskania. Notatka nie może zastąpić pomiaru, który przeczy wymaganiu polityki.
+## 6. Wykonaj wskazane etapy na telefonie
 
-Jeżeli przegląd pozostałej pracy wygaśnie, użyj `agent refresh --run RUN_ID`. Otrzymasz nowy plan wyłącznie niewykonanych kroków, jego `planId`, dokładny `reviewSummary` i termin. Zapisz zdekodowaną treść reviewSummary bez zmian w prywatnym pliku, sprawdź nowy plan i użyj `agent execute --plan NEW_PLAN_ID --review-file FILE --operator NAME`. Odświeżenie samo nie zatwierdza ani nie wykonuje zmian i nie stanowi zgody na zmienioną politykę lub kod wykonywalny. Zmienione dane załaduj ponownie i przygotuj świeży przegląd. Przerwana mutacja nadal wymaga inspekcji i odzyskiwania.
+Oczekująca operacja zwraca `pauseReason` i nazwę następnego etapu. Wykonaj wskazaną czynność we właściwym profilu. Konta, importy, MFA i zgody Androida konfiguruj prywatnie przed potwierdzeniem.
 
-## Instalacja systemu i wymazanie
+Konfiguracja aplikacji poprzedza wymuszenie VPN. Zmiana always-on lub blokady ruchu bez VPN, bez pasującej receptury, zatrzymuje się na `app_setup`: skonfiguruj VPN w tym profilu, zatwierdź zgodę Androida i sprawdź zamierzone połączenie przed wznowieniem. Osobne etapy profili wymagają osobnych, nowych potwierdzeń.
 
-Instaluj OS tylko po uzyskaniu jawnej zgody na wymazanie tego telefonu. Polityka musi przypinać oficjalne adresy obrazu i podpisu, kod urządzenia, przestrzeń nazw/principal OpenSSH i autentyczny klucz publiczny. Fastboot wymaga bezpośredniego USB i dokładnego numeru. Sam host-ADB w Dockerze nie wystarcza.
+Receptury są przypisane do konkretnej kompilacji Androida oraz wersji i podpisującego aplikację. Nieobsługiwane ekrany i importy pozostają ręczne lub wspomagane. Bez zaakceptowanego adaptera wyboru pliku wykonaj cały import zatwierdzoną prywatną metodą; plik tymczasowy nie czeka na późniejsze wskazanie. Nie umieszczaj wrażliwej konfiguracji w publicznym tekście receptury.
 
-~~~sh
-pxv device install-os --project-root "$P" --asset lab-01 --operator 'Operator'
-~~~
+```sh
+pxv device attest --project-root "$P" --asset "$ASSET" \
+  --check app_setup --operator "$OPERATOR"
+pxv agent resume --project-root "$P" --run RUN_ID
+```
 
-Instalator weryfikuje podpis i treść, a następnie wykonuje uwierzytelniony skrypt przez wrapper wymuszający numer fastboot. Operator nadzoruje odblokowanie, stan blokady, ponowne zablokowanie i pierwszy start. Nie blokuj bootloadera na niezweryfikowanym obrazie. Przerwana instalacja wymaga inspekcji. Stosuj oficjalną instrukcję GrapheneOS dla konkretnego modelu i zatrzymaj pracę, gdy stan telefonu odbiega od oczekiwań.
+Jeśli etap ma inną nazwę, zastąp `app_setup` właściwą. Przy `language:PROFIL` zmień język na telefonie i wznów operację; nie twórz potwierdzenia języka. Kolejność prywatna to sprawdzenie zwykłych blokad wszystkich profili, język docelowy, a następnie opcjonalny przymus. Obie wartości przymusu muszą różnić się od wszystkich rzeczywistych zwykłych danych blokady. Nigdy nie uruchamiaj wymazania w ramach testu.
 
-## Docker i niezależne ADB
+Po wygaśnięciu przeglądu `agent refresh --run RUN_ID` przygotowuje pozostałe czynności do nowego zatwierdzenia. Zapisz nowe dokładne podsumowanie i przekaż nowy plan do `agent execute`. Odświeżenie nie zatwierdza zmian ani nie odzyskuje niepewnej, przerwanej operacji.
 
-Obraz ma przypiętą bazę i narzędzia, a worker działa jako UID/GID operatora. Projekty, współdzielona kontrola hosta, rozszerzenia i prywatne klucze ADB są zewnętrzne. Rozszerzenia montuje się tylko do odczytu. Zbuduj jawny lokalny obraz i podstaw jego unikalny tag:
+## 7. Sprawdź telefon i przekaż go odbiorcy
 
-~~~sh
-pnpm build:preview --formats oci
-pxv host docker-prepare --yes
-pxv host docker-adb-start --image YOUR_UNIQUE_IMAGE --yes
-pxv host doctor --execution docker --image YOUR_UNIQUE_IMAGE --docker-mode direct
-pxv device inspect --project-root "$P" --asset lab-01 \
-  --execution docker --image YOUR_UNIQUE_IMAGE --docker-mode direct
-~~~
+Odczytaj aktualne wymagania i zapisany stan gotowości, a następnie wykonaj rzeczywiste kontrole:
 
-Usługa ADB jest osobno uruchamiana i używa loopback 5038. Worker nie uruchamia jej w swojej grupie mutacji. Tryb host-ADB używa już działającego serwera hosta, zwykle 5037. Uprawnienia USB i grupy zależą od hosta. Zakończ wyłącznie usługę należącą do operatora przez `host docker-adb-stop --yes`. Compose stanowi jawną alternatywę uruchomienia usług; nie pobiera ani nie publikuje obrazu automatycznie.
+```sh
+pxv device report --project-root "$P" --asset "$ASSET"
+pxv guide project --project-root "$P" --kind pixel --locale pl
+```
 
-## Przerwanie i odzyskiwanie
+Sprawdź trwałość po restarcie, rozdzielenie profili, aplikacje, uprawnienia i ustawienia, języki, oczekiwane działanie sieci i wymagane reprezentatywne odtworzenie danych. Pomocnik sieciowy bada własny UID i zatwierdzone punkty końcowe; nie potwierdza całego ruchu aplikacji. Zapisuj wyłącznie wykonane kontrole; potwierdzenie ręczne nie zastępuje sprzecznego pomiaru.
 
-Nadzorca Rust utrwala prywatne, zredagowane dowody właściciela procesu i zakończenia. Dane polecenia i środowiska przechodzą prywatnym IPC, a nie do trwałego dziennika. Utrata procesu Node nie oznacza zakończonego sprzątania. Rezerwacja urządzenia i transportu obowiązuje też inne projekty, forki, podglądy i kontenery na tym hoście. Równoległa kontrola z kilku stacji jest nieobsługiwana.
+```sh
+pxv device attest --project-root "$P" --asset "$ASSET" \
+  --check WYMAGANA_KONTROLA --operator "$OPERATOR"
+```
 
-~~~sh
+Wykonaj pozostałe wymagane kontrole, a następnie zapisz rzeczywistą akceptację odbiorcy przed świeżym `operator_signoff`. To potwierdzenie jest oddzielne od późniejszego zapisu przekazania telefonu. Podpis operatora i finalizacja korzystają ze świeżych pomiarów; zmieść się w oknie ważności wskazanym przez aplikację. Pozostawione pomocniki, nierozwiązane sprzątanie, rozbieżności i nieaktualna polityka lub kompilacja blokują gotowość.
+
+```sh
+pxv device attest --project-root "$P" --asset "$ASSET" \
+  --check recipient_acceptance --operator "$OPERATOR"
+pxv device attest --project-root "$P" --asset "$ASSET" \
+  --check operator_signoff --operator "$OPERATOR"
+pxv device finalize --project-root "$P" --asset "$ASSET" \
+  --transport usb --operator "$OPERATOR" --locale pl
+```
+
+Po finalizacji fizycznie sprawdź, że **debugowanie USB i debugowanie bezprzewodowe są wyłączone**. Potwierdź, że bootloader jest zablokowany, a odblokowanie OEM wyłączone. Potwierdź, że odbiorca przejął telefon, i dopiero wtedy zapisz przekazanie:
+
+```sh
+pxv handoff accept --project-root "$P" --asset "$ASSET" \
+  --recipient 'Imię odbiorcy' --debugging-off
+pxv handoff export --project-root "$P" --asset "$ASSET" \
+  --locale pl --output /bezwzgledna/sciezka/przekazania
+```
+
+Pakiet przekazania zawiera Markdown/HTML na podstawie zachowanego obrazu polityki. Sprawdź go przed udostępnieniem. Ogólne przewodniki PDF są instrukcją, a nie dowodem akceptacji telefonu.
+
+## 8. Obsługuj flotę z osobnymi wynikami telefonów
+
+Zarejestruj każdy fizyczny telefon oddzielnie. Sprawdź przypięty obraz każdego codename i plan każdego urządzenia. Zacznij od jednego telefonu, a równoległość zwiększaj świadomie; `--jobs` przyjmuje 1–8.
+
+```sh
+pxv fleet provision --project-root "$P" --group PARTIA --jobs 2 --dry-run
+pxv fleet provision --project-root "$P" --group PARTIA --jobs 2 --operator "$OPERATOR"
+```
+
+Drugie polecenie przygotowuje nowe plany i prosi o potwierdzenie. Najpierw przeczytaj wyświetlony przegląd. Śledź każdą operację osobno; sukces jednego telefonu nie zalicza etapu innego ani nie usuwa jego błędu. Potwierdzenia, finalizacja, zmiany rejestru i odzyskiwanie dotyczą dokładnie jednego urządzenia. Instalację systemu we flocie przeprowadzaj w osobnym etapie, obsługując komunikaty każdego telefonu.
+
+## 9. Zachowuj aktualne dane do uprawnionego wsparcia
+
+Lokalny szyfrowany rejestr łączy identyfikator zasobu, numer seryjny sprzętu i codename z trwałymi tożsamościami profili Androida. Może przechowywać numer telefonu i parę PIN/hasło przymusu urządzenia oraz PIN/hasło, klucz Oblivion, identyfikator komunikatora Session, login/hasło Proton VPN i opcjonalny numer telefonu każdego profilu. Współdzielone konta zapisuj jawnie; identyfikator Session nie jest identyfikatorem użytkownika Androida.
+
+```sh
+pxv registry init --project-root "$P"
+pxv registry update --project-root "$P" --asset "$ASSET" \
+  --file /prywatny/katalog/telefon.json --record-revision 0
+pxv registry show --project-root "$P" --asset "$ASSET"
+```
+
+Rewizja zero służy wyłącznie do pierwszego wpisu; przy zmianie podaj rewizję z `show`. Aktualizacja zastępuje cały bieżący rekord telefonu i zachowuje wszystkie wcześniejsze rewizje w szyfrowanej historii. Stany to `initial`, `current`, `unknown` i `stale`; `current` oznacza ostatnie jawne potwierdzenie operatora, a nie automatyczny odczyt z telefonu. Po prywatnej zmianie danych uzgodnij aktualizację rejestru.
+
+Odblokowanie odbywa się w ukrytym lokalnym monicie. Prywatne wejścia i wyniki wymagają własnego pliku `0600` w katalogu `0700`. `list`, `show` i `history` pomijają wartości; `reveal --asset ID --output NOWY_PRYWATNY_PLIK` celowo zapisuje tekst jawny. `rekey` zmienia hasło szyfrowania. `reconcile` jawnie przyjmuje przywróconą kopię lub przerwany zapis, dodając nieaktualne rewizje; następnie ponownie potwierdź aktualne dane. Najpierw przeczytaj [zasady rejestru, historii i odzyskiwania](../../../docs/PHONE_REGISTRY.md).
+
+Flashowanie, tworzenie profilu, zapisy domyślnych blokad i zdarzenia cyklu życia unieważniają odpowiednie powiązania; stare wartości pozostają w historii. Polecenia rejestru są lokalne i offline; nie konfigurują telefonu ani nie dostarczają sekretów do konfiguracji. Użytkownik opisał klucz powiadomienia Oblivion, przypisany do profilu, jako wymazujący cały telefon; zachowanie nie ma kwalifikacji dla konkretnej aplikacji i kompilacji. Oddzielaj te klucze od przymusu GrapheneOS; nigdy nie umieszczaj prawdziwych kluczy w powiadomieniach, logach, zwykłych eksportach ani testach.
+
+## 10. Obsłuż przerwanie i późniejszy serwis
+
+Przy oczekiwaniu przeczytaj nazwę etapu. Po błędzie, anulowaniu, utracie hosta/kontenera lub stanie `needs-inspection` wstrzymaj kolejne zmiany i sprawdź telefon, zdarzenia operacji i należące do niej sprzątanie.
+
+```sh
+pxv agent status --project-root "$P" --run RUN_ID --after 0
 pxv agent cancel --project-root "$P" --run RUN_ID
-pxv device recover --project-root "$P" --asset lab-01
-pxv device recover --project-root "$P" --asset lab-01 \
-  --run ORIGINAL_RUN_ID --inspected --yes
-~~~
+pxv device recover --project-root "$P" --asset "$ASSET"
+pxv device recover --project-root "$P" --asset "$ASSET" \
+  --run PIERWOTNY_OPERATION_ID --inspected
+```
 
-Najpierw obejrzyj telefon i zapisane zobowiązania. Odzyskiwanie wiąże użytkownika z jego stabilnym numerem seryjnym Androida, nie tylko ponownie użytym ID i nazwą. Nowo utworzony użytkownik nie jest starym celem sprzątania. Podoperacja sondy sieciowej zwalnia tylko własne zasoby, nigdy zasoby całego wdrożenia.
+Anulowanie jest żądaniem, a nie dowodem sprzątnięcia. Użyj pierwotnego identyfikatora wskazanego w zachowanych danych odzyskiwania. Nie usuwaj bazy SQLite, blokad, znaczników ochronnych ani potwierdzeń, aby ponowić zadanie. Ponowne użycie ID lub nazwy użytkownika Androida nie zezwala na sprzątanie nowego użytkownika o innym numerze seryjnym. Nierozstrzygnięte sprzątanie natywne może wymagać restartu hosta i odzyskiwania po inspekcji.
 
-Nieudane sprzątanie otrzymuje stan `blocked`, zachowując nierozwiązane zobowiązanie, ewentualną rezerwację natywną i historię prób. Po inspekcji telefonu i dowodów właściciela ponów odzyskiwanie jawnie przez `device recover` w zapisanej linii odzyskiwania. Każda próba sprawdza pierwotny zakres właściciela, urządzenie i stabilnego użytkownika Androida; rozwiązane zobowiązania nie są odtwarzane. Żywego nadzorcy nie da się ominąć potwierdzeniem ręcznym. Nieudowodnione sprzątanie procesów może wymagać restartu hosta i inspekcji. Nigdy nie usuwaj blokad, bazy ani pokwitowań, żeby wymusić gotowość. Przerwane mutacje nie są samoczynnie odtwarzane. Anulowanie nie cofa dowolnego flashowania, zmiany aplikacji ani wpisania konta.
+Zapisz właściwe zdarzenie przez `lifecycle maintenance|policy-change|loss|retirement --asset ID --operator NAME --note TEXT`. Notatki nie zawierają sekretów. Zdarzenia unieważniają wcześniejsze potwierdzenie przekazania; nowe wdrożenie wymaga świeżego przeglądu i akceptacji. Używaj `--erased` dopiero po rzeczywistym potwierdzeniu usunięcia danych.
 
-## Pomiar, akceptacja i przekazanie
+## Próba offline i dokumentacja
 
-Po restarcie sprawdź trwałość ustawień, izolację użytkowników, trasowanie, zachowanie przy awarii i reprezentatywne odtworzenie kopii. Włączony backup nie dowodzi odtworzenia. Ikona VPN nie dowodzi całego ruchu. Sonda obejmuje własny UID i zatwierdzone punkty HTTPS; sprawdź osobno faktyczne aplikacje.
+Bez fizycznego telefonu testowego najkrótsza próba wymaga nowego osobnego projektu i polityki z danymi syntetycznymi:
 
-Poświadczenia wymagają świeżych obserwacji. Obecne okno świeżości wynosi 15 minut. Finalizacja ponownie mierzy ustawienia i wymagane uprawnienia; odrzuca dryf, helpery, nierozwiązane sprzątanie i nieaktualne dowody. Raport opisuje zapisany stan, a nie nowe badanie telefonu.
+```sh
+pxv project init --path /prywatna/sciezka/proba-offline --policy /sciezka/polityki-syntetycznej.json
+pxv policy validate --project-root /prywatna/sciezka/proba-offline
+pxv guide project --project-root /prywatna/sciezka/proba-offline --kind pixel --locale pl
+```
 
-~~~sh
-pxv device report --project-root "$P" --asset lab-01
-pxv device finalize --project-root "$P" --asset lab-01 --operator 'Operator' --locale pl
-pxv handoff accept --project-root "$P" --asset lab-01 \
-  --recipient 'Odbiorca' --debugging-off --yes
-pxv handoff export --project-root "$P" --asset lab-01 --locale pl --output "$P/handoff"
-~~~
+Inicjalizacja zapisuje blokadę wersji. Programiści mogą też uruchomić testy rejestru i przebiegu z atrapą portu urządzenia. Sprawdza to stronę hosta; nie kwalifikuje flashowania, receptur UI, VPN, odtwarzania ani fizycznego przekazania. Nie zastępuj niedostępnego telefonu testowego podstawowym telefonem użytkownika.
 
-Odczytaj wynik finalizacji. Fizycznie potwierdź wyłączenie debugowania i brak tymczasowych helperów. Gotowość do przekazania różni się od przyjęcia urządzenia przez odbiorcę. Wynik częściowy lub emulator nie potwierdza gotowości telefonu fizycznego. Zachowaj dokument z zaakceptowanego snapshotu; nie zawiera on sekretów odbiorcy.
-
-Eksport przekazania używa zaakceptowanego snapshotu produktu i rozwiązanej polityki, a nie bieżącego edytowanego pliku. Historyczny dokument zachowuje dowód dawnego przekazania, ale nie potwierdza aktualnej gotowości. CLI eksportuje Markdown i HTML; PDF wymaga jawnego narzędzia/API, bez flagi PDF w CLI.
-
-## Serwis, rozszerzenia i fork
-
-`lifecycle maintenance`, `policy-change`, `loss` i `retirement` zapisują zdarzenia z operatorem i notatką. Serwis wymaga świeżych dowodów i ponownego przekazania. Utrata wymaga reakcji u właścicieli kont; sam zapis nie wymazuje zdalnie telefonu. Wycofanie rejestruje osobno potwierdzone wymazanie i przekazanie pieczy, bez automatycznego wipe.
-
-Rozszerzenia z dokładnymi wersjami instaluje się jawnie z prywatnego rejestru lub lokalnego tarballa. Brak skryptów instalacyjnych i pobierania zależności w czasie uruchomienia. Zainstalowane narzędzie działa offline. Rozszerzenie jest zaufanym kodem, a worker nie stanowi piaskownicy bezpieczeństwa. Akcje zmieniające telefon podlegają zwykłemu przeglądowi silnika. Zmiana wybranego pakietu polityki wymaga nowej blokady i zatwierdzenia.
-
-Wersja white-label jest osobnym forkiem z własnymi zasobami, manifestami i konfiguracją produktu. Zachowaj marker silnika/API i testy bezpieczeństwa. Sekrety rejestru, klucze ADB i dane projektów nie należą do forków ani obrazów. Wydania próbne mają unikalne katalogi, wersje i nazwy; zwykły build niczego nie publikuje ani nie zastępuje stabilnego launchera.
-
-## Lista zamknięcia sesji
-
-1. Wyjaśnij każdy oczekujący punkt i nierozwiązane sprzątanie.
-2. Zbierz nowe pomiary po restarcie oraz reprezentatywnym restore.
-3. Potwierdź prywatne wpisanie końcowych danych przez odbiorcę.
-4. Usuń helpery i fizycznie potwierdź wyłączenie debugowania.
-5. Zachowaj zaakceptowany dokument EN/PL oraz zapis pieczy.
-6. Odłącz telefon i zabezpiecz prywatny projekt.
-7. Zapisz nieukończoną kwalifikację zgodnie z faktami.
-
-Testy offline nie certyfikują polityki ani przepływu UI. Kwalifikacja wymaga zachowanych dowodów emulatora GrapheneOS i autoryzowanego Pixel 8a w EN/PL, z izolacją, restartem, routingiem, awarią, restore i przekazaniem. Zwykły emulator Google APIs nie jest dowodem pochodzenia GrapheneOS. Bieżący refaktoring źródeł ma wyłącznie weryfikację offline. Zachowane wyniki Pixel dotyczą kandydata wskazanego w zapisie, a nie nowego buildu po refaktoringu.
-
-## Wskazówki z wybranej polityki
-
-Polecenie `pxv guide project --project-root "$P" --locale pl --kind pixel` wypisuje profile, wymagane kontrole i kolejność prywatnej konfiguracji z bieżącej polityki. `--kind emulator` wybiera wymagania emulatora. `pxv device guided --project-root "$P" --asset lab-01 --operator 'Operator' --locale pl` pokazuje te wskazówki i korzysta ze wspólnej ścieżki przygotowania, zwracając konkretne dalsze kroki przy oczekiwaniu. Wariant `--dry-run` przygotowuje przegląd bez zmiany telefonu. Ogólne przewodniki pozostają oddzielne. Wskazówka nie podaje sekretu, nie zastępuje pomiaru i nie potwierdza automatycznie ręcznego etapu.
+Korzystaj z [listy poleceń](../../../docs/COMMAND_REFERENCE.md), [automatyzacji i MCP](../../../docs/AUTOMATION.md), [obsługi Dockera](../../../docs/DOCKER.md), [zasad bezpieczeństwa](../../../SECURITY.md) i [stanu weryfikacji](../../../docs/VERIFICATION.md). Community wyłącza opcjonalne rozszerzenia i eksperymentalną automatyzację Seedvault; ręczna kopia i odtworzenie pozostają osobną, sprawdzaną procedurą telefonu. Historyczne wyniki fizyczne dotyczą wyłącznie zapisanej wersji, a nie bieżącej kompilacji.

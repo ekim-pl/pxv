@@ -1,0 +1,119 @@
+{
+  "id": "reference-five",
+  "version": "0.1.0",
+  "name": "Five-profile structural starter",
+  "capabilities": [
+    "normal_credentials",
+    "duress",
+    "network",
+    "backup"
+  ],
+  "requiredAttestations": [
+    "routes",
+    "network_failure_tests",
+    "backup_recovery",
+    "recipient_acceptance",
+    "operator_signoff"
+  ],
+  "repositories": [],
+  "schemaVersion": 2,
+  "apps": {},
+  "profiles": [
+    {
+      "id": "owner",
+      "name": "owner",
+      "kind": "owner",
+      "settings": [],
+      "permissions": [],
+      "vpn": {
+        "packageId": null,
+        "alwaysOn": false,
+        "lockdown": false
+      },
+      "defaultCredential": {
+        "type": "password",
+        "secretRef": "owner-password"
+      },
+      "defaultDuress": {
+        "ownerCredentialRef": "owner-current",
+        "pinRef": "duress-pin",
+        "passwordRef": "duress-password"
+      },
+      "defaultLocale": "en-US",
+      "apps": []
+    },
+    {
+      "id": "contacts",
+      "name": "contacts",
+      "kind": "secondary",
+      "settings": [],
+      "permissions": [],
+      "vpn": {
+        "packageId": null,
+        "alwaysOn": false,
+        "lockdown": false
+      },
+      "defaultCredential": {
+        "type": "pin",
+        "secretRef": "contacts-pin"
+      },
+      "defaultLocale": "pl-PL",
+      "apps": []
+    },
+    {
+      "id": "google",
+      "name": "google",
+      "kind": "secondary",
+      "settings": [],
+      "permissions": [],
+      "vpn": {
+        "packageId": null,
+        "alwaysOn": false,
+        "lockdown": false
+      },
+      "defaultCredential": {
+        "type": "pin",
+        "secretRef": "google-pin"
+      },
+      "defaultLocale": "pl-PL",
+      "apps": []
+    },
+    {
+      "id": "testing",
+      "name": "testing",
+      "kind": "secondary",
+      "settings": [],
+      "permissions": [],
+      "vpn": {
+        "packageId": null,
+        "alwaysOn": false,
+        "lockdown": false
+      },
+      "defaultCredential": {
+        "type": "pin",
+        "secretRef": "testing-pin"
+      },
+      "defaultLocale": "pl-PL",
+      "apps": []
+    },
+    {
+      "id": "onion",
+      "name": "onion",
+      "kind": "secondary",
+      "settings": [],
+      "permissions": [],
+      "vpn": {
+        "packageId": null,
+        "alwaysOn": false,
+        "lockdown": false
+      },
+      "defaultCredential": {
+        "type": "pin",
+        "secretRef": "onion-pin"
+      },
+      "defaultLocale": "pl-PL",
+      "apps": []
+    }
+  ],
+  "deviceSettings": []
+}

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
-import { resolve, join } from 'node:path';
+import { mkdtemp, readdir, rm } from 'node:fs/promises';
+import { resolve } from 'node:path';
 const originalArgs = [...process.argv];
 const originalExit = process.exitCode;
 let directory: string;
@@ -31,37 +31,15 @@ it.each([new Error('Expected release failure')])(
     );
   },
 );
-it('keeps the documentation module read-only when imported without an executable argument', async () => {
-  process.argv = [process.execPath];
-  const stdout = vi.spyOn(process.stdout, 'write').mockReturnValue(true);
-  await import('../../packages/release/src/docs.js');
-  expect(stdout).not.toHaveBeenCalled();
-  expect(await readdir(directory)).toEqual([]);
-});
-it.each([true, false])(
-  'runs source documentation bootstrap with explicit chromium option=%s',
-  async (explicit) => {
-    const entry = resolve('packages/release/src/docs.ts');
-    const product = await readFile('product.json');
-    await writeFile(join(directory, 'product.json'), product);
-    await mkdir(join(directory, 'guides/source/markdown'), { recursive: true });
-    await writeFile(join(directory, 'guides/source/markdown/public.en.md'), '# Public bootstrap fixture');
-    process.argv = [process.execPath, entry, '--html-only'];
-    vi.spyOn(process, 'cwd').mockReturnValue(directory);
-    vi.stubEnv('PXV_CHROMIUM', explicit ? '/approved/chromium' : undefined);
+it.each([false, true])(
+  'keeps the documentation API read-only with executable arguments=%s',
+  async (executable) => {
+    process.argv = executable
+      ? [process.execPath, resolve('packages/release/src/docs.ts'), '--html-only']
+      : [process.execPath];
     const stdout = vi.spyOn(process.stdout, 'write').mockReturnValue(true);
     await import('../../packages/release/src/docs.js');
-    await vi.waitFor(() => expect(stdout).toHaveBeenCalledWith(expect.stringContaining('public.en.html')));
-    expect(await readFile(join(directory, 'dist/guides/public.en.html'), 'utf8')).toContain(
-      'Public bootstrap fixture',
-    );
+    expect(stdout).not.toHaveBeenCalled();
+    expect(await readdir(directory)).toEqual([]);
   },
 );
-it('reports source documentation build failure and preserves a nonzero exit status', async () => {
-  process.argv = [process.execPath, resolve('packages/release/src/docs.ts'), '--html-only'];
-  vi.spyOn(process, 'cwd').mockReturnValue(directory);
-  const stderr = vi.spyOn(process.stderr, 'write').mockReturnValue(true);
-  await import('../../packages/release/src/docs.js');
-  await vi.waitFor(() => expect(process.exitCode).toBe(1));
-  expect(stderr).toHaveBeenCalledWith(expect.stringContaining('ENOENT'));
-});

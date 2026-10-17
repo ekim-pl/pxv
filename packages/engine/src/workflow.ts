@@ -1,7 +1,7 @@
 import type { Action, SeedvaultRequest, SelectedTarget } from '@pxv/contracts';
 import { createWorkflowServices } from './composition.js';
 import { assertProjectFresh } from './project.js';
-import type { EngineOptions, EmulatorImagePin, Operation } from './workflow-types.js';
+import type { EngineOptions, EmulatorImagePin, Operation, RunRecord } from './workflow-types.js';
 /** @public Retained application façade types for existing WorkflowEngine port consumers. */
 export type {
   EmulatorImagePin,
@@ -43,36 +43,42 @@ export class WorkflowEngine {
   prepare(target: SelectedTarget, operation: Operation = 'provision', signal?: AbortSignal) {
     return this.services.preparation.prepare(target, operation, signal);
   }
-  prepareExtension(target: SelectedTarget, actions: Action[], signal?: AbortSignal) {
+  async prepareExtension(target: SelectedTarget, actions: Action[], signal?: AbortSignal) {
+    if (this.project.product.features?.extensions === false)
+      throw new Error('Extensions are outside this core product; use an extension-enabled product');
     return this.services.preparation.prepareExtension(target, actions, signal);
   }
   async submit(planId: string, reviewSummary: string, operator: string) {
-    if (await this.services.seedvault.plans.has(planId))
-      return this.services.seedvault.submit(planId, reviewSummary, operator);
+    if (await this.store.get('seedvault-plans', planId))
+      return (await this.services.seedvault()).submit(planId, reviewSummary, operator);
     return this.services.review.submit(planId, reviewSummary, operator);
   }
-  inspectSeedvault(target: SelectedTarget, signal?: AbortSignal) {
-    return this.services.seedvault.inspect(target, signal);
+  async inspectSeedvault(target: SelectedTarget, signal?: AbortSignal) {
+    return (await this.services.seedvault()).inspect(target, signal);
   }
-  prepareSeedvault(target: SelectedTarget, request: SeedvaultRequest, signal?: AbortSignal) {
-    return this.services.seedvault.prepare(target, request, signal);
+  async prepareSeedvault(target: SelectedTarget, request: SeedvaultRequest, signal?: AbortSignal) {
+    return (await this.services.seedvault()).prepare(target, request, signal);
   }
-  seedvaultReport(runId: string) {
-    return this.services.seedvault.report(runId);
+  async seedvaultReport(runId: string) {
+    return (await this.services.seedvault()).report(runId);
   }
   plan(id: string, summary?: string) {
     return this.services.plans.read(id, summary);
   }
   async refreshReview(runId: string, signal?: AbortSignal) {
-    if (await this.services.seedvault.ownsRun(runId)) return this.services.seedvault.refresh(runId, signal);
+    if (await this.isSeedvaultRun(runId)) return (await this.services.seedvault()).refresh(runId, signal);
     return this.services.review.refreshReview(runId, signal);
   }
   async execute(runId: string, signal?: AbortSignal) {
-    if (await this.services.seedvault.ownsRun(runId)) return this.services.seedvault.execute(runId, signal);
+    if (await this.isSeedvaultRun(runId)) return (await this.services.seedvault()).execute(runId, signal);
     return this.services.execution.execute(runId, signal);
   }
   executeFleet(runIds: string[], jobs = 2, signal?: AbortSignal) {
     return this.services.execution.executeFleet(runIds, jobs, signal);
+  }
+  private async isSeedvaultRun(runId: string): Promise<boolean> {
+    const run = await this.store.get<RunRecord>('runs', runId);
+    return run !== undefined && (await this.store.get('seedvault-plans', run.planId)) !== undefined;
   }
   cancel(runId: string) {
     return this.services.execution.cancel(runId);

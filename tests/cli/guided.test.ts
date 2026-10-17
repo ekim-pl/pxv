@@ -83,3 +83,24 @@ it('shows distinct owner and secondary default locales independently of the guid
   expect(pl).toContain('Ustawienia regionalne admin: de-DE');
   expect(pl).toContain('Ustawienia regionalne work: sr-Latn-RS');
 });
+
+it('gives re-enrollment instructions instead of manual attestation after an OS flash', () => {
+  const steps = guidedNextSteps(
+    product,
+    {
+      id: 'flash',
+      planId: 'plan',
+      operator: 'Operator',
+      createdAt: '2026-10-17T09:00:00Z',
+      status: 'pending',
+      pauseReason: { kind: 'reenrollment', instructions: 'Authorize USB debugging after phone setup.' },
+    },
+    'en',
+    '/tmp/project',
+    'phone',
+  ).join('\n');
+  expect(steps).toContain('device inspect');
+  expect(steps).toContain('device provision');
+  expect(steps).not.toContain('device attest');
+  expect(steps).not.toContain('agent resume');
+});

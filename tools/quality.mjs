@@ -4,7 +4,8 @@ import { qualityReport } from './lib/quality-report.mjs';
 import { packageManagerCommand } from './lib/package-manager.mjs';
 /** @param {string} stage */
 async function run(stage) {
-  const command = packageManagerCommand([stage]);
+  // The final report measures metrics once, after every source-bound check.
+  const command = packageManagerCommand([stage === 'check' ? 'check:static' : stage]);
   const child = spawn(command.file, command.args, { stdio: 'inherit', env: process.env });
   const code = await new Promise((done, reject) => {
     child.once('error', reject);

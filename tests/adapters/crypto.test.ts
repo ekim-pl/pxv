@@ -1,6 +1,6 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { createReadStream } from 'node:fs';
-import { access, chmod, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
+import { access, chmod, mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from 'node:fs/promises';
 import { createHash, X509Certificate } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { join, resolve } from 'node:path';
@@ -28,19 +28,36 @@ const native: CommandRunner = {
         ...(options.env ? { env: options.env } : {}),
         stdio: ['pipe', 'pipe', 'pipe'],
       });
+      const input = options.inputFile ? createReadStream(options.inputFile) : undefined;
+      let brokenPipe: Error | undefined;
+      const fail = (error: Error) => {
+        input?.destroy();
+        child.stdin.destroy();
+        child.kill();
+        reject(error);
+      };
       const stdout: Buffer[] = [];
       const stderr: Buffer[] = [];
       child.stdout.on('data', (chunk: Buffer) => stdout.push(chunk));
       child.stderr.on('data', (chunk: Buffer) => stderr.push(chunk));
-      child.once('error', reject);
-      child.once('close', (code) =>
-        resolveResult({
-          code: code ?? 1,
-          stdout: Buffer.concat(stdout).toString(),
-          stderr: Buffer.concat(stderr).toString(),
-        }),
-      );
-      if (options.inputFile) createReadStream(options.inputFile).pipe(child.stdin);
+      child.once('error', fail);
+      child.stdin.on('error', (error: NodeJS.ErrnoException) => {
+        input?.destroy();
+        if (error.code === 'EPIPE') brokenPipe = error;
+        else fail(error);
+      });
+      input?.once('error', fail);
+      child.once('close', (code) => {
+        input?.destroy();
+        if (brokenPipe && code === 0) reject(brokenPipe);
+        else
+          resolveResult({
+            code: code ?? 1,
+            stdout: Buffer.concat(stdout).toString(),
+            stderr: Buffer.concat(stderr).toString(),
+          });
+      });
+      if (input) input.pipe(child.stdin);
       else child.stdin.end(options.input);
     });
   },
@@ -196,6 +213,54 @@ afterAll(async () => {
 });
 afterEach(() => vi.unstubAllGlobals());
 describe('real cryptographic artifact checks', () => {
+  it('retains verifier refusal when the child exits before consuming streamed input', async () => {
+    const inputFile = join(directory, 'early-exit-input');
+    await writeFile(inputFile, Buffer.alloc(8 * 1024 * 1024));
+    for (let attempt = 0; attempt < 6; attempt++) {
+      const result = await native.run([process.execPath, '-e', 'process.exit(7)'], { inputFile });
+      expect(result.code).toBe(7);
+    }
+  });
+  it('propagates input-read and spawn failures while stopping the child and its streams', async () => {
+    await expect(
+      native.run([process.execPath, '-e', 'process.stdin.resume()'], {
+        inputFile: join(directory, 'missing-input'),
+      }),
+    ).rejects.toMatchObject({ code: 'ENOENT' });
+    await expect(
+      native.run([join(directory, 'missing-executable')], { inputFile: image }),
+    ).rejects.toMatchObject({ code: 'ENOENT' });
+  });
+  it('shares authenticated OS bytes across plans and revalidates corrupt retained signatures', async () => {
+    const imageBytes = await readFile(image);
+    const signatureBytes = await readFile(signature);
+    const fetch = vi
+      .fn()
+      .mockImplementation((url: URL) =>
+        Promise.resolve(new Response(url.pathname.endsWith('.sig') ? signatureBytes : imageBytes)),
+      );
+    vi.stubGlobal('fetch', fetch);
+    const service = new ImageService({ runner: native, cacheRoot: join(directory, 'os-cache') });
+    const [first, second] = await Promise.all([
+      service.snapshot(os, join(directory, 'cached-plan-one/os')),
+      service.snapshot(os, join(directory, 'cached-plan-two/os')),
+    ]);
+    const third = await service.snapshot(os, join(directory, 'cached-plan-three/os'));
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect((await stat(first.path)).ino).toBe((await stat(second.path)).ino);
+    expect((await stat(first.signaturePath)).ino).toBe((await stat(third.signaturePath)).ino);
+    await expect(service.snapshot(os, join(directory, 'cached-plan-one/os'))).rejects.toMatchObject({
+      code: 'EEXIST',
+    });
+    expect(await readFile(first.path)).toEqual(imageBytes);
+    await chmod(second.signaturePath, 0o600);
+    await writeFile(second.signaturePath, 'changed signature');
+    await expect(service.snapshot(os, join(directory, 'cached-plan-four/os'))).rejects.toThrow(
+      /signature verification/,
+    );
+    expect(fetch).toHaveBeenCalledTimes(2);
+    await expect(stat(join(directory, 'cached-plan-four/os'))).rejects.toMatchObject({ code: 'ENOENT' });
+  });
   it('downloads and seals an immutable authenticated OS pair and removes failed snapshots', async () => {
     const imageBytes = await readFile(image);
     const signatureBytes = await readFile(signature);

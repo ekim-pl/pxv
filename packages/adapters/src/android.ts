@@ -23,7 +23,7 @@ import { canonicalJson, canonicalLocale, profileLocale, sameAndroidUser } from '
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { ArtifactService, type VerifiedArtifact } from './artifacts.js';
+import { ArtifactService, type ApkIdentity, type VerifiedArtifact } from './artifacts.js';
 import {
   AdapterError,
   checked,
@@ -228,6 +228,7 @@ export class AndroidAdapter {
     user: AndroidUserIdentity,
     id: string,
     signal?: AbortSignal,
+    inspected?: Map<string, Promise<ApkIdentity>>,
   ): Promise<{ packageId: string; versionCode: number; signerSha256: string }> {
     packageId(id);
     const output = await this.shell(
@@ -250,6 +251,20 @@ export class AndroidAdapter {
     const base =
       paths.find((path) => /\/base\.apk$/.test(path)) ?? (paths.length === 1 ? paths[0] : undefined);
     if (!base) throw new AdapterError('Installed base APK cannot be identified');
+    let pending = inspected?.get(base);
+    if (!pending) {
+      pending = this.inspectInstalledPath(target, base, signal);
+      inspected?.set(base, pending);
+    }
+    const identity = await pending;
+    if (identity.packageId !== id) throw new AdapterError('Installed APK package changed during inspection');
+    return identity;
+  }
+  private async inspectInstalledPath(
+    target: SelectedTarget,
+    base: string,
+    signal?: AbortSignal,
+  ): Promise<ApkIdentity> {
     const directory = await mkdtemp(join(tmpdir(), 'pxv-observe-apk-'));
     try {
       const path = join(directory, 'base.apk');
@@ -260,10 +275,7 @@ export class AndroidAdapter {
         }),
         'Installed APK read',
       );
-      const identity = await this.artifacts.identity(path, signal);
-      if (identity.packageId !== id)
-        throw new AdapterError('Installed APK package changed during inspection');
-      return identity;
+      return await this.artifacts.identity(path, signal);
     } finally {
       await rm(directory, { recursive: true, force: true });
     }
@@ -312,10 +324,11 @@ export class AndroidAdapter {
     await this.guardTarget(target, signal);
     const users = await this.users(target, signal);
     const { listings, helpers } = await this.inspectUserPackages(target, users, signal);
+    const inspected = new Map<string, Promise<ApkIdentity>>();
     const profiles: ProfileObservation[] = [];
     for (const profile of policy.profiles) {
       const user = policyUser(users, profile);
-      if (user) profiles.push(await this.inspectProfile(target, user, profile, listings, signal));
+      if (user) profiles.push(await this.inspectProfile(target, user, profile, listings, inspected, signal));
     }
     const os = await this.inspectOs(target, signal);
     const debuggingEnabled = await this.inspectDebugging(target, users, signal);
@@ -352,6 +365,7 @@ export class AndroidAdapter {
     user: AndroidUserIdentity,
     profile: ProfilePolicy,
     listings: Map<number, Set<string>>,
+    inspected: Map<string, Promise<ApkIdentity>>,
     signal?: AbortSignal,
   ): Promise<ProfileObservation> {
     const installed = listings.get(user.userId);
@@ -359,7 +373,7 @@ export class AndroidAdapter {
     const packages: ProfileObservation['packages'] = [];
     for (const wanted of profile.packages)
       if (installed.has(wanted.packageId))
-        packages.push(await this.installedIdentity(target, user, wanted.packageId, signal));
+        packages.push(await this.installedIdentity(target, user, wanted.packageId, signal, inspected));
     const settings: SettingPolicy[] = [];
     for (const setting of profile.settings)
       settings.push({ ...setting, value: await this.readSetting(target, user, setting, signal) });
@@ -484,12 +498,13 @@ export class AndroidAdapter {
     const listings = new Map<number, Set<string>>();
     for (const user of users) listings.set(user.userId, await this.listPackages(target, user, signal));
     const effects: SharedApkEffect[] = [];
+    const inspected = new Map<string, Promise<ApkIdentity>>();
     for (const id of [...new Set(packageIds)].sort()) {
       packageId(id);
       const installed: SharedApkEffect['users'] = [];
       for (const user of users)
         if (listings.get(user.userId)?.has(id)) {
-          const identity = await this.installedIdentity(target, user, id, signal);
+          const identity = await this.installedIdentity(target, user, id, signal, inspected);
           installed.push({ user, versionCode: identity.versionCode, signerSha256: identity.signerSha256 });
         }
       effects.push({ packageId: id, users: installed.sort((a, b) => a.user.serialNo - b.user.serialNo) });

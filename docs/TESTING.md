@@ -1,8 +1,14 @@
 # Developing and testing pxv
 
-Run the commands below from the checkout root. The normal development suite uses synthetic policies, local fixture artifacts, temporary projects and real supervised test processes. It does not require a connected phone. For physical-device experiments, start with [canary, backup and recovery testing](CANARY_BACKUP_RECOVERY.md), then follow [E2E testing](E2E_TESTING.md).
+Run the commands below from the checkout root. The normal development suite uses synthetic policies, local fixture artifacts, temporary projects and real supervised test processes. It does not require a connected phone. For physical-device experiments and live acceptance, use [canary, backup and recovery testing](CANARY_BACKUP_RECOVERY.md).
 
 Development source, test, configuration and CI links in this guide refer to the matching source checkout. Installed distributions do not contain the development workspace or test suite.
+
+The quality orchestrator runs `check:static` for its first stage and computes metrics
+once at the end, retaining before/after source identity checks. Independent `pnpm check`
+runs the same static checks plus metrics. No crypto, native, coverage or helper gate
+is dropped. Ordinary CI derives portable/OCI formats; manual/tag runs also exercise
+the Debian/npm compatibility channels.
 
 ## Set up a development checkout
 
@@ -203,4 +209,4 @@ This creates uniquely named previews and does not publish, push, install globall
 
 The supervisor must be static Linux x86_64 with the reviewed musl target. Release validation rejects dynamic ELF binaries, including ones that happen to run on a newer build host. Distribution acceptance includes a real synthetic native lease, owned child execution, a cleanup-proven durable receipt and zero remaining reservations on both the host and Debian 12 runtime. `tools/check-native-baseline.mjs` provides that synthetic check; CI mounts it and the compiled runtime into the container. Printing a version or initializing a project alone does not prove native ownership compatibility.
 
-These tests can qualify code and package behavior without a phone. They do not establish GrapheneOS image provenance, live Docker USB/host-ADB transport behavior, localized UI support, cross-user isolation, routing/failure recovery, backup restoration or recipient custody. Retain separate live evidence through [E2E testing](E2E_TESTING.md) and the [canary, backup and recovery guide](CANARY_BACKUP_RECOVERY.md).
+These tests can qualify code and package behavior without a phone. They do not establish GrapheneOS image provenance, live Docker USB/host-ADB transport behavior, localized UI support, cross-user isolation, routing/failure recovery, backup restoration or recipient custody. Retain separate live evidence through the [canary, backup and recovery guide](CANARY_BACKUP_RECOVERY.md), using the [verification boundaries](VERIFICATION.md).

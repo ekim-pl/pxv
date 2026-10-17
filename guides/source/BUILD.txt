@@ -1,21 +1,30 @@
-pxv 0.1.0 Node documentation pipeline
+pxv guide build
 
-Sources: eight UTF-8 Markdown editions under source/markdown (four guide types, EN/PL).
-Brand theme: guides/assets/brand.json; optional local logo and font; replaceable cover photos.
-Renderer: @pxv/release buildDocumentation, pinned marked/Playwright/pdf-lib, explicit system Chromium.
-Formats: eight HTML files, eight A4 office PDFs, eight full-color print PDFs.
-Print page: 216 x 303 mm media, A4 TrimBox, 3 mm bleed on selected cover and section opener pages.
-Generated PDFs and HTML are ignored build outputs, not Git sources. Keep reviewed copies with the release.
-Workspace: Node 24.22.0, pnpm 12.11.2, pinned TypeScript compiler 7.0.2.
-Native build: Rust 1.99.1, x86_64-unknown-linux-musl, rustfmt and Clippy.
-Quality prerequisites: Java, Android SDK and host tools from docs/HOST_DEPENDENCIES.md.
-Explicit setup: pnpm install --frozen-lockfile; pnpm quality:setup.
-Before guide edits/distribution: pnpm build:native; pnpm build; pnpm quality.
-CLI rebuild: pxv guides rebuild [--output-dir DIR] [--chromium PATH] [--html-only] [--no-render].
-The CLI rebuild automatically runs pnpm build; it does not install tools or run the full quality gate.
-QA: Poppler pdfinfo, pdftotext, pdffonts and pdftoppm; hashes and every-page PNGs under qa/.
-The complete default guides/qa/ directory is ignored by Git. Retain reviewed QA evidence with matching artifacts.
-Review every rendered page after each source/brand revision; generation alone is not visual approval.
-The rebuild wrapper performs no package installation, browser download, device command or publication.
-A successful render does not establish policy, emulator or physical-device acceptance.
-Historical Pixel evidence remains limited to the candidate named in its original record.
+Authoritative sources: operator-en.md, operator-pl.md, user-en.md and user-pl.md
+under source/markdown. The edition list is configured once in build-manifest.json.
+Theme: assets/brand.json with the same brandName as product.json.
+
+From the matching source checkout, with pinned dependencies installed:
+  pxv guides rebuild --chromium /usr/bin/google-chrome
+For HTML only:
+  pxv guides rebuild --html-only
+For another destination:
+  pxv guides rebuild --output-dir output/pdf --chromium /usr/bin/google-chrome
+
+The command builds the workspace, then calls tools/optional/publishing/rebuild.mjs.
+Installed packages contain guide sources and build configuration, not the renderer.
+No browser download, dependency installation, device access or publication occurs.
+
+Each edition creates HTML, an A4 office PDF and a color print PDF with 216 x 303 mm
+media, an A4 TrimBox and 3 mm bleed. The print output is not PDF/X and has no
+commercial printer profile. Office PDFs use less ink and include page numbers.
+
+PDF builds require an explicitly selected Chromium and Poppler tools pdfinfo,
+pdftotext, pdffonts and pdftoppm. Hashes, extracted text, page counts, font checks,
+page boxes and one PNG per page are recorded in qa/manifest.json. --no-render
+skips PNG generation; --html-only does not run Chromium or Poppler.
+
+Review every rendered page before distribution. QA records describe only the
+actual document build. Device status belongs to the project handoff report.
+Generated guide files and qa/ are local build outputs; keep reviewed copies with
+the matching release. Never put credentials or device-specific records in guides.

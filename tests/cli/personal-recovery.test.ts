@@ -172,17 +172,20 @@ it('requires an explicit recovery mode and defaults recovery finalization while 
     'never provisions',
   );
 });
-it('both shell entrypoints offer help; dry-run reads inputs without a CLI call or filesystem changes', async () => {
-  for (const script of ['01-create-personal-master.sh', '02-recover-personal-device.sh']) {
-    const help = spawnSync('bash', [join(repo, 'scripts/examples', script), '--help'], { encoding: 'utf8' });
+it('canonical recovery commands offer help; dry-run reads inputs without a CLI call or filesystem changes', async () => {
+  for (const mode of ['create', 'recover']) {
+    const help = spawnSync(process.execPath, [join(repo, 'tools/personal-recovery.mjs'), mode, '--help'], {
+      encoding: 'utf8',
+    });
     expect(help.status).toBe(0);
     expect(help.stdout).toContain('--dry-run');
   }
   const before = await treeFiles(fixture.root);
   const result = spawnSync(
-    'bash',
+    process.execPath,
     [
-      join(repo, 'scripts/examples/01-create-personal-master.sh'),
+      join(repo, 'tools/personal-recovery.mjs'),
+      'create',
       '--dry-run',
       '--project-root',
       join(fixture.root, 'new-project'),

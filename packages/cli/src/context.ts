@@ -1,9 +1,8 @@
 import { type AndroidAdapter } from '@pxv/adapters';
 import type { ProductDescriptor } from '@pxv/contracts';
 import { loadProduct, loadProject, WorkflowEngine } from '@pxv/engine';
-import { ExtensionManager } from '@pxv/extensions';
 import { type CommandRunner, hostControlRoot, SqliteStore } from '@pxv/runtime';
-import { access } from 'node:fs/promises';
+import { access, realpath } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -12,7 +11,7 @@ import { createDependencies } from './dependencies.js';
 import { createWorkflowPort } from './workflow-port.js';
 import { createSeedvaultPort } from './seedvault-port.js';
 export async function resourceRoot(explicit?: string): Promise<string> {
-  if (explicit) return resolve(explicit);
+  if (explicit) return realpath(resolve(explicit));
   const candidates = [
     process.env['PXV_RESOURCE_ROOT'],
     resolve(dirname(fileURLToPath(import.meta.url)), '../../..'),
@@ -26,29 +25,40 @@ export async function resourceRoot(explicit?: string): Promise<string> {
         () => false,
       ))
     )
-      return path;
+      return realpath(path);
   throw new Error('Installed product resources are missing');
 }
 
 export async function productAt(root: string): Promise<ProductDescriptor> {
   return loadProduct(join(root, 'product.json'));
 }
+async function verifyExtensions(
+  project: Awaited<ReturnType<typeof loadProject>>,
+  skip: boolean,
+): Promise<void> {
+  if (skip || !project.config.extensions.length) return;
+  if (project.product.features?.extensions === false)
+    throw new Error(
+      'This core product cannot execute projects with extensions; remove them explicitly or use an extension-enabled product',
+    );
+  const { ExtensionManager } = await import('@pxv/extensions');
+  const manager = new ExtensionManager({
+    installRoot:
+      process.env['PXV_EXTENSION_ROOT'] ??
+      join(process.env['XDG_DATA_HOME'] ?? join(homedir(), '.local/share'), 'pxv/extensions'),
+  });
+  for (const extension of project.config.extensions) await manager.inspect(extension);
+}
 
 export async function application(
   root: string,
   resources: string,
   readOnly = false,
+  recovery = false,
 ): Promise<{ engine: WorkflowEngine; store: SqliteStore; runner: CommandRunner; android: AndroidAdapter }> {
   const product = await productAt(resources);
   const project = await loadProject(root, product, resources);
-  if (!readOnly) {
-    const manager = new ExtensionManager({
-      installRoot:
-        process.env['PXV_EXTENSION_ROOT'] ??
-        join(process.env['XDG_DATA_HOME'] ?? join(homedir(), '.local/share'), 'pxv/extensions'),
-    });
-    for (const extension of project.config.extensions) await manager.inspect(extension);
-  }
+  await verifyExtensions(project, readOnly || recovery);
   const database = join(project.root, 'state/pxv.sqlite3');
   await access(database); // Only project init may create a database.
   const store = await SqliteStore.open(database, { readOnly });
@@ -60,7 +70,7 @@ export async function application(
         project,
         store,
         port: createWorkflowPort(deps),
-        seedvault: createSeedvaultPort(deps),
+        ...(product.features?.seedvault === false ? {} : { seedvault: createSeedvaultPort(deps) }),
         artifacts: createArtifactPort(deps),
         controlRoot: hostControlRoot(),
       }),

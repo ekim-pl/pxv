@@ -137,6 +137,51 @@ describe('MCP/CLI backend ports and detached execution', () => {
       await expect(action()).rejects.toThrow('disabled');
   });
 
+  it('opens retained cancellation and inspected recovery without loading optional extension code', async () => {
+    const backend = live();
+    const recover = vi
+      .spyOn(engine, 'recover')
+      .mockResolvedValue({ operationId: 'retained-run', resolved: 0 });
+    await store.set('runs', 'retained-run', {
+      id: 'retained-run',
+      planId: 'retained-plan',
+      status: 'running',
+      createdAt: '2026-10-17T10:00:00Z',
+      operator: 'Operator',
+    });
+    await backend.cancelRun('retained-run');
+    expect(Context.application).toHaveBeenLastCalledWith(engine.project.root, resourceRoot, false, true);
+    expect(await store.get('cancellation', 'retained-run')).toEqual({ requested: true });
+    await backend.recoverDevice(device.assetId, 'retained-run', true);
+    expect(Context.application).toHaveBeenLastCalledWith(engine.project.root, resourceRoot, false, true);
+    expect(recover).toHaveBeenCalledWith(expect.anything(), 'retained-run');
+  });
+
+  it('refuses optional extension mutations in the core product before loading trusted code', async () => {
+    const core = new WorkflowEngine({
+      project: {
+        ...engine.project,
+        product: { ...engine.project.product, features: { extensions: false, seedvault: false } },
+      },
+      store,
+      port: engine.port,
+      artifacts: engine.artifacts,
+      controlRoot: engine.controlRoot,
+    });
+    const install = vi.spyOn(ExtensionManager.prototype, 'install');
+    const backend = agentBackend(core, resourceRoot, 'launcher.js', true);
+    const actions = [
+      () => backend.extensionInstall({ tarball: '/not-read.tgz' }, true),
+      () => backend.extensionUpdate('private', { package: '@private/pkg', version: '1.0.0' }, true),
+      () => backend.extensionPolicy('private', 'policy.json', true),
+      () => backend.extensionAdapter('all', 'private', 'adapter.js', {}),
+      () => backend.extensionCommand('all', 'private', 'command', {}),
+    ];
+    for (const action of actions) await expect(action()).rejects.toThrow('outside this core product');
+    expect(install).not.toHaveBeenCalled();
+    expect(await store.entries('runs')).toEqual([]);
+  });
+
   it('uses shared engine gates for checks, handoff, custody, lifecycle and typed recovery', async () => {
     const backend = live();
     const prepared = await engine.prepare({ device, transport: { kind: 'usb', serial: 'PIXEL1' } });

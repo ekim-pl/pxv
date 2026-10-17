@@ -31,10 +31,9 @@ async function sources(): Promise<void> {
 async function editionSources(): Promise<void> {
   await sources();
   for (const [name, source] of [
-    ['product-en.md', '# Product edition'],
     ['operator-en.md', '# Operator edition'],
     ['user-en.md', '# User edition'],
-    ['b2b-pl.md', '<!-- print:opener -->\n## Flota firmowa'],
+    ['user-pl.md', '## Codzienne użytkowanie'],
   ] as const)
     await writeFile(join(directory, 'guides/source/markdown', name), source);
 }
@@ -66,6 +65,9 @@ function browserFixture(destination: string, pdfFailure = false, wrongPrintSize 
         path: string;
         width?: string;
         preferCSSPageSize?: boolean;
+        displayHeaderFooter?: boolean;
+        headerTemplate?: string;
+        footerTemplate?: string;
         margin?: number | { top?: string; right?: string; bottom?: string; left?: string };
       }) => {
         if (pdfFailure) throw new Error('Browser PDF failure');
@@ -113,10 +115,10 @@ describe('public documentation generation', () => {
     expect(html).toContain('src="assets/logo.svg"');
     expect(html).toContain('href="https://example.org/"');
     expect(html).not.toContain('href="../../secret"');
-    expect(html).toContain('Qualification draft');
-    expect(html).toContain('@page pxvoffice{size:A4;margin:15mm 18mm 25mm}');
+    expect(html).toContain('General instructions.');
+    expect(html).toContain('@page pxvoffice{size:A4;margin:15mm 18mm 20mm}');
     expect(html).toContain('@page pxvprint');
-    expect(await readFile(outputs[1] ?? '', 'utf8')).toContain('Wersja do kwalifikacji');
+    expect(await readFile(outputs[1] ?? '', 'utf8')).toContain('Instrukcja ogólna.');
     expect(await readFile(join(directory, 'output/assets/logo.svg'), 'utf8')).toBe('<svg/>');
   });
   it('uses a local browser with JavaScript disabled and blocks network or outside-directory resources', async () => {
@@ -149,6 +151,13 @@ describe('public documentation generation', () => {
     expect(fixture.context.close).toHaveBeenCalledOnce();
     expect(fixture.browser.close).toHaveBeenCalledOnce();
     expect(fixture.page.pdf).toHaveBeenCalledTimes(4);
+    for (const [options] of vi.mocked(fixture.page.pdf).mock.calls) {
+      expect(options.displayHeaderFooter).toBe(true);
+      expect(options.headerTemplate).toBe('<span></span>');
+      expect(options.footerTemplate).toContain('pxv Community');
+      expect(options.footerTemplate).toContain('class="pageNumber"');
+      expect(options.footerTemplate).toContain('class="totalPages"');
+    }
     const officeOptions = vi.mocked(fixture.page.pdf).mock.calls.filter(([options]) => !options.width);
     expect(officeOptions).toHaveLength(2);
     expect(officeOptions.every(([options]) => options.preferCSSPageSize)).toBe(true);
@@ -205,7 +214,7 @@ describe('public documentation generation', () => {
     }
   });
 
-  it('renders every named guide kind with a custom local font, logo and an untitled Polish B2B source', async () => {
+  it('renders operator and user editions with a custom local font, logo and an untitled Polish source', async () => {
     await editionSources();
     await writeFile(join(directory, 'guides/assets/font.ttf'), 'fixture font asset');
     await writeFile(
@@ -220,17 +229,24 @@ describe('public documentation generation', () => {
       }),
     );
     const outputs = await buildDocumentation(directory, join(directory, 'output'));
-    expect(outputs).toHaveLength(6);
-    for (const kind of ['product', 'operator', 'user', 'b2b'])
-      expect(
-        await readFile(join(directory, `output/${kind}-${kind === 'b2b' ? 'pl' : 'en'}.html`), 'utf8'),
-      ).toContain(`cover-${kind}.png`);
-    const polish = await readFile(join(directory, 'output/b2b-pl.html'), 'utf8');
+    expect(outputs).toHaveLength(5);
+    for (const kind of ['operator', 'user'])
+      expect(await readFile(join(directory, `output/${kind}-en.html`), 'utf8')).toContain(
+        `cover-${kind}.png`,
+      );
+    const polish = await readFile(join(directory, 'output/user-pl.html'), 'utf8');
     expect(polish).toContain('<html lang="pl">');
+    expect(polish).toContain('<body data-guide-kind="user">');
+    expect(polish).toContain('body[data-guide-kind="user"] .guide-cover{min-height:50mm}');
     expect(polish).toContain('<title>pxv Community - pxv Community</title>');
     expect(polish).toContain('class="cover-logo" src="assets/logo.svg"');
     expect(polish).toContain("@font-face{font-family:'Pxv Display'");
-    expect(polish).toContain('<h2 class="print-opener">Flota firmowa</h2>');
+    expect(polish).toContain('<h2>Codzienne użytkowanie</h2>');
+    expect(polish).not.toContain('print-opener');
+    const index = await readFile(join(directory, 'output/index.html'), 'utf8');
+    expect(index).toContain('Operator (EN)');
+    expect(index).toContain('User (PL)');
+    expect(index).not.toContain('Business fleet');
   });
 
   it('removes a print PDF whose renderer page size falls outside the required bleed format', async () => {

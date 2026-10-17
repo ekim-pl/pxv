@@ -11,7 +11,7 @@ import { seedvaultCommand } from '../../packages/cli/src/seedvault-command.js';
 import { createSeedvaultPort } from '../../packages/cli/src/seedvault-port.js';
 import { createWorkflowPort } from '../../packages/cli/src/workflow-port.js';
 import type { ApplicationDependencies } from '../../packages/cli/src/dependencies.js';
-import { device } from '../contracts/fixtures.js';
+import { device, product } from '../contracts/fixtures.js';
 type SeedvaultExecutionContext = Parameters<SeedvaultWorkflowPort['executeProfile']>[3];
 
 const mocks = vi.hoisted(() => ({
@@ -55,6 +55,7 @@ function context(command: string, values: Record<string, unknown> = {}) {
   const targets = vi.fn(() => [target]);
   const confirm = vi.fn().mockResolvedValue(true);
   const ctx = {
+    product,
     section: 'seedvault',
     command,
     values,
@@ -89,6 +90,16 @@ afterEach(async () => {
 });
 
 describe('Seedvault command routing', () => {
+  it('keeps historical reports accessible while refusing new optional recovery operations', async () => {
+    const backup = context('backup');
+    backup.ctx.product = { ...product, features: { extensions: false, seedvault: false } };
+    await expect(seedvaultCommand(backup.ctx)).rejects.toThrow('optional experimental recovery');
+    expect(backup.engine.prepareSeedvault).not.toHaveBeenCalled();
+    const report = context('report', { run: 'retained-run' });
+    report.ctx.product = backup.ctx.product;
+    expect(await seedvaultCommand(report.ctx)).toBe(0);
+    expect(report.engine.seedvaultReport).toHaveBeenCalledWith('retained-run');
+  });
   it('reports exact runs without requiring device selection and inspects a selected device', async () => {
     const report = context('report', { run: 'recorded-run' });
     expect(await seedvaultCommand(report.ctx)).toBe(0);

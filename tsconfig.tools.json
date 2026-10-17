@@ -8,5 +8,5 @@
     "allowImportingTsExtensions": true,
     "rootDir": "."
   },
-  "include": ["tools/**/*.mjs", "guides/source/rebuild.mjs", "eslint.config.mjs"]
+  "include": ["tools/**/*.mjs", "eslint.config.mjs"]
 }

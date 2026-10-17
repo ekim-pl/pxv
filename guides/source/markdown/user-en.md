@@ -1,110 +1,102 @@
-# Recipient handbook
+# Your prepared Pixel: recipient guide
 
-This edition describes pxv 0.1.0. It is a general guide, not a certificate for a phone. Only the accepted project record identifies the exact policy, software, checks and custody outcome. Release qualification and physical acceptance must be retained separately.
+This guide explains how to receive and use a Pixel prepared with GrapheneOS and several Android user profiles. Your handoff packet describes the profiles and checks for **your phone**. App names and screen locations depend on the reviewed configuration and installed build.
 
-![Private setup and support](../../assets/diagrams/recipient-en.svg)
+**Before daily use:** confirm the phone's label, learn which profile serves each purpose, verify your ordinary locks, complete private app setup, and receive the support and recovery instructions. Never try a destructive code or notification key to check that it works.
 
-## Your first session
+## 1. Check what you are receiving
 
-Your phone follows a policy selected by your provider. Profile names, allowed applications and available services vary; five profiles are not mandatory. Keep your provider's support details and the device's public asset label.
+With the operator, confirm the following:
 
-1. Review which profile is intended for each activity and how to switch users.
-2. Set or replace and verify the normal screen lock privately for every selected profile. Do not give the operator passwords, MFA secrets, recovery words or the final lock code.
-3. Complete the agreed app/account setup, then confirm the final language in each profile.
-4. If your policy includes a duress credential, configure it only after the normal credential and language steps. Never test destructive duress activation.
-5. Check ordinary calling/network/app behavior with the operator, including what happens when the approved network path fails.
-6. Confirm a representative backup restore and understand where your recovery material is stored outside the phone.
-7. Review the handoff record, verify temporary helpers are removed and physically confirm debugging is off before accepting custody.
+1. The physical phone matches the asset label on your handoff packet.
+2. Each promised profile exists, opens and has the intended apps and language.
+3. You know how to unlock each profile with its ordinary PIN or password.
+4. Required app accounts, VPN connections and recovery methods have been checked, or their remaining limitations are written down.
+5. USB debugging and Wireless debugging are physically off after preparation.
+6. You have the operator's actual support contact, the agreed backup location and a way to recover access without this phone.
 
-A ready-for-handoff record is not the same as a completed custody transfer. Ask the operator to explain every unresolved item. Do not accept a device based only on a screenshot, a successful install message or a printed generic guide.
+Raise missing apps, broken connections or unexpected data before accepting the phone. A generic guide or an old test result is not proof that your phone passed its checks. The operator records finalization and your custody confirmation separately.
 
-Keep the phone updated through the agreed maintenance process and contact support before changing system/profile/network policy. If the phone is lost, use your provider's loss procedure and revoke accounts/tokens through their respective services. See [full user guide](../../../docs/USER_GUIDE.md) and [FAQ](../../../docs/USER_FAQ.md).
+## 2. Use the intended profile
 
-## What the phone provides
+Open the Android user switcher and select the profile named in your handoff packet. Ask the operator to demonstrate switching, locking and ending a secondary-user session on this exact build.
 
-Your provider chooses a policy for your intended use. It can divide activities into Android users/profiles, install pinned applications and require specific network or backup settings. Application code updates can affect several users even when their data is separated. Ask which tasks belong in each profile and which changes require a maintenance visit.
+Keep personal, work, test or other agreed activities in their intended profiles. App data and account setup belong to the profile where you entered them. Installing an app in several profiles does not sign those profiles into the same account automatically.
 
-A hardened configuration reduces particular risks; it cannot guarantee anonymity, protection against every attacker or recovery of data that was never backed up. Certification applies only to the exact pack, software build and checks in your accepted handoff record. Community starter packs are demonstrations of structure.
+App package versions are shared by the phone, while user data and many settings are separate. An update or package-level change can affect several profiles. Ask for support before removing a profile, replacing a managed app or changing a required VPN setting.
 
-## Private setup and credentials
+A visible profile name is not a durable account identifier. Android user numbers can be reused after deletion; support also tracks the user's serial number. Do not recreate a missing profile under the same name and assume its old record still applies.
 
-Set the normal screen lock yourself while the operator gives you privacy. If provisioning supplied an initial PIN or password, privately verify an ordinary unlock in every selected profile and replace the initial value if it is not your intended final credential. Enter accounts, MFA and recovery information on the phone or through the service's approved recovery process. Do not put these values in an operator's notes, a chat, a guide annotation, a repository or an unapproved photo.
+## 3. Complete private setup in the right order
 
-When setup hands you a manual import task, it does not leave a temporary file for later selection. Ask for the complete approved private transfer and import procedure. Keep private configuration out of support chats and project attachments.
+The operator may pause preparation while you work privately on the phone. Follow the named checkpoint rather than completing unrelated steps at random.
 
-Finish normal credentials before final language selection and any optional duress configuration. GrapheneOS uses one owner-managed duress PIN/password pair across the device ([official feature description](https://grapheneos.org/features#duress)). If you change the owner lock before automatic duress setup, privately update the referenced owner value using the approved private input procedure before the run resumes, or complete duress manually under a new reviewed plan. Do not disclose the value to the operator or put it in a note or chat. The owner value used for duress must be the current ordinary unlock credential.
+1. Complete ordinary app configuration when requested: sign-ins, imports, MFA and Android consent. Check the correct profile before entering anything.
+2. Set or verify the **ordinary screen lock in every intended profile**. If an initial PIN/password was supplied, privately verify it or replace it as agreed. Try an ordinary lock/unlock with the correct credential.
+3. Apply and check the final language in each profile after normal locks have been verified.
+4. Complete optional GrapheneOS duress setup only after normal locks and language. Both duress values must differ from every actual ordinary profile PIN/password, including values you changed privately.
 
-Duress is an optional policy capability with potentially destructive consequences. Never enter a duress credential to see whether it works. Ask your provider how to avoid confusing ordinary and duress credentials and how to handle replacement or retirement safely. The [official GrapheneOS usage guide](https://grapheneos.org/usage) is a primary reference for device features; follow the exact instructions for your installed build.
+Never use a duress value for an ordinary unlock or authentication prompt. Do not activate destructive duress as an acceptance test. If you are unsure which credential a screen requests, stop and ask before entering it.
 
-## Language for each profile
+Initial defaults are only initialization values. A successful setup command does not prove that you can unlock the profile, and changing a value on the phone does not automatically update the support registry.
 
-Your provider can set a different initial language and region for every profile, including the owner: for example, owner `en-US`, work `pl-PL` and travel `de-DE`. After verifying ordinary screen locks and before optional duress setup, confirm the intended language in each profile and complete any pending manual language step there. These defaults do not set your time zone. The EN/PL language of this guide and your handoff document is selected separately.
+Tell the operator that the named step is complete without speaking, displaying or writing secret values into public notes. If authorized ongoing support retains your current credentials, transfer the required update through the agreed private process described below.
 
-## Profiles and applications
+## 4. Configure apps and VPN in each profile
 
-Learn the owner/secondary-profile layout actually delivered to you. Different users can have different apps and settings. Restarting or ending a user's session may affect which apps run in the background. Follow your provider's demonstrated procedure instead of assuming another Android model's menus are identical.
+Follow each app's supported sign-in, configuration import and recovery process. Use the approved private transfer method for sensitive imports. If automated setup is unsupported, complete the full setup privately; do not look for an expired temporary file left by an earlier attempt.
 
-Install or remove applications only through the agreed policy. A new source, signer or version may invalidate qualification. Report unexpected permissions, accessibility prompts, administrator requests or app behavior before accepting them.
+A VPN app needs its own configuration and Android consent in every profile where it is required. Complete that setup before the operator enables always-on VPN or blocking connections without VPN. Check the intended connection and apps afterward.
 
-## Network and backup
+If networking stops, check that you are in the intended profile, the expected VPN app is configured and the agreed network is available. Report the profile, app and visible error without credentials. Do not remove the VPN or disable its protection merely to make a test pass.
 
-Understand which VPN/routing arrangement applies to each profile. A VPN icon does not establish all traffic behavior. Ask for a demonstration of the intended route and agreed failure behavior for your actual applications. If connectivity fails, use support's recovery procedure; switching settings at random may change the policy.
+Successful helper checks cover only their recorded scope. They do not promise that every app's traffic has the same route. Keep limitations in your handoff packet and ask before changing routing, backup or permission settings.
 
-Know what is backed up, where it is kept, how it is encrypted and what a successful restore looked like. Keep recovery material outside the phone. A backup-enabled switch is not proof of a usable backup. Test representative restoration before relying on a new device or a new destination.
+## 5. Distinguish Session, Oblivion and duress
 
-## Acceptance and everyday use
+A **Session messenger ID** identifies a messenger account. It is not the Android profile ID, Android user number, phone number or hardware serial. Confirm which Session account belongs to each profile before sharing its ID.
 
-Before custody transfer, verify the asset label, chosen language in every profile, required profiles, expected apps, contact/support information and agreed live checks. Confirm temporary setup/probe helpers are gone and debugging toggles are off. Retain the EN or PL handoff document; it deliberately excludes device credentials and recovery values.
+An **Oblivion notification-wipe key** belongs to an app installation in a particular Android profile. The requested behavior is user-described as wiping the **whole phone** when the key is received in a notification. That behavior is not qualified for a reviewed exact app/build by this project.
 
-Arrange maintenance before policy changes, replacing network services or moving recovery destinations. Maintenance produces new evidence and a renewed handoff. If the device is lost, tell support promptly and revoke affected services; a local loss record does not remotely wipe it. At retirement, follow a separately authorized erasure and custody process and retain confirmation.
+Treat an actual Oblivion key as destructive secret material. Keep it separate from the GrapheneOS duress PIN/password. Do not send it during preparation, acceptance tests or ordinary support, or include it in screenshots, logs or public exports. Intentional erasure needs its own agreed process. Registry access does not send a notification or activate erasure.
 
+If you do not understand an erasure feature or its intended scope, leave configuration to the agreed supervised process. There is no need to trigger real erasure to receive or check this phone.
 
-## Questions to resolve before accepting the device
+## 6. Understand the retained support record
 
-Ask your provider to write down the public asset label, support contact, intended profile for each activity, approved update process, backup destination and agreed failure procedure. These are operational details, not passwords. A generic printed guide cannot tell you which exact software and policy were installed: retain your device's accepted handoff document.
+For authorized ongoing support, the operator can retain last-confirmed credentials in a **local encrypted registry**. Agree who may unlock it, what is retained, how changes are reported and how private copies are handled.
 
-Practise an ordinary unlock, a restart, switching the intended users, launching your essential applications and obtaining support. Demonstrate ordinary network use and the agreed failure behavior with the operator. Check that you can recover representative data from your backup without exposing recovery material. Do not activate a destructive duress function as a demonstration.
+The record can contain:
 
-If a required application or account is not ready, ask the operator to record the unresolved item. A pending setup should not be described as a completed custody transfer. The right response may be a follow-up visit or a policy decision rather than an improvised change.
+- Phone identity: asset label, hardware serial, Pixel codename and phone number.
+- Device-wide GrapheneOS duress PIN/password, separate from Oblivion.
+- Each profile's PIN/password, Oblivion key, Session messenger ID, Proton VPN username/password and optional phone number.
+- Stable Android profile identities and encrypted historical revisions.
 
-## Everyday checklist
+`current` means a value was last explicitly confirmed by the operator; it is not a continuous reading from your phone. `initial`, `unknown` and `stale` are distinct states. After changing a retained credential or account on the phone, arrange a private registry update so support does not rely on the old value.
 
-- Keep the phone under your control and use its normal lock.
-- Follow the approved update and installation process.
-- Notice unexpected permission, administrator or accessibility requests.
-- Check that important backups continue and keep recovery material separately.
-- Arrange support before changing profile, VPN, account or recovery arrangements.
-- Report loss promptly and use the service providers' account-revocation procedures.
+Flashing, profile creation, certain initial credential writes and maintenance/lifecycle changes can mark affected records stale. Previous revisions remain encrypted history. Do not use an old retrieved value as evidence that it still unlocks the phone.
 
-## Questions and answers
+Ordinary reports and handoff exports omit registry values. A private retrieval deliberately creates a plaintext file that needs protection and cleanup. Registry backups and unlock material need separate protection; the operator can rotate the encryption passphrase. See [registry details](../../../docs/PHONE_REGISTRY.md) and [security boundaries](../../../SECURITY.md).
 
-**Do all phones have five profiles?** No. The product's policy determines the layout. The repository includes owner-only, five-profile and arbitrary-layout starters.
+## 7. Keep recoverable copies of your data
 
-**Does a successful command mean the phone is ready?** No. Runs can be pending or need inspection, and a stored report is not a fresh live check. Acceptance needs the policy's measurements, human checks, helper cleanup, debugging shutdown and custody record.
+Agree which data is covered in **each profile**, where backups are stored, who has recovery material and what is excluded. App installation, a backup-enabled setting or a success notification is not a demonstrated restore.
 
-**Should I tell the operator my final password?** No. Enter final lock/account/MFA/recovery material privately. Support should not need those values in project state, logs or screenshots.
+Use the exact OS/app-supported backup or export method chosen with the operator. Keep recovery access available when this phone, its number or its MFA is unavailable. Do not assume the owner's backup includes every secondary profile or app.
 
-**Can I test my duress code?** Do not test destructive duress activation. It is an optional sensitive feature; get the exact approved procedure from your provider and keep it separate from normal unlock behavior.
+Ask for a representative restore check on an authorized separate test device when available. Never erase your primary phone, delete a profile or unlock its bootloader just to test a backup. Read the agreed exclusions before depending on recovery.
 
-**Is a VPN icon enough?** No. Routing and failure behavior must be checked for the intended applications and profiles. A probe helper's result only covers its reviewed scope.
+## 8. Request support without exposing secrets
 
-**Are backups guaranteed?** No. A configured transport is not a successful restoration. Agree a representative restore test and protect recovery material outside the phone.
+Report your asset label, affected profile, app, time and a description of the problem. Send secrets only through the agreed private registry/update process; ordinary support notes and screenshots should exclude them.
 
-**Can I change the policy or install any app?** Ask your provider. OS/app/policy changes can invalidate the accepted evidence and affect more than one user.
+Contact the operator before repair, profile deletion, factory reset, OS reinstallation or transfer to another person. These changes require new identity checks and can invalidate the previous handoff. If the phone is lost, use the agreed loss procedure and review affected service accounts; possession of a registry record does not recover the missing phone.
 
-**Does Community require a license server?** No. Community is free under MIT. Commercial extensions are distributed through private repositories/registries and have no engine runtime activation check.
+During maintenance, temporary debugging may be needed under supervision. At the end, check both debugging switches are off again, review changed credentials and receive the new handoff record where required.
 
-**Can support remotely manage or wipe my phone?** The Community local toolkit does not itself provide remote MDM. Any separately deployed integration must be explained and authorized as part of the product's policy.
+## Further instructions and qualification
 
-**What if I lose the phone?** Follow the provider's loss process and revoke accounts/tokens with the service owners. Do not assume a local loss record erased the device.
+The [operator guide](operator-en.md) covers commands and acceptance. Technical references include [host dependencies](../../../docs/HOST_DEPENDENCIES.md), [policy format](../../../docs/POLICY_FORMAT.md), [command reference](../../../docs/COMMAND_REFERENCE.md), [backup and recovery](../../../docs/CANARY_BACKUP_RECOVERY.md), [automation](../../../docs/AUTOMATION.md) and [Docker](../../../docs/DOCKER.md).
 
-
-## Return, replacement and retirement
-
-At a maintenance visit, the operator gathers fresh observations and renews the handoff. If a new phone replaces this one, confirm that data restoration and the new device's acceptance are complete before disposing of the old phone. Follow an explicitly authorized erasure procedure and keep the erasure/custody confirmation. A retirement record alone does not wipe hardware.
-
-Never send a lock code, password, MFA seed or recovery phrase to support through a project attachment or chat. Ask for a recovery process that preserves your privacy.
-
-## Scope of this edition
-
-pxv 0.1.0 is undergoing release qualification. Automated tests, artifact verification and container checks do not certify a policy pack, UI recipe, recipient workflow or physical phone. Verified GrapheneOS emulator evidence, exact-build EN/PL walkthroughs and a physical Pixel 8a acceptance record must be retained before making a deployment claim. A stock Google APIs emulator is useful for compatibility tests and cannot supply GrapheneOS provenance.
+Read the [verification status](../../../docs/VERIFICATION.md) for the limits of retained evidence. An offline rehearsal or historical phone result does not qualify the current configuration. Without a physical canary, live flashing, app/VPN behavior and recovery remain unqualified until actually checked on an authorized target.

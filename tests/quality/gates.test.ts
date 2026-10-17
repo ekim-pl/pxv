@@ -72,9 +72,9 @@ test('architecture gate rejects module cycles, forbidden imports and undeclared 
   expect(result.errors.join('\n')).toContain('engine cannot import');
 });
 
-test('documentation gate checks guide instructions and acceptance documentation', async () => {
+test('documentation gate checks guide, optional tooling and acceptance documentation', async () => {
   const root = await scratch();
-  for (const path of ['docs', 'guides/source/markdown', 'policy-packs', 'tests/acceptance'])
+  for (const path of ['docs', 'guides/source/markdown', 'policy-packs', 'tests/acceptance', 'tools/optional'])
     await mkdir(join(root, path), { recursive: true });
   for (const path of [
     'README.md',
@@ -88,6 +88,11 @@ test('documentation gate checks guide instructions and acceptance documentation'
   const script = fileURLToPath(new URL('../../tools/check-docs.mjs', import.meta.url));
   const run = () => spawnSync(process.execPath, [script], { cwd: root, encoding: 'utf8' });
   expect(run().status).toBe(0);
+  await writeFile(join(root, 'tools/optional/README.md'), '[Missing source tool](missing.mjs)\n');
+  const brokenOptional = run();
+  expect(brokenOptional.status).toBe(1);
+  expect(brokenOptional.stderr).toContain('tools/optional/README.md: missing missing.mjs');
+  await writeFile(join(root, 'tools/optional/README.md'), '# Optional source tooling\n');
   await writeFile(
     join(root, 'guides/README.md'),
     '`![Example](../../outside.svg)`\n\n```md\n[Example](missing.md)\n```\n',
@@ -104,6 +109,17 @@ test('documentation gate checks guide instructions and acceptance documentation'
   const obsoleteCommand = run();
   expect(obsoleteCommand.status).toBe(1);
   expect(obsoleteCommand.stderr).toContain('tests/acceptance/README.md: obsolete application command');
+  await writeFile(join(root, 'tests/acceptance/README.md'), '# Acceptance\n');
+  await writeFile(join(root, 'docs/guide.md'), '# Zażółć\n\n## Repeated\n\n## Repeated\n');
+  await writeFile(
+    join(root, 'guides/README.md'),
+    '[Known](../docs/guide.md#zażółć)\n\n[Repeated](../docs/guide.md#repeated-1)\n',
+  );
+  expect(run().status).toBe(0);
+  await writeFile(join(root, 'guides/README.md'), '# Guides\n\n[Stale](#removed-heading)\n');
+  const brokenAnchor = run();
+  expect(brokenAnchor.status).toBe(1);
+  expect(brokenAnchor.stderr).toContain('missing heading #removed-heading');
 });
 
 test('build commands enforce bounded output, deadlines and redacted failure diagnostics', async () => {

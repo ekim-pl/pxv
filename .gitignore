@@ -41,3 +41,5 @@ native/supervisor/target/
 
 # Generated guide PDFs, including customizable output directories
 *.pdf
+/output/pdf/
+/tmp/pdfs/

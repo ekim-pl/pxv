@@ -49,8 +49,9 @@ describe('guides rebuild command', () => {
     expect(calls).toEqual([
       { command: 'pnpm', args: ['build'], cwd: process.cwd() },
       {
-        command: `${process.cwd()}/guides/rebuild.sh`,
+        command: process.execPath,
         args: [
+          `${process.cwd()}/tools/optional/publishing/rebuild.mjs`,
           '--output-dir',
           '/tmp/guide-output',
           '--chromium',
@@ -75,7 +76,7 @@ describe('guides rebuild command', () => {
       },
     });
     expect(result).toBe(0);
-    expect(calls).toEqual(['pnpm', 'corepack', `${process.cwd()}/guides/rebuild.sh`]);
+    expect(calls).toEqual(['pnpm', 'corepack', process.execPath]);
   });
 
   it('stops on a failed build instead of running the renderer', async () => {
@@ -97,9 +98,9 @@ describe('guides rebuild command', () => {
     try {
       const context = await parseCli(['guides', 'rebuild', '--html-only', '--output-dir', outputRoot], io);
       expect(await guidesRebuildCommand(context)).toBe(0);
-      await access(join(outputRoot, 'b2b-en.html'));
-      await access(join(outputRoot, 'b2b-pl.html'));
-      expect(await readFile(join(outputRoot, 'qa/manifest.json'), 'utf8')).toContain('"outputCount": 8');
+      for (const edition of ['operator-en', 'operator-pl', 'user-en', 'user-pl'])
+        await access(join(outputRoot, `${edition}.html`));
+      expect(await readFile(join(outputRoot, 'qa/manifest.json'), 'utf8')).toContain('"outputCount": 4');
     } finally {
       await rm(outputRoot, { recursive: true, force: true });
     }

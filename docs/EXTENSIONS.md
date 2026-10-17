@@ -1,5 +1,12 @@
 # Extensions and authoring SDK
 
+This is an optional compatibility subsystem. The default Community descriptor sets
+`features.extensions: false`: listing, inspection, guide reading and explicit removal
+remain available, while installation and invocation are refused. Use an explicitly
+extension-enabled product descriptor for the workflow below. Changing product
+identity requires fresh locks and reviews; existing extension references are never
+silently ignored. See [optional tooling](../tools/optional/README.md).
+
 Extensions provide commands, declared policy packs, guides and integration adapters. Community does not contact an activation server. A commercial publisher keeps source private and distributes an exact compiled bundle through an authenticated npm-compatible registry. Operators can also install local tarballs for testing.
 
 ## Operator workflow

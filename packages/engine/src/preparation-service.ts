@@ -7,6 +7,7 @@ import {
   profileLocale,
   validateAction,
   validateArtifact,
+  osPolicyForTarget,
 } from '@pxv/contracts';
 import type {
   Action,
@@ -44,6 +45,19 @@ function profileSetupAction(
 ): action is Extract<Action, { kind: 'create-user' | 'default-credential' | 'default-duress' }> {
   return ['create-user', 'default-credential', 'default-duress'].includes(action.kind);
 }
+function provisioningStage(action: Action): number {
+  const stages: Partial<Record<Action['kind'], number>> = {
+    'create-user': 0,
+    'install-apk': 1,
+    setting: 2,
+    permission: 2,
+    recipe: 3,
+    manual: 3,
+    vpn: 4,
+    'network-probe': 5,
+  };
+  return stages[action.kind] ?? 6;
+}
 export class PreparationService implements Preparation {
   constructor(
     readonly project: ProjectContext,
@@ -73,7 +87,10 @@ export class PreparationService implements Preparation {
     const actions = contributions.map(validateAction);
     const os = actions.filter((action) => action.kind === 'install-os');
     if (os.length) {
-      if (actions.length !== 1 || digest(os[0]?.os) !== digest(this.project.policy.os ?? null))
+      if (
+        actions.length !== 1 ||
+        digest(os[0]?.os) !== digest(osPolicyForTarget(this.project.policy, target.device.codename) ?? null)
+      )
         throw new Error('OS extension actions must be a separate operation using the selected policy');
       return this.prepare(target, 'install-os', signal);
     }
@@ -151,7 +168,7 @@ export class PreparationService implements Preparation {
     let actions: Action[];
     let osSnapshot: OsSnapshot | undefined;
     if (operation === 'install-os') {
-      osSnapshot = await this.prepareOs(id, signal);
+      osSnapshot = await this.prepareOs(target, id, signal);
       actions = [{ kind: 'install-os', os: osSnapshot.policy }];
     } else if (contributions) {
       actions = [];
@@ -168,6 +185,7 @@ export class PreparationService implements Preparation {
       baseline,
       actions,
       sharedEffects,
+      ...(this.port.capabilities ? { capabilities: { ...this.port.capabilities } } : {}),
       ...(lifecycleGeneration ? { lifecycleGeneration } : {}),
       ...(osSnapshot ? { osSnapshot } : {}),
     });
@@ -194,7 +212,11 @@ export class PreparationService implements Preparation {
     signal?: AbortSignal,
   ): Promise<DeviceObservation> {
     if (operation === 'install-os') {
-      if (target.device.kind !== 'pixel' || target.transport.kind !== 'usb' || !this.project.policy.os)
+      if (
+        target.device.kind !== 'pixel' ||
+        target.transport.kind !== 'usb' ||
+        !osPolicyForTarget(this.project.policy, target.device.codename)
+      )
         throw new Error('OS installation requires an enrolled USB Pixel and pinned OS policy');
       return {
         schemaVersion: 1,
@@ -213,8 +235,8 @@ export class PreparationService implements Preparation {
       throw new Error('Owner display name differs; update policy or rename on device and prepare again');
     return baseline;
   }
-  private async prepareOs(id: string, signal?: AbortSignal): Promise<OsSnapshot> {
-    const os = this.project.policy.os;
+  private async prepareOs(target: SelectedTarget, id: string, signal?: AbortSignal): Promise<OsSnapshot> {
+    const os = osPolicyForTarget(this.project.policy, target.device.codename);
     if (!os) throw new Error('OS policy is missing');
     if (!this.artifacts.snapshotOs) throw new Error('Verified OS snapshot service is required');
     return this.artifacts.snapshotOs(os, join(this.project.root, 'state/plans', id, 'os'), signal);
@@ -291,6 +313,7 @@ export class PreparationService implements Preparation {
           ...(await this.prepareCapabilities(target, id, profile, signal)),
         );
     }
+    actions.sort((left, right) => provisioningStage(left) - provisioningStage(right));
     if (operation === 'provision') actions.push(...this.remainingSetupActions(baseline));
     return actions;
   }
@@ -334,9 +357,27 @@ export class PreparationService implements Preparation {
     for (const permission of profile.permissions)
       if (!observed?.permissions.some((value) => digest(value) === digest(permission)))
         actions.push({ kind: 'permission', profileId: profile.id, permission });
-    if (!observed || digest(observed.vpn) !== digest(profile.vpn))
+    if (!observed || digest(observed.vpn) !== digest(profile.vpn)) {
+      actions.push(...this.manualVpnSetup(profile));
       actions.push({ kind: 'vpn', profileId: profile.id, vpn: profile.vpn });
+    }
     return actions;
+  }
+  private manualVpnSetup(profile: ProfilePolicy): Action[] {
+    const vpn = profile.vpn;
+    if (
+      !vpn.packageId ||
+      (!vpn.alwaysOn && !vpn.lockdown) ||
+      profile.recipes?.some((recipe) => recipe.packageId === vpn.packageId)
+    )
+      return [];
+    return [
+      {
+        kind: 'manual',
+        capability: 'app_setup',
+        instructions: `Configure VPN app ${vpn.packageId} in profile ${profile.id} (${profile.name}) and grant its Android VPN consent privately before applying always-on VPN or lockdown. Verify the intended connection; do not record private configuration or credentials.`,
+      },
+    ];
   }
   private async prepareCapabilities(
     target: SelectedTarget,

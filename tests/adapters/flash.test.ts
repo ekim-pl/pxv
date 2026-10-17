@@ -152,6 +152,21 @@ describe('serial-bound authenticated OS flashing', () => {
 });
 
 describe('OS preflight and uncertain lock failures', () => {
+  it('refuses source tampering at the private staging boundary before unlocking or flashing', async () => {
+    const image = await fixture('changed-after-review');
+    await writeFile(image.path, 'changed after plan approval');
+    const mutations: string[][] = [];
+    const guarded: CommandRunner = {
+      run: (args, options) => {
+        if (options?.mutation) mutations.push(args);
+        return runner.run(args, options);
+      },
+    };
+    await expect(flashImage(guarded, fakeFastboot, target, image, { lease: {} })).rejects.toThrow(
+      /signature verification/,
+    );
+    expect(mutations).toHaveLength(0);
+  });
   it('rejects unsupported fastboot versions and malformed target observations before mutation', async () => {
     const image = await fixture('preflight-errors');
     for (const version of ['unrecognized', 'fastboot version 34.0.9', 'fastboot version 35.0.1']) {

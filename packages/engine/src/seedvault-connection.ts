@@ -33,6 +33,8 @@ export async function connectSeedvaultEndpoint(
   store: Store,
   signal?: AbortSignal,
 ): Promise<{ connected: boolean; endpoint: string }> {
+  if (project.product.features?.seedvault === false && !request.disconnect)
+    throw new Error('Seedvault is an optional experimental recovery module; new connections are disabled');
   if (target.device.kind !== 'pixel') throw new Error('Wireless Seedvault requires an enrolled Pixel');
   // Reuse the normal enrollment guard without inspecting Android or starting ADB.
   const enrolled = project.inventory.devices.find((device) => device.assetId === target.device.assetId);

@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { AdapterError, checked, packageId, sha256Pin, type CommandRunner } from './command.js';
 import { copySnapshot, download, fileDigest, regularFile, seal } from './files.js';
+import { cachedArtifact, cachePlanReference, linkCachedArtifact } from './artifact-cache.js';
 
 const MAX_APK_BYTES = 512 * 1024 * 1024;
 export interface ApkIdentity {
@@ -21,16 +22,19 @@ export interface ArtifactOptions {
   runner: CommandRunner;
   aapt?: string;
   apksigner?: string;
+  cacheRoot?: string;
 }
 /** The only APK acquisition and verification path, shared by CLI, MCP and workflows. */
 export class ArtifactService {
   readonly runner: CommandRunner;
   readonly aapt: string;
   readonly apksigner: string;
+  readonly cacheRoot?: string;
   constructor(options: ArtifactOptions) {
     this.runner = options.runner;
     this.aapt = options.aapt ?? 'aapt';
     this.apksigner = options.apksigner ?? 'apksigner';
+    if (options.cacheRoot) this.cacheRoot = options.cacheRoot;
   }
   async checkCompatibility(
     path: string,
@@ -114,6 +118,38 @@ export class ArtifactService {
     sha256Pin(policy.sha256);
     sha256Pin(policy.signerSha256);
     packageId(policy.packageId);
+    if (!this.cacheRoot) return this.privateSnapshot(policy, destination, signal);
+    const artifact = await cachedArtifact(
+      {
+        root: join(this.cacheRoot, 'apk'),
+        key: sha256Pin(policy.sha256),
+        build: (directory) => this.privateSnapshot(policy, join(directory, 'artifact.apk'), signal),
+        verify: (directory) => this.inspect(join(directory, 'artifact.apk'), policy, signal),
+        contentId: (value) => value.sha256,
+        relocate: (value, directory) => ({ ...value, path: join(directory, 'artifact.apk') }),
+      },
+      signal,
+    );
+    if (
+      artifact.packageId !== policy.packageId ||
+      artifact.versionCode !== policy.versionCode ||
+      artifact.signerSha256 !== sha256Pin(policy.signerSha256)
+    )
+      throw new AdapterError('Cached APK identity differs from the reviewed artifact');
+    await linkCachedArtifact(artifact.path, destination);
+    try {
+      await cachePlanReference(`${destination}.ref.json`, artifact);
+      return { ...artifact, path: destination };
+    } catch (error) {
+      await unlink(destination).catch(() => undefined);
+      throw error;
+    }
+  }
+  private async privateSnapshot(
+    policy: ArtifactPolicy,
+    destination: string,
+    signal?: AbortSignal,
+  ): Promise<VerifiedArtifact> {
     let created = false;
     try {
       if (policy.path) await copySnapshot(policy.path, destination, MAX_APK_BYTES, signal);
@@ -141,7 +177,7 @@ export class ArtifactService {
   ): Promise<T> {
     const directory = await mkdtemp(join(tmpdir(), 'pxv-verified-apk-'));
     try {
-      const staged = await this.snapshot(
+      const staged = await this.privateSnapshot(
         { ...artifact, path: artifact.path },
         join(directory, 'verified.apk'),
         signal,

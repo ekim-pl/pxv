@@ -8,10 +8,11 @@
   "image": "pxv/community",
   "upstreamVersion": "0.1.0",
   "engineApi": 1,
+  "features": { "extensions": false, "seedvault": false },
   "assets": {
     "logo": "assets/logo.svg"
   },
-  "defaultPolicy": "policy-packs/reference-five/policy.json",
+  "defaultPolicy": "policy-packs/reference-five/policy.v2.json",
   "support": {
     "name": "pxv Community",
     "email": "support@example.org",

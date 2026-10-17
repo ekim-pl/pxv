@@ -17,6 +17,7 @@ A generated `oci-context` contains only a frozen candidate, Dockerfile and entry
 ~~~sh
 pxv host docker-prepare --yes
 pxv host docker-adb-start --image YOUR_UNIQUE_IMAGE --yes
+pxv host doctor --execution docker --image YOUR_UNIQUE_IMAGE --docker-mode direct
 ~~~
 
 Preparation explicitly creates private shared control/ADB-home/extension directories. The independent direct-USB ADB service uses caller UID/GID, persistent keys and loopback port 5038. Workers only connect to that service and mount its home read-only. Stopping/cancelling a worker does not own the ADB server. The service can be stopped explicitly with `host docker-adb-stop --yes`.
@@ -31,9 +32,31 @@ Preparation explicitly creates private shared control/ADB-home/extension directo
 ~~~sh
 pxv device inspect --project-root "$P" --asset lab-01 \
   --execution docker --image YOUR_UNIQUE_IMAGE --docker-mode direct
+pxv device provision --project-root "$P" --asset lab-01 --operator 'Operator' \
+  --execution docker --image YOUR_UNIQUE_IMAGE --docker-mode direct --dry-run
 ~~~
 
 The CLI resolves the explicit local image to an immutable ID. It mounts an external project, the common control root and installed extensions; workers do not receive a registry token. Run native and Docker work as the same operator UID and use the same control directory. Do not mount a project on several workstations concurrently.
+
+Direct workers need caller USB permissions and the reviewed USB bus mount. Match
+the phone's enrolled identity and accept its ADB authorization on the phone. For
+OS installation, retain the exact signed codename-specific image and attend the
+physical unlock/relock prompts. The container does not bypass erasure approval.
+
+For an existing host ADB server, start it explicitly and select host-ADB mode:
+
+~~~sh
+pxv host adb-start --yes
+pxv host docker-prepare --yes
+pxv device inspect --project-root "$P" --asset lab-01 \
+  --execution docker --image YOUR_UNIQUE_IMAGE --docker-mode host-adb
+~~~
+
+The CLI wrapper fixes this endpoint to loopback port 5037 and mounts no USB bus.
+Compose can use its explicit `PXV_HOST_ADB_HOST`/`PXV_HOST_ADB_PORT` configuration.
+Workers never start or restart that host daemon. Fastboot cannot use an ADB TCP
+endpoint, so `install-os` is refused in host-ADB mode. After service loss, inspect
+the phone and shared reservations before resubmitting work.
 
 A raw image defaults to `PXV_DOCKER_MODE=host-adb`, so short-lived execution stays in the foreground and flashing is refused. Direct raw `docker run` use must explicitly set `PXV_DOCKER_MODE=direct` and provide the reviewed USB permissions/mount, shared control directory and existing ADB service. The CLI and Compose direct mode set this marker explicitly.
 

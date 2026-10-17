@@ -249,6 +249,43 @@ describe('supervised Seedvault runs', () => {
     expect((await engine.seedvaultReport(run.id)).profiles[0]!.status).toBe('completed');
   });
 
+  it('keeps recovery history readable when experimental recovery is disabled in the core product', async () => {
+    const { prepared, run } = await prepare();
+    await engine.execute(run.id);
+    const report = await engine.seedvaultReport(run.id);
+    const retained = await store.get('runs', run.id);
+    const core = new WorkflowEngine({
+      project: {
+        ...engine.project,
+        product: { ...engine.project.product, features: { extensions: false, seedvault: false } },
+      },
+      store,
+      port: engine.port,
+      seedvault: port,
+      artifacts: engine.artifacts,
+      controlRoot: engine.controlRoot,
+      clock: engine.clock,
+    });
+    expect(await core.seedvaultReport(run.id)).toEqual(report);
+    const count = port.calls.length;
+    await expect(core.inspectSeedvault(target)).rejects.toThrow('optional experimental recovery');
+    await expect(core.prepareSeedvault(target, { operation: 'backup', adapter })).rejects.toThrow(
+      'optional experimental recovery',
+    );
+    await expect(core.submit(prepared.plan.id, prepared.reviewSummary, 'Owner')).rejects.toThrow(
+      'optional experimental recovery',
+    );
+    await expect(core.execute(run.id)).rejects.toThrow('optional experimental recovery');
+    await expect(core.refreshReview(run.id)).rejects.toThrow('optional experimental recovery');
+    expect(await store.get('runs', run.id)).toEqual(retained);
+    expect(port.calls).toHaveLength(count);
+    await expect(
+      core.prepareExtension(target, [
+        { kind: 'manual', capability: 'app_setup', instructions: 'Configure privately' },
+      ]),
+    ).rejects.toThrow('outside this core product');
+  });
+
   it('refuses reused Android IDs and changed package pins before resuming', async () => {
     port.pending.add('personal');
     const { run } = await prepare();

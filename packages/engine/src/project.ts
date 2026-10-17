@@ -6,10 +6,12 @@ import {
   resolvePolicy,
   validateInventory,
   validatePolicy,
+  validatePolicyDocument,
   validateProduct,
   validateProject,
   type Inventory,
   type PolicyPack,
+  type PolicyDocument,
   type ProductDescriptor,
   type ProjectConfig,
   type ResolvedPolicy,
@@ -132,11 +134,11 @@ export async function assertProjectFresh(project: ProjectContext): Promise<void>
 export async function createProject(
   root: string,
   product: ProductDescriptor,
-  policy: PolicyPack,
+  policy: PolicyDocument,
   codeRoot?: string,
 ): Promise<ProjectContext> {
   validateProduct(product);
-  validatePolicy(policy);
+  const policyDocument = validatePolicyDocument(policy);
   await mkdir(root, { recursive: true, mode: 0o700 });
   const base = await realpath(root);
   for (const name of [
@@ -158,7 +160,7 @@ export async function createProject(
     inventoryFile: 'inventory.json',
     extensions: [],
   };
-  await atomicWritePrivate(resolve(base, 'policy.yaml'), JSON.stringify(policy, null, 2));
+  await atomicWritePrivate(resolve(base, 'policy.yaml'), JSON.stringify(policyDocument, null, 2));
   await atomicWritePrivate(
     resolve(base, 'inventory.json'),
     JSON.stringify({ schemaVersion: 1, devices: [] }, null, 2),

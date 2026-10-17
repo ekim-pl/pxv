@@ -1,70 +1,44 @@
-# Guide sources, branding and print files
+# Operator and device user guides
 
-The Markdown under [source/markdown](source/markdown) is authoritative. Four guide types are available in English and Polish: product, operator, user and business fleet. The renderer creates eight accessible HTML editions and sixteen PDFs. Generic guides are qualification drafts, not device certificates. Only an accepted project record identifies the policy, software, checks and custody outcome for a particular phone.
+The four Markdown sources under [source/markdown](source/markdown) are authoritative. The operator guides explain preparing and flashing a Pixel or fleet, applying predefined profiles, and keeping local records. The user guides explain receiving and using the prepared phone. English and Polish editions cover the same workflows.
 
-The generated PDFs and HTML are build outputs, ignored by Git. Keep reviewed copies with the matching release artifacts. Do not commit customer-specific or device-specific evidence here.
+| Reader      | English                                          | Polski                                                 |
+| ----------- | ------------------------------------------------ | ------------------------------------------------------ |
+| Operator    | [Operator guide](source/markdown/operator-en.md) | [Instrukcja operatora](source/markdown/operator-pl.md) |
+| Device user | [User guide](source/markdown/user-en.md)         | [Instrukcja użytkownika](source/markdown/user-pl.md)   |
 
-## Rebuild from the source checkout
+Use a phone's accepted handoff report for its actual policy, software and verification results. General guides do not certify a device. Never add credentials, customer information or device-specific records to guide sources or branding assets.
 
-The current source checkout includes the renderer and its developer toolchain; installed builds do not. From the checkout, use:
+## Build HTML and PDF
+
+Rebuild from the matching source checkout with the pinned developer dependencies installed:
 
 ```sh
 pxv guides rebuild --chromium /usr/bin/google-chrome
 ```
 
-The command runs `pnpm build` automatically, then calls the existing `guides/rebuild.sh` pipeline. For a workspace invocation use `pnpm pxv guides rebuild --chromium /usr/bin/google-chrome` after installing dependencies. The command is handled before project initialization, so it does not require a `pxv.project.json` or device connection.
-
-If Chromium is already configured, set `PXV_CHROMIUM` instead of passing `--chromium`. The rebuild does not download a browser. The source checkout requires the pinned Node/pnpm versions; PDF checks require Poppler (`pdfinfo`, `pdftotext`, `pdffonts`, `pdftoppm`).
+For a workspace invocation, use `pnpm pxv guides rebuild`. The command runs `pnpm build`, then the [optional publishing tool](../tools/optional/publishing/rebuild.mjs). It requires no initialized project or device. Installed releases include the guide sources, but rebuilding requires the source checkout.
 
 ```sh
 pxv guides rebuild [--output-dir DIR] [--chromium PATH] [--html-only] [--no-render]
 ```
 
-`--output-dir` selects an alternate output directory. `--html-only` writes HTML without launching Chromium. `--no-render` still inspects the PDFs with Poppler but skips page PNGs. For the full page-by-page evidence, leave it off.
+`--output-dir` selects the destination; the default is `guides/`. `PXV_CHROMIUM` can replace `--chromium`. `--html-only` creates HTML without Chromium or Poppler. `--no-render` creates and checks PDFs but skips page images. A full build creates one HTML file, one A4 office PDF and one color print PDF for each edition.
 
-The existing wrapper remains available for release tooling:
+The rebuild uses an explicitly selected local Chromium and never downloads a browser. PDF QA requires Poppler: `pdfinfo`, `pdftotext`, `pdffonts` and `pdftoppm`. It does not install dependencies, run the full source quality gate, contact phones or publish files. Follow [the contributor workflow](../CONTRIBUTING.md) when changing the renderer.
 
-```sh
-PXV_CHROMIUM=/usr/bin/google-chrome ./guides/rebuild.sh
-```
+The [build configuration](source/build-manifest.json) contains the single edition list. The generated `index.html` links the files actually produced. The `qa/manifest.json` records source/output hashes, page counts, extracted text, embedded fonts, Polish glyph checks, page boxes and one PNG per rendered page. Review every page before distributing a build; automated checks cannot approve its layout.
 
-The rebuild does not install project dependencies, install Poppler, run the full source quality gate, contact devices or publish files. For source edits, follow the [contributor quality workflow](../CONTRIBUTING.md) before distributing the output.
+Office PDFs use A4 pages, a low-ink layout and page numbers. Color print PDFs use 216 × 303 mm media, with an A4 `TrimBox` inset by 3 mm. They are not PDF/X files and contain no commercial printer color profile. See [BUILD.txt](source/BUILD.txt) for the pipeline details.
 
-## Editions and print modes
+Generated HTML, PDFs and `qa/` are ignored build outputs. Keep reviewed copies with their matching release. Rebuilding overwrites current edition outputs; an alternate output directory keeps a separate build.
 
-Each Markdown edition writes one HTML file and two PDFs:
+## Fork branding
 
-| Edition | HTML | Office PDF | Print PDF | Markdown |
-| --- | --- | --- | --- | --- |
-| Product EN | `product-en.html` | `product-en-office.pdf` | `product-en-print.pdf` | [source](source/markdown/product-en.md) |
-| Product PL | `product-pl.html` | `product-pl-office.pdf` | `product-pl-print.pdf` | [source](source/markdown/product-pl.md) |
-| Operator EN | `operator-en.html` | `operator-en-office.pdf` | `operator-en-print.pdf` | [source](source/markdown/operator-en.md) |
-| Operator PL | `operator-pl.html` | `operator-pl-office.pdf` | `operator-pl-print.pdf` | [source](source/markdown/operator-pl.md) |
-| User EN | `user-en.html` | `user-en-office.pdf` | `user-en-print.pdf` | [source](source/markdown/user-en.md) |
-| User PL | `user-pl.html` | `user-pl-office.pdf` | `user-pl-print.pdf` | [source](source/markdown/user-pl.md) |
-| Business fleet EN | `b2b-en.html` | `b2b-en-office.pdf` | `b2b-en-print.pdf` | [source](source/markdown/b2b-en.md) |
-| Business fleet PL | `b2b-pl.html` | `b2b-pl-office.pdf` | `b2b-pl-print.pdf` | [source](source/markdown/b2b-pl.md) |
-
-Office PDFs use A4 pages, a low-ink layout, and page numbers. Print PDFs have full-color branded pages, photo covers and selected color section openers. Their physical media is 216 × 303 mm, with an A4 `TrimBox` inset by 3 mm on every edge. The cover and marked section openers extend color into that bleed. The document is not PDF/X, does not specify an ICC profile, and is not a commercial printer proof.
-
-The QA manifest records hashes, language, embedded fonts, Polish glyph presence, page sizes, trim/bleed boxes, text extraction and raster paths for every generated page. Review every page image before distribution; automated checks do not determine whether a layout is visually acceptable. `guides/index.html` provides the static output index.
-
-## Fork branding and the starter policy
-
-The guide theme is [brand.json](assets/brand.json). It supplies a brand name, three colors, a font family, and optional local logo/font paths. Keep its `brandName` equal to `product.json.name`. Cover photos are public editorial assets under [assets/photos](assets/photos) and can be replaced while preserving `cover-product.png`, `cover-operator.png`, `cover-user.png` and `cover-b2b.png` filenames.
-
-Create a product identity, branded guide theme and an empty device starter from a versioned configuration:
+[assets/brand.json](assets/brand.json) supplies the brand name, three colors, font family and optional local logo/font paths. Keep `brandName` equal to `product.json.name`. The optional [branding scaffold](../tools/optional/branding/scaffold.mjs) creates this theme together with a product identity and an empty starter project:
 
 ```sh
-pnpm whitelabel:scaffold -- --config ./brand/acme.json
+pnpm whitelabel:scaffold -- --config ./config/templates/white-label.example.json
 ```
 
-The command validates `product.json`, policy and project objects against the existing schemas. It defaults to the `simple` policy, which contains no app pins, extra permissions, settings or VPN. `reference-five` can be selected explicitly. The Community `product.json` remains on `reference-five` unless the scaffold command is deliberately run in that checkout. See [the white-label guide](../docs/WHITE_LABEL.md) and [the example config](../config/templates/white-label.example.json).
-
-To generate the guides for the resulting brand, rebuild from its source checkout after review. A custom font file must be local for consistent embedding; without it, Chromium uses an installed font matching `fontFamily`. The optional logo and font are copied to public `guides/assets/`. Never add customer data, secrets, device identities, or recovery values to the theme or guide sources.
-
-## Sources and evidence boundaries
-
-The [diagrams](assets/diagrams) are editable SVG concepts, not UI captures. The [CLI capture manifest](assets/cli/manifest.json) binds the help capture to its content hash. The DejaVu fonts retain their upstream license next to the font files. The cover photos are generated editorial imagery, not photographs of tested phones or product UI.
-
-Guide output proves document generation and selected text/font/page-box checks only. It does not establish that a policy is qualified, that a Seedvault dataset is restorable, or that a live phone was accepted. The historical Pixel record applies only to the candidate identified in its original evidence. Rebuilding guides does not extend that acceptance. See [build instructions](source/BUILD.txt), [build manifest](source/build-manifest.json), [release gates](source/release-gates.json), and the [canary and recovery runbook](../docs/CANARY_BACKUP_RECOVERY.md).
+See [the branding instructions](../docs/WHITE_LABEL.md). The two editorial cover images, `assets/photos/cover-operator.png` and `assets/photos/cover-user.png`, can be replaced with public images using those names. They are illustrations, not evidence of tested phones or captured product UI. The bundled font retains its license under `assets/fonts/`. Use a local font file for consistent PDF embedding; otherwise Chromium uses an installed font matching `fontFamily`.

@@ -258,6 +258,53 @@ describe('operator controller dispatch without device access', () => {
     expect(engine.observe).not.toHaveBeenCalled();
   });
 
+  it('inspects every selected fleet asset and preserves single-device response shape', async () => {
+    project.inventory.devices.push({
+      ...device,
+      assetId: 'second',
+      canonicalSerial: 'SECOND',
+      transports: [{ kind: 'usb', serial: 'SECOND' }],
+    });
+    engine.observe.mockImplementation((target: { device: { assetId: string } }) =>
+      Promise.resolve({ assetId: target.device.assetId, measured: true }),
+    );
+    expect(await runCli(args(['fleet', 'inspect', '--all']), io)).toBe(0);
+    expect(engine.observe).toHaveBeenCalledTimes(2);
+    expect(JSON.parse(output.at(-1) ?? 'null')).toEqual([
+      { assetId: 'all', measured: true },
+      { assetId: 'second', measured: true },
+    ]);
+    expect(await runCli(args(['device', 'inspect', '--asset', 'all']), io)).toBe(0);
+    expect(JSON.parse(output.at(-1) ?? 'null')).toEqual({ assetId: 'all', measured: true });
+  });
+  it('rejects conflicting selectors and fleet confirmation commands before any device action', async () => {
+    for (const selectors of [
+      ['--asset', 'all', '--group', 'pilot'],
+      ['--asset', 'all', '--all'],
+      ['--group', 'pilot', '--all'],
+    ])
+      await expect(runCli(args(['fleet', 'inspect', ...selectors]), io)).rejects.toThrow('Choose one');
+    for (const command of ['attest', 'finalize', 'recover'])
+      for (const selector of [['--all'], ['--group', 'pilot']])
+        await expect(runCli(args(['fleet', command, ...selector, '--yes']), io)).rejects.toThrow(
+          'one exact --asset',
+        );
+    expect(engine.observe).not.toHaveBeenCalled();
+    expect(engine.attest).not.toHaveBeenCalled();
+    expect(engine.finalize).not.toHaveBeenCalled();
+    expect(engine.recover).not.toHaveBeenCalled();
+  });
+  it('projects legacy OS pause reasons on status without rewriting the run', async () => {
+    store.get
+      .mockResolvedValueOnce({ id: 'flash', planId: 'plan', status: 'pending' })
+      .mockResolvedValueOnce({ operation: 'install-os' });
+    expect(await runCli(args(['agent', 'status', '--run', 'flash']), io)).toBe(0);
+    expect(JSON.parse(output.at(-1) ?? 'null')).toMatchObject({
+      run: { id: 'flash', status: 'pending', pauseReason: { kind: 'reenrollment' } },
+    });
+    expect(store.set).not.toHaveBeenCalled();
+  });
+
   it('enrolls only the measured USB or emulator target and rejects mismatched fastboot identities', async () => {
     const base = [
       'inventory',
