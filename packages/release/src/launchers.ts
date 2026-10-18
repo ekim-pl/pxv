@@ -3,7 +3,7 @@ export function shellLauncher(previewId: string | undefined): string {
   const project = previewId
     ? `\n: "\${PXV_ROOT:=\${XDG_STATE_HOME:-\${HOME:?}/.local/state}/pxv/previews/${previewId}}"\nexport PXV_ROOT`
     : '';
-  return `#!/bin/sh\nset -eu\npxv_launcher=$(readlink -f -- "$0")\npxv_dir=$(CDPATH='' cd -- "$(dirname -- "$pxv_launcher")/.." && pwd)\nexport PXV_RESOURCE_ROOT="$pxv_dir" PXV_SUPERVISOR="$pxv_dir/native/pxv-supervisor"${project}\nexec "$pxv_dir/bin/node" "$pxv_dir/lib/main.js" "$@"\n`;
+  return `#!/bin/sh\nset -eu\npxv_launcher=$(readlink -f -- "$0")\npxv_dir=$(CDPATH='' cd -- "$(dirname -- "$pxv_launcher")/.." && pwd)\nexport PXV_RESOURCE_ROOT="$pxv_dir" PXV_SUPERVISOR="$pxv_dir/node_modules/@pxv/runtime/supervisor.js"${project}\nexec "$pxv_dir/bin/node" "$pxv_dir/lib/main.js" "$@"\n`;
 }
 
 export function dockerEntrypoint(): string {

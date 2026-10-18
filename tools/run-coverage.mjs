@@ -4,26 +4,13 @@ import { resolve } from 'node:path';
 import { completeCoverage } from './lib/coverage.mjs';
 const root = process.cwd(),
   directory = resolve('.quality/v8');
+await rm(resolve('coverage/coverage-final.json'), { force: true });
 await rm(directory, { recursive: true, force: true });
 await mkdir(directory, { recursive: true });
-/** @type {NodeJS.ProcessEnv} */
-const env = { ...process.env, PXV_CHILD_V8_COVERAGE_DIRECTORY: directory };
-// Vitest terminates pool supervisors after their stop acknowledgement. Their
-// native exit dumps can be interrupted; the V8 provider covers those isolates.
-delete env['NODE_V8_COVERAGE'];
-const child = spawn(
-  process.execPath,
-  [
-    'node_modules/vitest/vitest.mjs',
-    'run',
-    '--coverage',
-    '--reporter=default',
-    '--reporter=json',
-    '--outputFile.json=.quality/tests.json',
-    ...process.argv.slice(2),
-  ],
-  { stdio: 'inherit', env },
-);
+const child = spawn(process.execPath, ['tools/run-tests.mjs', ...process.argv.slice(2)], {
+  stdio: 'inherit',
+  env: { ...process.env, NODE_V8_COVERAGE: directory },
+});
 const code = await new Promise((done, reject) => {
   child.once('error', reject);
   child.once('close', done);

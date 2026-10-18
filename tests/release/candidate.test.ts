@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from './../test-api.js';
 import { createHash } from 'node:crypto';
 import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
@@ -88,7 +88,7 @@ describe('candidate input and runtime provenance', () => {
     const candidate = await createCandidate({
       sourceRoot: root,
       outputRoot: output,
-      nativeBinary: await supervisorPath(),
+      supervisorEntry: await supervisorPath(),
       runtime,
     });
     expect(candidate.manifest.source).toMatchObject({ revision: 'fixture-revision', dirty: false });
@@ -110,33 +110,36 @@ describe('candidate input and runtime provenance', () => {
     const root = await fixture();
     temporary.push(root);
     const output = await temp('/tmp/pxv-candidate-output-');
-    const nativeBinary = await supervisorPath();
+    const supervisorEntry = await supervisorPath();
     const replies = [
       { flag: '--version', tool: process.execPath, value: 'v23.0.0' },
-      { flag: '--version', tool: nativeBinary, value: 'pxv-supervisor 9.9.9' },
+      { flag: '--build-info', tool: supervisorEntry, value: JSON.stringify({ protocol: 1, addon: '9.9.9' }) },
       {
         flag: '--build-info',
-        tool: nativeBinary,
+        tool: supervisorEntry,
         value: JSON.stringify({ target: 'x86_64-unknown-linux-gnu', static: true, protocol: 1 }),
       },
       {
         flag: '--build-info',
-        tool: nativeBinary,
+        tool: supervisorEntry,
         value: JSON.stringify({ target: 'x86_64-unknown-linux-musl', static: false, protocol: 1 }),
       },
       {
         flag: '--build-info',
-        tool: nativeBinary,
+        tool: supervisorEntry,
         value: JSON.stringify({ target: 'x86_64-unknown-linux-musl', static: true, protocol: 2 }),
       },
     ];
     for (const reply of replies) {
       const runtime = nativeOverrides((args) =>
-        args[0] === reply.tool && args[1] === reply.flag ? reply.value : undefined,
+        (args[0] === reply.tool && args[1] === reply.flag) ||
+        (args[1] === reply.tool && args[2] === reply.flag)
+          ? reply.value
+          : undefined,
       );
       await expect(
-        createCandidate({ sourceRoot: root, outputRoot: output, nativeBinary, runtime }),
-      ).rejects.toThrow(/Release requires|Native supervisor/);
+        createCandidate({ sourceRoot: root, outputRoot: output, supervisorEntry, runtime }),
+      ).rejects.toThrow(/Release requires|Supervisor/);
     }
   });
   it('rejects symlinked source metadata and unsafe source package names without following their targets', async () => {

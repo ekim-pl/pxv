@@ -1,5 +1,5 @@
 import { Readable } from 'node:stream';
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from './../test-api.js';
 import { inspectArchive } from '../../packages/extensions/src/archive.js';
 function header(path: string, size: number, type = '0'): Buffer {
   const value = Buffer.alloc(512);

@@ -1,7 +1,7 @@
 import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from './../test-api.js';
 import { qualityReport } from '../../tools/lib/quality-report.mjs';
 import type { writeMetrics } from '../../tools/lib/metrics.mjs';
 type Metrics = Awaited<ReturnType<typeof writeMetrics>>;
@@ -45,7 +45,7 @@ async function fixture() {
         path: 'packages/example/src/index.ts',
         language: 'typescript',
         depth: 1,
-        functions: [{ name: 'example', line: 1, column: 1, cyclomatic: 2, lines: 5 }],
+        functions: [{ name: 'example', line: 1, cyclomatic: 2 }],
         failures: [],
       },
     ],
@@ -87,7 +87,7 @@ describe('quality report acceptance evidence', () => {
     const report = await qualityReport(root, dependencies);
     expect(report.status).toBe('passed');
     expect(report.sourceUnchanged).toBe(true);
-    expect(calls).toEqual(['source', 'check', 'test:native', 'test:coverage', 'check:helpers']);
+    expect(calls).toEqual(['source', 'check', 'test:supervisor', 'test:coverage', 'check:helpers']);
     expect(stages).toHaveLength(4);
     expect(Object.values(report.evidence).every((item) => item.current)).toBe(true);
     expect(report.declaredVersions.packageManager).toBe('pnpm@12.11.2');

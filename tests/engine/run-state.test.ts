@@ -1,4 +1,4 @@
-import { expect, it } from 'vitest';
+import { expect, it } from './../test-api.js';
 import { runPauseReason, withRunPauseReason, type RunRecord } from '@pxv/engine';
 
 const legacy: RunRecord = {

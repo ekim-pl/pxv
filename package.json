@@ -11,12 +11,10 @@
   },
   "scripts": {
     "build": "tsc -b",
-    "build:native": "node tools/build-native.mjs",
     "check": "pnpm check:static && node tools/check-quality.mjs --metrics-only",
-    "check:static": "pnpm typecheck && eslint packages tests tools eslint.config.mjs vitest.config.ts && node tools/check-boundaries.mjs && pnpm deadcode && node tools/check-quality.mjs --checks-only && prettier --check \"packages/**/*.ts\" \"tests/**/*.ts\" \"tools/**/*.mjs\" \"*.mjs\" && pnpm docs:check",
-    "test": "vitest run",
-    "test:coverage": "node tools/run-coverage.mjs",
-    "test:native": "node tools/build-native.mjs --test",
+    "check:static": "pnpm typecheck && eslint packages tests tools eslint.config.mjs && node tools/check-boundaries.mjs && pnpm deadcode && node tools/check-dependencies.mjs && node tools/check-quality.mjs --checks-only && prettier --check \"packages/**/*.ts\" \"tests/**/*.ts\" \"tools/**/*.mjs\" \"*.mjs\" && pnpm docs:check",
+    "test": "pnpm build && node tools/run-tests.mjs",
+    "test:coverage": "pnpm build && node tools/run-coverage.mjs",
     "build:preview": "pnpm build && node packages/release/dist/cli.js",
     "pxv": "node packages/cli/dist/main.js",
     "docs:build": "pnpm build && node tools/optional/publishing/rebuild.mjs",
@@ -26,7 +24,8 @@
     "deadcode": "node tools/check-deadcode.mjs",
     "quality:setup": "node tools/bootstrap-quality.mjs",
     "quality": "node tools/quality.mjs",
-    "check:helpers": "node tools/check-helpers.mjs"
+    "check:helpers": "node tools/check-helpers.mjs",
+    "test:supervisor": "pnpm build && node tools/run-tests.mjs 'tests/runtime/supervisor*.test.ts' tests/runtime/commands.test.ts"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
@@ -34,18 +33,21 @@
     "@types/istanbul-lib-coverage": "2.0.6",
     "@types/node": "24.19.2",
     "@typescript/native": "npm:typescript@7.0.2",
-    "@vitest/coverage-v8": "5.0.5",
     "esbuild": "0.28.2",
     "eslint": "10.12.0",
     "globals": "17.5.0",
     "istanbul-lib-coverage": "3.2.2",
-    "knip": "6.41.0",
     "marked": "18.1.1",
     "pdf-lib": "1.17.1",
     "prettier": "3.9.10",
     "typescript": "npm:@typescript/typescript6@6.0.2",
     "typescript-eslint": "8.71.2",
-    "v8-to-istanbul": "9.3.0",
-    "vitest": "5.0.5"
+    "expect": "30.5.2",
+    "jest-mock": "30.5.2",
+    "@sinonjs/fake-timers": "15.4.0",
+    "@types/sinonjs__fake-timers": "15.0.1",
+    "ast-v8-to-istanbul": "1.0.7",
+    "@babel/parser": "8.0.7",
+    "java-parser": "3.0.1"
   }
 }

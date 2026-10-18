@@ -8,7 +8,9 @@ all yourself.
 
 One person can use only the Android Owner profile or several profiles for different
 activities. Additional profiles do not require additional people. This guide follows
-one phone through preparation, acceptance, daily use and maintenance.
+one phone through preparation, acceptance, daily use and maintenance. For a scripted
+checklist, a separate five-profile starter and a private result sheet, use the
+[five-profile self-service test procedure](SELF_SERVICE_FIVE_PROFILE_TEST.md).
 
 **Before you start:** preserve existing phone data and recovery access. OS
 installation erases data. Rehearse an unqualified configuration on a disposable

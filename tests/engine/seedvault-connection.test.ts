@@ -1,7 +1,7 @@
 import { toPolicyDocument } from '@pxv/contracts';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { afterEach, beforeEach, expect, it, vi, type Mock } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi, type Mock } from './../test-api.js';
 import {
   connectSeedvaultEndpoint,
   createProject,

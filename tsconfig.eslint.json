@@ -7,7 +7,16 @@
     "checkJs": true,
     "allowImportingTsExtensions": true,
     "rootDir": ".",
-    "paths": { "@pxv/*": ["./packages/*/src/index.ts"] }
+    "paths": {
+      "@pxv/*": [
+        "./packages/*/src/index.ts"
+      ]
+    }
   },
-  "include": ["packages/**/*.ts", "tests/**/*.ts", "vitest.config.ts", "tools/**/*.mjs", "eslint.config.mjs"]
+  "include": [
+    "packages/**/*.ts",
+    "tests/**/*.ts",
+    "tools/**/*.mjs",
+    "eslint.config.mjs"
+  ]
 }

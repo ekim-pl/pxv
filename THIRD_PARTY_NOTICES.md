@@ -1,15 +1,7 @@
 # Third-party notices
 
-pxv Community source is MIT licensed. Each frozen distribution generates `THIRD-PARTY-NOTICES.txt`, `NODE-LICENSE.txt` and `sbom.spdx.json` from its actual bundled inputs. Preserve those files when redistributing a fork or an extracted package.
+Official Node.js 24.22.0 is distributed with its complete upstream license and notices. Its embedded Rust-derived TypeScript parser is the explicit upstream Node exception; test transpilation uses esbuild instead. Project-managed Rust executables, native addons, WASM and transitive development dependencies are prohibited.
 
-The portable/Debian/Docker runtime bundles Node.js 24.22.0 with its upstream license and third-party notices. JavaScript runtime inputs include the MCP SDK, Zod, YAML and tar dependencies; their recorded versions, licenses and upstream license text are included in the generated notices. Build tooling includes TypeScript 7, its TypeScript 6 ESLint compatibility API, ESLint, Vitest, esbuild, marked and Playwright. Development dependencies are not runtime package requirements.
+The supervisor uses Koffi 3.3.3 (MIT), its JavaScript loader and the selected Linux glibc x64 Node-API 8 prebuild. Its reviewed license is retained in resources/third-party/KOFFI-LICENSE.txt. No Koffi source build is run. Generated distributions include runtime npm dependency notices and an SPDX SBOM. Retired Rust crate, Rust runtime and musl catalogs are no longer release inputs.
 
-The native supervisor uses pinned Rust crates recorded in `native/supervisor/Cargo.lock` (base64, libc, serde and serde_json). Preserve their license notices and the release SBOM. Android helpers and the retained Java repository-signature verifier are repository source, built with operator or image toolchains.
-
-Docker includes checksum-pinned Google Android platform/build tools and a Debian snapshot containing OpenJDK, OpenSSH and system libraries. Their bundled notices and package copyright files remain in the image. Host bootstrap requires explicit acceptance of the reviewed tool archive's license; package installation never downloads toolchains or accepts licenses implicitly.
-
-The DejaVu guide font license is retained beside the three font files under `guides/assets/fonts/`. Forks are responsible for documenting the origin and terms of replacement logos, artwork, fonts, manifests and private extensions.
-
-Use the candidate's generated SBOM and notices to identify the exact content of an artifact. This source summary does not substitute for those artifact-specific records.
-
-The static supervisor also contains the Rust 1.99.1 standard runtime and musl 1.2.5 supplied by its pinned target. The reviewed runtime catalog records upstream archive hashes, the exact sysroot libc archive digest and notice hashes. Candidate files RUST-RUNTIME-COPYRIGHT.html and MUSL-COPYRIGHT.txt preserve full upstream notices, and their packages appear separately in the SBOM.
+Development tools include TypeScript, ESLint, esbuild, expect/jest-mock, fake-timers, ast-v8-to-istanbul, @babel/parser, java-parser, marked and Playwright. Playwright's libwebp WASM codec is reviewed as a C/C++ development artifact. Android helpers and the Java signature verifier remain repository source. Preserve the bundled font and third-party license files when distributing guides.

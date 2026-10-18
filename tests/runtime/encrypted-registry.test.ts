@@ -3,7 +3,7 @@ import { chmod, mkdir, mkdtemp, readFile, readdir, rm, stat, symlink, writeFile 
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { inspect } from 'node:util';
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from './../test-api.js';
 import {
   createEncryptedRegistry,
   readEncryptedRegistry,

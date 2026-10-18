@@ -1,7 +1,7 @@
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from './../test-api.js';
 import { digest, type Action, type SelectedTarget } from '@pxv/contracts';
 import { SqliteStore } from '@pxv/runtime';
 import {

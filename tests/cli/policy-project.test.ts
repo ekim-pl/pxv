@@ -1,7 +1,7 @@
 import { access, mkdtemp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from './../test-api.js';
 import { toPolicyDocument, verifyResolvedPolicy } from '@pxv/contracts';
 import { createProject, loadProject, writePolicyLock } from '@pxv/engine';
 import { runCli } from '../../packages/cli/src/cli.js';

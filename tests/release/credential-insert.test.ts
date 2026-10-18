@@ -1,7 +1,7 @@
 import { chmod, mkdtemp, readFile, readdir, rm, stat, symlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from './../test-api.js';
 import type { PhoneRegistryRecord } from '@pxv/contracts';
 import type { Runtime } from '@pxv/runtime';
 import { writeCredentialInsert } from '../../packages/guides/src/index.js';
@@ -166,4 +166,48 @@ describe('private credential insert', () => {
     await expect(stat(temporary)).rejects.toThrow();
     await expect(stat(destination)).rejects.toThrow();
   });
+});
+
+it('renders blank secret lines and the codename fallback while rejecting an unsupported locale', () => {
+  const data = record();
+  data.fields.phoneNumber = value('\n');
+  const minimal = { exportedAt: at, support: 'Private support' };
+  expect(renderCredentialInsert(data, minimal)).toContain('shiba');
+  expect(renderCredentialInsert(data, minimal)).toContain('<pre>\n</pre>');
+  expect(() => renderCredentialInsert(data, { ...minimal, locale: 'de' as 'en' })).toThrow(
+    'Unsupported insert locale',
+  );
+});
+it('uses the default local command runner and rejects missing browser, failed exit and invalid PDF bytes', async () => {
+  const directory = await root(),
+    browser = join(directory, 'renderer.sh');
+  await writeFile(
+    browser,
+    '#!/bin/sh\nfor arg do case "$arg" in --print-to-pdf=*) printf "%s\\n" "%PDF-1.4 synthetic" > "${arg#*=}";; esac; done\n',
+    { mode: 0o700 },
+  );
+  await writeCredentialInsert(record(), join(directory, 'default.pdf'), {
+    ...options,
+    chromiumExecutable: browser,
+  });
+  expect(await readFile(join(directory, 'default.pdf'), 'utf8')).toContain('%PDF-');
+  await expect(
+    writeCredentialInsert(record(), join(directory, 'missing.pdf'), { ...options, chromiumExecutable: '' }),
+  ).rejects.toThrow('Private credential insert');
+  for (const code of [0, 1]) {
+    const runtime: Runtime = {
+      async run(args) {
+        const output = args.find((arg) => arg.startsWith('--print-to-pdf='))!.slice(15);
+        await writeFile(output, 'not a PDF');
+        return { code, stdout: '', stderr: '' };
+      },
+    };
+    await expect(
+      writeCredentialInsert(record(), join(directory, `invalid-${code}.pdf`), {
+        ...options,
+        chromiumExecutable: browser,
+        runtime,
+      }),
+    ).rejects.toThrow('Private credential insert');
+  }
 });

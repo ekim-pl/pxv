@@ -99,6 +99,4 @@ Podczas serwisu pod nadzorem może być potrzebne tymczasowe debugowanie. Po zak
 
 ## Dalsze instrukcje i zakres weryfikacji
 
-[Przewodnik operatora](operator-pl.md) opisuje polecenia i odbiór. Dokumentacja techniczna obejmuje [zależności komputera](../../../docs/HOST_DEPENDENCIES.md), [format polityki](../../../docs/POLICY_FORMAT.md), [listę poleceń](../../../docs/COMMAND_REFERENCE.md), [kopie i odzyskiwanie](../../../docs/CANARY_BACKUP_RECOVERY.md), [automatyzację](../../../docs/AUTOMATION.md) i [Dockera](../../../docs/DOCKER.md).
-
-[Stan weryfikacji](../../../docs/VERIFICATION.md) określa granice zachowanych dowodów. Próba offline i historyczny wynik telefonu nie kwalifikują bieżącej konfiguracji. Bez fizycznego telefonu testowego instalacja, aplikacje, VPN i odzyskiwanie pozostają niezakwalifikowane do czasu rzeczywistych kontroli na uprawnionym urządzeniu.
+Zobacz [przewodnik operatora](operator-pl.md), [zależności komputera](../../../docs/HOST_DEPENDENCIES.md), [format polityki](../../../docs/POLICY_FORMAT.md), [listę poleceń](../../../docs/COMMAND_REFERENCE.md), [kopie i odzyskiwanie](../../../docs/CANARY_BACKUP_RECOVERY.md), [automatyzację](../../../docs/AUTOMATION.md) i [Dockera](../../../docs/DOCKER.md). [Stan weryfikacji](../../../docs/VERIFICATION.md): próby offline i dawne wyniki nie zastępują fizycznych kontroli instalacji, aplikacji, VPN i odzyskiwania za zgodą właściciela.

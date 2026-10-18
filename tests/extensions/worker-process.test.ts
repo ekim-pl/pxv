@@ -1,5 +1,8 @@
+import type * as TestModule1 from '../../packages/extensions/src/worker-process.js';
+import { importModule } from './../test-api.js';
+globalThis.__pxvTestFile = import.meta.url;
 import type { EventEmitter } from 'node:events';
-import { beforeEach, expect, test, vi } from 'vitest';
+import { beforeEach, expect, test, vi } from './../test-api.js';
 
 const state = vi.hoisted(() => ({ workers: [] as TestWorker[] }));
 vi.mock('node:worker_threads', async () => {
@@ -16,7 +19,12 @@ vi.mock('node:worker_threads', async () => {
     },
   };
 });
-import { invokeWorker } from '../../packages/extensions/src/worker-process.js';
+// Module exports are called without a receiver.
+
+const { invokeWorker } = await importModule<typeof TestModule1>(
+  '../../packages/extensions/src/worker-process.js',
+  import.meta.url,
+);
 
 interface TestWorker extends EventEmitter {
   terminate: ReturnType<typeof vi.fn<() => Promise<number>>>;

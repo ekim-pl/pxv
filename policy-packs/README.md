@@ -48,3 +48,19 @@ Normal defaults initialize profiles without an existing screen lock. The recipie
 Select a pack at new-project initialization with `project init --path DIRECTORY --policy FILE`, or explicitly review an installed extension's declared policy contribution. Validate the resulting project policy and write a fresh lock before planning. Copying a file is not policy acceptance.
 
 Forks own these manifests, assets and release qualification. Preserve the engine contract version and safety regressions when merging upstream. Secrets, recipient inventory and private helper signing keys never belong in a distributed pack. Record emulator provenance and physical EN/PL acceptance separately from offline test results.
+
+
+## One-person five-profile acceptance
+
+[`self-service-five/policy.json`](self-service-five/policy.json) keeps the Owner,
+contacts, google, testing and onion layout with English Owner and Polish secondary
+profiles. It requires ordinary credentials and network/backup acceptance, but has
+no initial credential references or duress configuration. Enter ordinary credentials
+privately on the phone. The Owner display name starts as `Owner`; match it to the
+observed Owner before review.
+
+The app catalog and OS pins are deliberately empty, and no VPN route is configured.
+Complete a private copy with authentic artifacts and explicit per-profile network
+and backup expectations before the full test. A profile named onion does not route
+traffic through Tor, and a profile named google does not install Google services.
+Follow the [full self-service procedure](../docs/SELF_SERVICE_FIVE_PROFILE_TEST.md).

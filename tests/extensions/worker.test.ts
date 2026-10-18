@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from './../test-api.js';
 import { executeExtension, extensionResponse } from '../../packages/extensions/src/worker-handler.js';
 import { validateWorkerInput, validateWorkerResult } from '../../packages/extensions/src/worker-protocol.js';
 const action = {

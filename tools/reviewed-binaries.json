@@ -1,0 +1,32 @@
+[
+  {
+    "path": "@esbuild+linux-x64@0.28.2/node_modules/@esbuild/linux-x64/bin/esbuild",
+    "sha256": "e1698a3d5c6c0798fee4fd3b5cc816651f460c63d390a7a26ea4beb0b1884100",
+    "reason": "esbuild 0.28.2 Go executable for transpilation and bundling."
+  },
+  {
+    "path": "@koromix+koffi-linux-x64@3.3.3/node_modules/@koromix/koffi-linux-x64/linux_x64/koffi.node",
+    "sha256": "2fcc0e86bc8f4244303e01a0878c2738cb768b84c40f1cd31694fa9c2d16baf1",
+    "reason": "Koffi 3.3.3 C/C++ Node-API 8 prebuild; glibc selected for distribution, musl retained only in the exact platform dependency."
+  },
+  {
+    "path": "@koromix+koffi-linux-x64@3.3.3/node_modules/@koromix/koffi-linux-x64/musl_x64/koffi.node",
+    "sha256": "f699de4b961217b9a75dd22111818b40e6bfcb0d2653719b6e54dc6797760275",
+    "reason": "Koffi 3.3.3 C/C++ Node-API 8 prebuild; glibc selected for distribution, musl retained only in the exact platform dependency."
+  },
+  {
+    "path": "playwright-core@1.64.1/node_modules/playwright-core/lib/webp_codec.wasm",
+    "sha256": "164cd9583a3e4d081f767d3b41ff0a730443dc7535fcc5caff83561463384b79",
+    "reason": "Playwright 1.64.1 C/C++ libwebp codec; development browser artifact only."
+  },
+  {
+    "path": "esbuild@0.28.2/node_modules/esbuild/bin/esbuild",
+    "sha256": "e1698a3d5c6c0798fee4fd3b5cc816651f460c63d390a7a26ea4beb0b1884100",
+    "reason": "esbuild 0.28.2 Go executable installed from the pinned esbuild platform package."
+  },
+  {
+    "path": "@typescript+typescript-linux-x64@7.0.2/node_modules/@typescript/typescript-linux-x64/lib/tsc",
+    "sha256": "4f2de678286401759b3fb4475bafe35b8f32b4b3a07d92642bbf37eadc9b34a4",
+    "reason": "TypeScript 7.0.2 Go compiler from the pinned official platform package."
+  }
+]

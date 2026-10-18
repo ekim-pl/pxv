@@ -34,22 +34,4 @@ async function checkTools() {
     });
     execFileSync('sh', ['-n'], { input: script, stdio: ['pipe', 'inherit', 'inherit'], timeout: 60_000 });
   }
-  execFileSync('cargo', ['fmt', '--manifest-path', 'native/supervisor/Cargo.toml', '--check'], {
-    stdio: 'inherit',
-    timeout: 60_000,
-  });
-  execFileSync(
-    'cargo',
-    [
-      'clippy',
-      '--manifest-path',
-      'native/supervisor/Cargo.toml',
-      '--locked',
-      '--all-targets',
-      '--',
-      '-D',
-      'warnings',
-    ],
-    { stdio: 'inherit', timeout: 60_000 },
-  );
 }

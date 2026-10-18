@@ -1,5 +1,5 @@
 import { recordObligation } from '../engine/obligations.js';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from './../test-api.js';
 import { createServer, type Server } from 'node:net';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';

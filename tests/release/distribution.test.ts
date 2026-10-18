@@ -11,7 +11,7 @@ import {
 } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { createHash } from 'node:crypto';
-import { afterEach, describe, expect, test } from 'vitest';
+import { afterEach, describe, expect, test } from './../test-api.js';
 import { CommandRunner, supervisorPath } from '../../packages/runtime/src/index.js';
 import {
   buildFormats,
@@ -41,12 +41,12 @@ afterEach(async () => {
 });
 const runner = new CommandRunner();
 
-test('candidate rejects a dynamically linked supervisor even when runnable on the build host', async () => {
+test('candidate rejects an executable supplied instead of a JavaScript supervisor', async () => {
   const root = await fixture();
   const output = await mkdtemp('/tmp/pxv-release-output-');
   await expect(
-    createCandidate({ sourceRoot: root, outputRoot: output, nativeBinary: '/bin/true' }),
-  ).rejects.toThrow('static Linux x86_64');
+    createCandidate({ sourceRoot: root, outputRoot: output, supervisorEntry: '/bin/true' }),
+  ).rejects.toThrow();
 });
 
 describe('frozen distribution candidate', () => {
@@ -79,7 +79,7 @@ describe('frozen distribution candidate', () => {
         });
         expect(JSON.parse(result.stdout)).toEqual({
           root: installation,
-          supervisor: join(installation, 'native', 'pxv-supervisor'),
+          supervisor: join(installation, 'node_modules', '@pxv/runtime', 'supervisor.js'),
           project: preview ? join(root, 'state', 'pxv', 'previews', preview) : join(root, 'existing-project'),
           args: ['argument with spaces'],
         });
@@ -103,19 +103,18 @@ describe('frozen distribution candidate', () => {
     const candidate = await createCandidate({
       sourceRoot: root,
       outputRoot: output,
-      nativeBinary: await supervisorPath(),
+      supervisorEntry: await supervisorPath(),
     });
     expect(candidate.manifest.version).toMatch(/^0\.1\.0-preview\./u);
-    expect(candidate.manifest.toolchain.rust).toBe('1.99.1');
-    expect(candidate.manifest.toolchain.nativeTarget).toBe('x86_64-unknown-linux-musl');
-    expect(candidate.manifest.toolchain.nativeLinkage).toBe('static');
-    expect(await readFile(join(candidate.directory, 'MUSL-COPYRIGHT.txt'), 'utf8')).toContain(
-      'musl as a whole',
+    expect(candidate.manifest.toolchain.addonVersion).toBe('3.3.3');
+    expect(candidate.manifest.toolchain.addonPlatform).toBe('linux_x64');
+    expect(candidate.manifest.toolchain.addonNodeApi).toBe(8);
+    expect(await readFile(join(candidate.directory, 'node_modules/koffi/LICENSE.txt'), 'utf8')).toContain(
+      'MIT',
     );
-    expect(await readFile(join(candidate.directory, 'RUST-RUNTIME-COPYRIGHT.html'), 'utf8')).toContain(
-      'musl',
-    );
-    expect(candidate.manifest.source.files.some((file) => file.path === 'rust-toolchain.toml')).toBe(true);
+    expect(
+      candidate.manifest.source.files.some((file) => file.path === 'resources/third-party/koffi.json'),
+    ).toBe(true);
     expect(candidate.manifest.command).toMatch(/^alpha-preview-/u);
     expect((await stat(candidate.directory)).mode & 0o777).toBe(0o555);
     expect(await readFile(join(candidate.directory, 'guides/assets/fonts/LICENSE'), 'utf8')).toEqual(
@@ -128,25 +127,15 @@ describe('frozen distribution candidate', () => {
       packages: { name: string; checksums?: { checksumValue: string }[] }[];
     };
     expect(sbom.packages.map((entry) => entry.name)).toEqual(
-      expect.arrayContaining([
-        'Node.js',
-        'pxv-supervisor',
-        'musl',
-        'rust-std',
-        'base64',
-        'libc',
-        'serde',
-        'serde_json',
-        'unicode-ident',
-      ]),
+      expect.arrayContaining(['Node.js', 'pxv-supervisor', 'koffi', '@koromix/koffi-linux-x64']),
     );
     expect(sbom.packages.find((entry) => entry.name === 'Node.js')?.checksums?.[0]?.checksumValue).toBe(
       candidate.manifest.toolchain.nodeSha256,
     );
     const notices = await readFile(join(candidate.directory, 'THIRD-PARTY-NOTICES.txt'), 'utf8');
-    expect(notices).toContain('cargo:base64@0.22.1');
-    expect(notices).toContain('Unicode-3.0');
-    expect(notices).toContain('UNICODE LICENSE V3');
+    expect(notices).toContain('npm:koffi@3.3.3');
+    expect(notices).toContain('MIT');
+    expect(notices).toContain('Niels');
     expect(
       candidate.manifest.files.some((file) => file.path.startsWith('node_modules/@pxv/runtime/worker')),
     ).toBe(true);
@@ -174,7 +163,7 @@ describe('frozen distribution candidate', () => {
     const second = await createCandidate({
       sourceRoot: secondRoot,
       outputRoot: output,
-      nativeBinary: await supervisorPath(),
+      supervisorEntry: await supervisorPath(),
     });
     expect(second.manifest.product.id).toBe('bravo');
     expect(second.manifest.sourceDigest).not.toBe(candidate.manifest.sourceDigest);
@@ -185,7 +174,7 @@ describe('frozen distribution candidate', () => {
     const output = await mkdtemp('/tmp/pxv-release-output-');
     await symlink('/etc/passwd', join(root, 'assets', 'bad.txt'));
     await expect(
-      createCandidate({ sourceRoot: root, outputRoot: output, nativeBinary: await supervisorPath() }),
+      createCandidate({ sourceRoot: root, outputRoot: output, supervisorEntry: await supervisorPath() }),
     ).rejects.toThrow('symlinks');
     await expect(walkPublic(root, '../secrets')).rejects.toThrow('Forbidden');
     expect(await walkPublic(root, 'absent')).toEqual([]);
@@ -199,7 +188,7 @@ describe('frozen distribution candidate', () => {
     product['assets'] = { logo: 'assets/missing.svg' };
     await writeFile(join(noAsset, 'product.json'), JSON.stringify(product));
     await expect(
-      createCandidate({ sourceRoot: noAsset, outputRoot: output, nativeBinary: await supervisorPath() }),
+      createCandidate({ sourceRoot: noAsset, outputRoot: output, supervisorEntry: await supervisorPath() }),
     ).rejects.toThrow('absent');
   });
   test('portable, npm and Debian packages use the same reviewed engine and install without publication', async () => {
@@ -208,7 +197,7 @@ describe('frozen distribution candidate', () => {
     const candidate = await createCandidate({
       sourceRoot: root,
       outputRoot: output,
-      nativeBinary: await supervisorPath(),
+      supervisorEntry: await supervisorPath(),
     });
     const artifacts = await buildFormats(candidate, { formats: ['portable', 'npm', 'deb'] });
     const directory = join(candidate.directory, '..', 'artifacts');
@@ -254,6 +243,24 @@ describe('frozen distribution candidate', () => {
         ])
       ).stdout,
     ).toContain('alpha');
+    const installedPackage = join(installed, 'node_modules/@example/alpha');
+    expect(
+      (
+        await runner.run(
+          [
+            process.execPath,
+            join(process.cwd(), 'tools/check-native-baseline.mjs'),
+            join(installedPackage, 'node_modules/@pxv/runtime/index.js'),
+          ],
+          {
+            env: {
+              ...process.env,
+              PXV_SUPERVISOR: join(installedPackage, 'node_modules/@pxv/runtime/supervisor.js'),
+            },
+          },
+        )
+      ).stdout,
+    ).toContain('"status":"passed"');
     const info = (await runner.run(['dpkg-deb', '--field', deb.path])).stdout;
     expect(info).toContain(`Package: ${candidate.manifest.debName}`);
     expect(info).toContain('~preview.');
@@ -269,7 +276,7 @@ describe('frozen distribution candidate', () => {
     const candidate = await createCandidate({
       sourceRoot: root,
       outputRoot: output,
-      nativeBinary: await supervisorPath(),
+      supervisorEntry: await supervisorPath(),
     });
     const modified = join(output, 'modified');
     await copyCandidate(candidate.directory, modified);
@@ -281,24 +288,24 @@ describe('frozen distribution candidate', () => {
     await writeFile(join(checksumDirectory, 'SHA256SUMS'), 'bad\n');
     await expect(verifyArtifacts(checksumDirectory)).rejects.toThrow('Invalid release checksum');
   });
-  test('Rust dependency changes and missing or changed reviewed notices block release creation offline', async () => {
+  test('Koffi dependency changes and missing or changed reviewed notices block release creation offline', async () => {
     const root = await fixture();
     const output = await mkdtemp('/tmp/pxv-release-output-');
-    const catalogFile = join(root, 'resources/third-party/rust-crates.json');
+    const catalogFile = join(root, 'resources/third-party/koffi.json');
     const original = await readFile(catalogFile, 'utf8');
     const catalog = JSON.parse(original) as {
-      packages: { checksum: string; licenses: { path: string }[] }[];
+      files: Record<string, string>;
     };
-    catalog.packages[0]!.checksum = '0'.repeat(64);
+    catalog.files['koffi/index.cjs'] = '0'.repeat(64);
     await writeFile(catalogFile, JSON.stringify(catalog));
     await expect(
-      createCandidate({ sourceRoot: root, outputRoot: output, nativeBinary: await supervisorPath() }),
-    ).rejects.toThrow('catalog differs from Cargo.lock');
+      createCandidate({ sourceRoot: root, outputRoot: output, supervisorEntry: await supervisorPath() }),
+    ).rejects.toThrow('catalog mismatch');
     await writeFile(catalogFile, original);
-    const notice = join(root, 'resources/third-party', catalog.packages[0]!.licenses[0]!.path);
+    const notice = join(root, 'resources/third-party', 'KOFFI-LICENSE.txt');
     await writeFile(notice, 'changed license');
     await expect(
-      createCandidate({ sourceRoot: root, outputRoot: output, nativeBinary: await supervisorPath() }),
+      createCandidate({ sourceRoot: root, outputRoot: output, supervisorEntry: await supervisorPath() }),
     ).rejects.toThrow('notice integrity mismatch');
   });
   test('explicit signing and promotion verify real OpenSSH signatures before publication', async () => {
@@ -309,7 +316,7 @@ describe('frozen distribution candidate', () => {
     const candidate = await createCandidate({
       sourceRoot: root,
       outputRoot: output,
-      nativeBinary: await supervisorPath(),
+      supervisorEntry: await supervisorPath(),
       preview: false,
     });
     await expect(buildFormats(candidate, { formats: ['npm'] })).rejects.toThrow('signing key');
@@ -338,7 +345,8 @@ describe('frozen distribution candidate', () => {
     await expect(verifyArtifacts(directory)).rejects.toThrow('checksum mismatch');
     const amendedProvenance = JSON.parse(originalProvenance) as {
       sourceDigest: string;
-      artifacts: { size: number }[];
+      artifacts: { size: number; format: string }[];
+      signed: boolean;
     };
     const rewriteMetadata = async (): Promise<void> => {
       const content = JSON.stringify(amendedProvenance);
@@ -351,6 +359,26 @@ describe('frozen distribution candidate', () => {
         ),
       );
     };
+    for (const [signed, format] of [
+      [false, 'npm'],
+      [true, 'portable'],
+    ] as const) {
+      amendedProvenance.signed = signed;
+      amendedProvenance.artifacts[0]!.format = format;
+      await rewriteMetadata();
+      await expect(
+        promoteNpm({
+          artifactDirectory: directory,
+          packageFile,
+          registry: 'https://registry.example.org/',
+          allowedSigners: allowed,
+          signer: 'release',
+          dryRun: true,
+        }),
+      ).rejects.toThrow('identified by signed release provenance');
+    }
+    amendedProvenance.signed = true;
+    amendedProvenance.artifacts[0]!.format = 'npm';
     amendedProvenance.artifacts[0]!.size += 1;
     await rewriteMetadata();
     await expect(verifyArtifacts(directory)).rejects.toThrow('does not match reviewed bytes');

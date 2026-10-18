@@ -1,12 +1,13 @@
 #!/usr/bin/env node
 import { mkdtemp, rm } from 'node:fs/promises';
 import { join } from 'node:path';
-import {
-  CommandRunner,
-  withDeviceLease,
-  nativeReceipts,
-  recoveryReservations,
-} from '../packages/runtime/dist/index.js';
+import { pathToFileURL } from 'node:url';
+const modulePath = process.argv[2];
+const { CommandRunner, withDeviceLease, nativeReceipts, recoveryReservations } = await import(
+  modulePath
+    ? pathToFileURL(modulePath).href
+    : new URL('../packages/runtime/dist/index.js', import.meta.url).href
+);
 const scratch = await mkdtemp('/tmp/pxv-native-baseline-');
 try {
   const control = join(scratch, 'control');
@@ -17,7 +18,7 @@ try {
     'synthetic-baseline-device',
     'synthetic-baseline-transport',
     operation,
-    (lease) =>
+    (/** @type {import('../packages/runtime/dist/index.js').DeviceLease} */ lease) =>
       runner.run([process.execPath, '-e', 'process.stdout.write("pxv-native-baseline")'], {
         mutation: true,
         lease,
@@ -26,7 +27,10 @@ try {
       }),
   );
   const receipts = await nativeReceipts(control, operation);
-  const completed = receipts.filter((r) => r.status === 'completed');
+  const completed = receipts.filter(
+    (/** @type {import('../packages/runtime/dist/native-evidence.js').NativeReceipt} */ r) =>
+      r.status === 'completed',
+  );
   if (
     result.code !== 0 ||
     result.stdout !== 'pxv-native-baseline' ||

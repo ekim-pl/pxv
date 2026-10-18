@@ -1,4 +1,4 @@
-import { describe, expect, expectTypeOf, it } from 'vitest';
+import { describe, expect, expectTypeOf, it } from './../test-api.js';
 import {
   toPolicyDocument,
   digest,
@@ -67,9 +67,9 @@ describe('policy authoring and locks', () => {
     expect(() => validatePolicyDocument({ ...policyDocument, unexpected: true })).toThrow();
     const retained = resolvePolicy(policy, project, product);
     expect(() => verifyResolvedPolicy({ ...retained, policy: invalid })).toThrow();
-    expect(() => evaluateObservation(invalid as typeof policy, observation)).toThrow();
-    expect(() => resolvePolicy(invalid as typeof policy, project, product)).toThrow();
-    expect(() => toPolicyDocument(invalid as typeof policy)).toThrow();
+    expect(() => evaluateObservation(invalid, observation)).toThrow();
+    expect(() => resolvePolicy(invalid, project, product)).toThrow();
+    expect(() => toPolicyDocument(invalid)).toThrow();
   });
 
   it('roundtrips authored policies and locks without policy version fields', () => {

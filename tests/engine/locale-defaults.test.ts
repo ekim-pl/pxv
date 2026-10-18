@@ -1,7 +1,7 @@
 import { toPolicyDocument } from '@pxv/contracts';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from './../test-api.js';
 import { createProject, loadProject, saveInventory, WorkflowEngine, type WorkflowPort } from '@pxv/engine';
 import { SqliteStore } from '@pxv/runtime';
 import { device, product } from '../contracts/fixtures.js';

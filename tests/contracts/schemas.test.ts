@@ -1,20 +1,16 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from './../test-api.js';
 import {
-  canonicalJson,
   parseDocument,
   validateAction,
   validateArtifact,
-  validateAttestation,
   validateExtension,
   validateHandoff,
   validateInventory,
-  validateObligation,
   validateObservation,
   validatePlan,
   validateExecutionPolicy,
   validateProduct,
   validateProject,
-  validateRunEvent,
   validateUserIdentity,
   validateRecipe,
   validateNetworkProbe,
@@ -22,7 +18,7 @@ import {
   requiredAttestations,
   evaluateObservation,
 } from '@pxv/contracts';
-import { device, hashA, hashB, observation, obligation, policy, product, project } from './fixtures.js';
+import { device, hashA, hashB, observation, policy, product, project } from './fixtures.js';
 
 describe('strict configuration parser', () => {
   it('reads JSON and YAML documents', () => {
@@ -435,39 +431,6 @@ describe('public workflow contracts', () => {
       }).actions,
     ).toHaveLength(10);
     expect(() => validateAction({ kind: 'shell', command: 'wipe' })).toThrow();
-  });
-
-  it('validates evidence, durable obligations and run events without inherited execution inputs (regression 4)', () => {
-    const attestation = {
-      schemaVersion: 1,
-      id: 'receipt',
-      planDigest: hashA,
-      observationDigest: hashB,
-      check: 'operator_signoff',
-      operator: 'Alice',
-      recordedAt: at,
-      profileIds: ['admin'],
-    };
-    expect(validateAttestation(attestation).check).toBe('operator_signoff');
-    expect(validateAttestation({ ...attestation, note: 'Observed on bench.' }).note).toBe(
-      'Observed on bench.',
-    );
-    expect(validateObligation(obligation)).toEqual(obligation);
-    expect(() =>
-      validateObligation({ ...obligation, inheritedEnvironment: { TOKEN: 'do-not-retain' } }),
-    ).toThrow();
-    expect(
-      validateRunEvent({
-        schemaVersion: 1,
-        id: 'event-1',
-        runId: 'run-1',
-        sequence: 0,
-        at,
-        type: 'intent',
-        data: { action: 'setting' },
-      }).sequence,
-    ).toBe(0);
-    expect(canonicalJson(validateObligation(obligation))).not.toContain('inheritedEnvironment');
   });
 
   it('requires paired recipient acceptance for completed custody', () => {

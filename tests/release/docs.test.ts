@@ -1,11 +1,46 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { access, link, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
-import { join, resolve } from 'node:path';
-import { pathToFileURL } from 'node:url';
-import { PDFDocument } from 'pdf-lib';
-import { buildDocumentation } from '../../packages/release/src/docs.js';
-import { parseDocument, validatePolicy } from '@pxv/contracts';
-import { verifyGuideLinks } from '../../tools/optional/publishing/links.mjs';
+import type * as TestModule0 from 'node:fs/promises';
+import type * as TestModule1 from 'node:path';
+import type * as TestModule2 from 'node:url';
+import type * as TestModule3 from 'pdf-lib';
+import type * as TestModule4 from '../../packages/release/src/docs.js';
+import type * as TestModule5 from '@pxv/contracts';
+import type * as TestModule6 from '../../tools/optional/publishing/links.mjs';
+import { importModule } from './../test-api.js';
+globalThis.__pxvTestFile = import.meta.url;
+import { afterEach, beforeEach, describe, expect, it, vi } from './../test-api.js';
+// Module exports are called without a receiver.
+
+const { access, link, mkdir, mkdtemp, readFile, rm, symlink, writeFile } = await importModule<
+  typeof TestModule0
+>('node:fs/promises', import.meta.url);
+// Module exports are called without a receiver.
+// eslint-disable-next-line @typescript-eslint/unbound-method
+const { join, resolve } = await importModule<typeof TestModule1>('node:path', import.meta.url);
+// Module exports are called without a receiver.
+
+const { pathToFileURL } = await importModule<typeof TestModule2>('node:url', import.meta.url);
+// Module exports are called without a receiver.
+
+const { PDFDocument } = await importModule<typeof TestModule3>('pdf-lib', import.meta.url);
+// Module exports are called without a receiver.
+
+const { buildDocumentation } = await importModule<typeof TestModule4>(
+  '../../packages/release/src/docs.js',
+  import.meta.url,
+);
+// Module exports are called without a receiver.
+
+const { parseDocument, validatePolicy } = await importModule<typeof TestModule5>(
+  '@pxv/contracts',
+  import.meta.url,
+);
+// Module exports are called without a receiver.
+
+const { verifyGuideLinks } = await importModule<typeof TestModule6>(
+  '../../tools/optional/publishing/links.mjs',
+  import.meta.url,
+);
+
 type Launch = NonNullable<NonNullable<Parameters<typeof buildDocumentation>[2]>['browser']>['launch'];
 type Browser = Awaited<ReturnType<Launch>>;
 type BrowserContext = Awaited<ReturnType<Browser['newContext']>>;
@@ -577,7 +612,10 @@ it('uses the production browser dependency when no browser override is supplied'
   vi.doMock(playwright, () => ({ chromium: { launch: fixture.launch } }));
   vi.resetModules();
   try {
-    const module = await import('../../packages/release/src/docs.js');
+    const module = await importModule<typeof TestModule4>(
+      '../../packages/release/src/docs.js',
+      import.meta.url,
+    );
     await module.buildDocumentation(directory, destination, { pdf: true });
     expect(fixture.launch).toHaveBeenCalledOnce();
   } finally {
@@ -585,3 +623,5 @@ it('uses the production browser dependency when no browser override is supplied'
     vi.resetModules();
   }
 });
+
+type PDFDocument = typeof PDFDocument.prototype;

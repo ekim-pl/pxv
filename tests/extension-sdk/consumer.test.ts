@@ -4,7 +4,7 @@ import { mkdtemp, mkdir, readFile, writeFile, rm, readdir } from 'node:fs/promis
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { build } from 'esbuild';
-import { afterEach, describe, it, expect } from 'vitest';
+import { afterEach, describe, it, expect } from './../test-api.js';
 import { ExtensionManager } from '@pxv/extensions';
 import { packageManagerCommand } from '../../tools/lib/package-manager.mjs';
 const execute = promisify(execFile);

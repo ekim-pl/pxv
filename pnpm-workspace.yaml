@@ -2,10 +2,9 @@ packages:
   - packages/*
 allowBuilds:
   esbuild: true
-  '@swc/core': false
-  unrs-resolver: true
-minimumReleaseAgeExclude:
-  - '@vitest/coverage-v8@5.0.5'
-  - '@vitest/mocker@5.0.5'
-  - '@vitest/spy@5.0.5'
-  - vitest@5.0.5
+  koffi: false
+
+# java-parser/chevrotain permit these patched releases; retain exact parser pin.
+overrides:
+  lodash: 4.18.1
+  lodash-es: 4.18.1

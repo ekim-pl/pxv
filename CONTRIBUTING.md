@@ -1,7 +1,7 @@
 # Contributing
 
 Use the exact versions in `.node-version`, `package.json`, `pnpm-lock.yaml` and
-`rust-toolchain.toml`: Node 24.22.0, pnpm 12.11.2 and the pinned Rust toolchain.
+`packages/runtime/package.json`: Node 24.22.0, pnpm 12.11.2.
 Compilation uses TypeScript 7 through `@typescript/native`; TypeScript 6 supplies
 ESLint's JavaScript API. See [host setup](docs/HOST_DEPENDENCIES.md) and
 [development testing](docs/TESTING.md) for Android/Java/OpenSSH prerequisites.
@@ -9,7 +9,7 @@ ESLint's JavaScript API. See [host setup](docs/HOST_DEPENDENCIES.md) and
 ```sh
 pnpm install --frozen-lockfile
 pnpm quality:setup
-pnpm build:native
+pnpm build
 PXV_REQUIRE_CRYPTO=1 pnpm quality
 ```
 
@@ -28,7 +28,7 @@ used by attestation and finalization. Read [architecture](docs/ARCHITECTURE.md).
 Use focused tests during development and rebuild compiled workers before integration
 checks. Every executable TypeScript module/package must meet 90% lines and 85%
 branches. TS/JS functions must stay at cyclomatic complexity 10, nesting 4 and 80
-nonblank/noncomment lines or below. Rust/Java complexity, Rustfmt/Clippy, Java warnings,
+nonblank/noncomment lines or below. Java/JavaScript complexity, Java warnings,
 ShellCheck, syntax, boundaries and development/production reachability are also gated.
 Remove unused internals rather than adding broad exclusions.
 

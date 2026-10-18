@@ -1,29 +1,71 @@
 {
   "schemaVersion": 1,
   "operator": [
-    "host-diagnosis", "project-initialization", "enrollment", "exact-target-selection",
-    "plan-review", "verified-os-installation", "user-creation", "verified-app-deployment",
-    "settings-and-permissions", "app-setup-recipes", "network-probe-and-recovery",
-    "backup-observation", "operator-attestation", "typed-recovery", "handoff-finalization"
+    "host-diagnosis",
+    "project-initialization",
+    "enrollment",
+    "exact-target-selection",
+    "plan-review",
+    "verified-os-installation",
+    "user-creation",
+    "verified-app-deployment",
+    "settings-and-permissions",
+    "app-setup-recipes",
+    "network-probe-and-recovery",
+    "backup-observation",
+    "operator-attestation",
+    "typed-recovery",
+    "handoff-finalization"
   ],
   "recipient": [
-    "private-normal-credentials", "language", "optional-private-duress",
-    "private-accounts-and-mfa", "private-recovery-material", "recipient-acceptance",
-    "physical-debugging-shutdown", "completed-custody"
+    "private-normal-credentials",
+    "language",
+    "optional-private-duress",
+    "private-accounts-and-mfa",
+    "private-recovery-material",
+    "recipient-acceptance",
+    "physical-debugging-shutdown",
+    "completed-custody"
   ],
-  "lifecycle": ["maintenance", "policy-change", "loss", "retirement"],
+  "lifecycle": [
+    "maintenance",
+    "policy-change",
+    "loss",
+    "retirement"
+  ],
   "profileLayouts": [
-    { "pack": "reference-five", "count": 5 },
-    { "pack": "simple", "count": 1 },
-    { "pack": "custom", "count": 3 }
+    {
+      "pack": "reference-five",
+      "count": 5
+    },
+    {
+      "pack": "simple",
+      "count": 1
+    },
+    {
+      "pack": "custom",
+      "count": 3
+    },
+    {
+      "pack": "self-service-five",
+      "count": 5
+    }
   ],
   "liveAcceptance": {
     "device": "Pixel 8a",
-    "locales": ["en", "pl"],
+    "locales": [
+      "en",
+      "pl"
+    ],
     "requiredEvidence": [
-      "recorded-grapheneos-emulator-provenance", "physical-pixel-reboot-persistence",
-      "user-isolation", "network-routing-failure-recovery", "representative-restore",
-      "helper-removal", "recipient-acceptance", "physical-debugging-shutdown"
+      "recorded-grapheneos-emulator-provenance",
+      "physical-pixel-reboot-persistence",
+      "user-isolation",
+      "network-routing-failure-recovery",
+      "representative-restore",
+      "helper-removal",
+      "recipient-acceptance",
+      "physical-debugging-shutdown"
     ]
   }
 }

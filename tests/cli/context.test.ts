@@ -1,9 +1,19 @@
-import { toPolicyDocument } from '@pxv/contracts';
-import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
+import type * as TestModule0 from '@pxv/adapters';
+import type * as TestModule1 from '@pxv/contracts';
+import type * as TestModule2 from 'node:fs/promises';
+import type * as TestModule3 from 'node:os';
+import type * as TestModule4 from 'node:path';
+import type * as TestModule5 from '@pxv/engine';
+import type * as TestModule6 from '@pxv/runtime';
+import type * as TestModule7 from '../../packages/cli/src/context.js';
+import type * as TestModule8 from '../engine/fixtures.js';
+import type * as TestModule9 from '../contracts/fixtures.js';
+import { importModule } from './../test-api.js';
+globalThis.__pxvTestFile = import.meta.url;
+
 import type * as FileSystemModule from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join, relative, resolve } from 'node:path';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+import { afterEach, beforeEach, describe, expect, it, vi } from './../test-api.js';
 import type {
   ObligationWriter,
   ArtifactPolicy,
@@ -13,14 +23,10 @@ import type {
   NetworkProbePolicy,
 } from '@pxv/contracts';
 import type { RepositoryOptions } from '@pxv/adapters';
-import { createProject, saveInventory } from '@pxv/engine';
+
 import type { ExecutionContext, OsSnapshot } from '@pxv/engine';
-import { SqliteStore } from '@pxv/runtime';
+
 import type { DeviceLease } from '@pxv/runtime';
-import { application, productAt, redact, resourceRoot } from '../../packages/cli/src/context.js';
-import { basePolicy } from '../engine/fixtures.js';
-import { device, hashA, hashB, observation, product } from '../contracts/fixtures.js';
-import { obligation } from '../contracts/fixtures.js';
 
 const mocks = vi.hoisted(() => ({
   denyAccess: false,
@@ -70,7 +76,8 @@ vi.mock('node:fs/promises', async (importOriginal) => {
     },
   };
 });
-vi.mock('@pxv/adapters', () => ({
+vi.mock('@pxv/adapters', async (original) => ({
+  ...(await original<typeof TestModule0>()),
   HostTools: class {
     discover = mocks.discover;
     require = mocks.require;
@@ -118,6 +125,48 @@ vi.mock('@pxv/extensions', () => ({
     inspect = mocks.extensionInspect;
   },
 }));
+// Module exports are called without a receiver.
+
+const { toPolicyDocument } = await importModule<typeof TestModule1>('@pxv/contracts', import.meta.url);
+// Module exports are called without a receiver.
+
+const { mkdir, mkdtemp, readFile, rm, symlink, writeFile } = await importModule<typeof TestModule2>(
+  'node:fs/promises',
+  import.meta.url,
+);
+// Module exports are called without a receiver.
+
+const { tmpdir } = await importModule<typeof TestModule3>('node:os', import.meta.url);
+// Module exports are called without a receiver.
+// eslint-disable-next-line @typescript-eslint/unbound-method
+const { join, relative, resolve } = await importModule<typeof TestModule4>('node:path', import.meta.url);
+// Module exports are called without a receiver.
+
+const { createProject, saveInventory } = await importModule<typeof TestModule5>(
+  '@pxv/engine',
+  import.meta.url,
+);
+// Module exports are called without a receiver.
+
+const { SqliteStore } = await importModule<typeof TestModule6>('@pxv/runtime', import.meta.url);
+// Module exports are called without a receiver.
+
+const { application, productAt, redact, resourceRoot } = await importModule<typeof TestModule7>(
+  '../../packages/cli/src/context.js',
+  import.meta.url,
+);
+// Module exports are called without a receiver.
+
+const { basePolicy } = await importModule<typeof TestModule8>('../engine/fixtures.js', import.meta.url);
+// Module exports are called without a receiver.
+
+const { device, hashA, hashB, observation, product } = await importModule<typeof TestModule9>(
+  '../contracts/fixtures.js',
+  import.meta.url,
+);
+// Module exports are called without a receiver.
+
+const { obligation } = await importModule<typeof TestModule9>('../contracts/fixtures.js', import.meta.url);
 
 describe('production dependency wiring and evidence boundaries', () => {
   let root = '';
@@ -222,7 +271,7 @@ describe('production dependency wiring and evidence boundaries', () => {
     await expect(application(projectRoot, resources)).rejects.toThrow();
     const store = await SqliteStore.open(join(projectRoot, 'state/pxv.sqlite3'));
     await store.close();
-    const project = await import('node:fs/promises')
+    const project = await importModule<typeof TestModule2>('node:fs/promises', import.meta.url)
       .then((fs) => fs.readFile(join(projectRoot, 'pxv.project.json'), 'utf8'))
       .then((text) => JSON.parse(text) as Record<string, unknown>);
     await writeFile(
@@ -634,3 +683,5 @@ describe('production dependency wiring and evidence boundaries', () => {
     ).toEqual({ data: ['<device-serial>', null, 3, { serial: 'prefix <device-serial> suffix' }] });
   });
 });
+
+type SqliteStore = typeof SqliteStore.prototype;

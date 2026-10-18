@@ -28,7 +28,10 @@ The workspace uses pnpm and TypeScript project references. The pinned versions a
 ```sh
 pnpm install --frozen-lockfile
 pnpm build
-pnpm build:native
 ```
 
-`pnpm build` compiles the TypeScript packages; `pnpm build:native` separately builds and checks the static Linux x86_64 Rust supervisor. Packaging is derived from a candidate with `pnpm build:preview`. For the full contributor quality gate and its Android, Java, OpenSSH and Rust prerequisites, see [CONTRIBUTING.md](../CONTRIBUTING.md) and the root [README](../README.md).
+The supervisor is a separate TypeScript process compiled by `pnpm build` in `@pxv/runtime`. It runs through the selected Node executable with private IPC on fd 3. Koffi 3.3.3 and its exact Linux x64 platform package provide reviewed prebuilt Node-API 8 calls for locks, subreapers and pidfds. The install script is disabled; missing or incompatible prebuilds require reinstalling the frozen dependencies on supported glibc Linux, with no compilation fallback.
+
+The official Node 24.22.0 distribution is an explicit exception to the Rust-payload policy: it includes upstream Rust-derived TypeScript parser bytes. Tests use synchronous module hooks and esbuild 0.28.2 to transpile TypeScript and never use Node's embedded parser. Project-managed executables, addons, WASM and development dependencies must pass `node tools/check-dependencies.mjs`.
+
+`pnpm test` builds compiled integration entrypoints, then runs each TypeScript test file in an isolated Node process. Assertions and mocks use expect/jest-mock 30.5.2, with fake-timers 15.4.0. Module mocks register before dynamic imports. `pnpm test:supervisor` includes the ported unit and receipt-persistence fault tests.

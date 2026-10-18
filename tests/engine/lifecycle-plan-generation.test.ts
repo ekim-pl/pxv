@@ -2,7 +2,7 @@ import { toPolicyDocument } from '@pxv/contracts';
 import { DatabaseSync } from 'node:sqlite';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { beforeEach, afterEach, expect, it } from 'vitest';
+import { beforeEach, afterEach, expect, it } from './../test-api.js';
 import { createProject, loadProject, recordLifecycle, saveInventory, WorkflowEngine } from '@pxv/engine';
 import type { ArtifactPort, ProjectContext, SeedvaultWorkflowPort } from '@pxv/engine';
 import { SqliteStore } from '@pxv/runtime';

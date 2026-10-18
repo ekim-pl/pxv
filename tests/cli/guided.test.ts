@@ -1,4 +1,4 @@
-import { expect, it } from 'vitest';
+import { expect, it } from './../test-api.js';
 import { renderProjectGuide, guidedNextSteps } from '../../packages/cli/src/guided.js';
 import type { RunRecord } from '@pxv/engine';
 import { policy, product } from '../contracts/fixtures.js';

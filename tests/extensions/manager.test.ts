@@ -3,7 +3,7 @@ import { chmod, lstat, mkdir, mkdtemp, readFile, rename, rm, symlink, writeFile 
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { gzipSync } from 'node:zlib';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from './../test-api.js';
 import { canonicalJson } from '@pxv/contracts';
 import { ExtensionManager, safeRelativePath, validateMetadata } from '@pxv/extensions';
 import type { ExtensionMetadata } from '@pxv/extensions';

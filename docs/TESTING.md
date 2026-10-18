@@ -20,26 +20,23 @@ Use the exact workspace versions; `.npmrc` enforces the Node/pnpm engine require
 | Node.js             | 24.22.0 LTS                                                                                          |
 | pnpm                | 12.11.2                                                                                              |
 | TypeScript compiler | 7.0.2, installed by the lockfile as `@typescript/native`                                             |
-| Rust                | 1.99.1 with rustfmt, Clippy and `x86_64-unknown-linux-musl`                                          |
 | Java                | JDK 17 or newer, including `java`, `javac`, `jar` and `keytool`                                      |
 | Cryptography        | OpenSSH with `ssh-keygen -Y` signing/verification                                                    |
 | Android SDK         | Platform `android-35` and Build Tools `35.0.0`, including aapt, d8 and apksigner                     |
 | Basic build tools   | Git for source identity, tar/xz and the tools described in [host dependencies](HOST_DEPENDENCIES.md) |
 
-Compilation uses TypeScript 7.0.2. The separately pinned TypeScript 6 API package supports type-aware linting; changing that package to match the compiler is not a setup step. TypeScript has stable releases rather than an LTS channel. Dependencies and analyzer versions are pinned in [package.json](../package.json), [rust-toolchain.toml](../rust-toolchain.toml) and [quality-tools.json](../tools/quality-tools.json).
+Compilation uses TypeScript 7.0.2. The separately pinned TypeScript 6 API package supports type-aware linting; changing that package to match the compiler is not a setup step. TypeScript has stable releases rather than an LTS channel. Dependencies and analyzer versions are pinned in [package.json](../package.json), [runtime package](../packages/runtime/package.json) and [quality-tools.json](../tools/quality-tools.json).
 
 Install the pinned Node runtime first. If pnpm is missing, `npm install --global pnpm@12.11.2` installs that exact package manager. Check the active tools before installing the workspace:
 
 ```sh
 node --version
 pnpm --version
-rustc --version
-cargo --version
 javac -version
 ssh -V
 ```
 
-The expected Node/pnpm/Rust versions are `v24.22.0`, `12.11.2` and `1.99.1`. Configure an existing, reviewed Android SDK location:
+The supervisor is a separate TypeScript process compiled by `pnpm build` in `@pxv/runtime`. It runs through the selected Node executable with private IPC on fd 3. Koffi 3.3.3 and its exact Linux x64 platform package provide reviewed prebuilt Node-API 8 calls for locks, subreapers and pidfds. The install script is disabled; missing or incompatible prebuilds require reinstalling the frozen dependencies on supported glibc Linux, with no compilation fallback.
 
 ```sh
 export ANDROID_HOME="$HOME/Android/Sdk"
@@ -55,36 +52,29 @@ If the required SDK packages are absent, install them through your SDK manager a
   'platforms;android-35' 'build-tools;35.0.0'
 ```
 
-Install the workspace and native toolchain, then build the executable code used by integrations:
+Install the workspace and helper tools, then build the executable code used by integrations:
 
 ```sh
 pnpm install --frozen-lockfile
-rustup toolchain install 1.99.1 --profile minimal \
-  --component rustfmt --component clippy --target x86_64-unknown-linux-musl
 pnpm quality:setup
-pnpm build:native
 pnpm build
 ```
 
-`rust-toolchain.toml` selects Rust for this checkout; changing your global Rust default is unnecessary. The native build uses the toolchain's bundled rust-lld and reviewed musl runtime; it does not require host musl-gcc. The output is `native/supervisor/target/x86_64-unknown-linux-musl/release/pxv-supervisor`.
-
-Dependency installation, Rust/SDK installation and `quality:setup` are explicit setup steps that can use the network. `quality:setup` downloads and checksum-verifies Rust Code Analysis 0.0.25 and ShellCheck 0.11.0. Their cache defaults below the user's cache directory; set `PXV_QUALITY_TOOLS` to select another location and keep that setting for subsequent checks. Checks validate the installed analyzers and never install them implicitly. The [CI workflow](../.github/workflows/validate.yml) records the automated setup recipe and Node archive checksum.
-
 ## Use a fast edit-and-test loop
 
-Start with the tests nearest the behavior you changed. Vitest accepts file/directory filters and a test-name regular expression:
+Start with the tests nearest the behavior you changed. The test runner accepts file paths and glob patterns:
 
 ```sh
-pnpm exec vitest run tests/contracts/policy.test.ts
-pnpm exec vitest run tests/engine
-pnpm exec vitest run tests/contracts/policy.test.ts -t 'permission drift'
-pnpm exec vitest list tests/contracts/policy.test.ts -t 'permission drift'
+pnpm test tests/contracts/policy.test.ts
+pnpm test 'tests/engine/**/*.test.ts'
 ```
 
-`list` shows the selected tests without executing their bodies. Confirm the filter selects the intended cases; an empty selection does not establish correctness. For continuous feedback while editing:
+Each file runs in its own process. For Node's native name filtering or watch mode, build the integration entrypoints first and register the same esbuild hooks:
 
 ```sh
-pnpm exec vitest watch tests/contracts/policy.test.ts
+pnpm build
+node --import ./tools/test-hooks.mjs --test --test-name-pattern='permission drift' tests/contracts/policy.test.ts
+node --import ./tools/test-hooks.mjs --test --watch tests/contracts/policy.test.ts
 ```
 
 Stop watch mode with Ctrl-C. Choose the relevant test area:
@@ -101,17 +91,15 @@ Stop watch mode with Ctrl-C. Choose the relevant test area:
 | Candidate formats, launchers, notices and guides                     | `tests/release`       |
 | Quality-gate/report behavior                                         | `tests/quality`       |
 
-Add a regression around the actual failure or safety invariant. Exercise the relevant boundary: malformed input, a competing generation, owner death, a failed durable event, an incompatible signer, or a changed Android user serial. A test that only reproduces an implementation detail does not establish the resulting workflow behavior. Follow the existing temporary-fixture and cleanup patterns.
+Use focused functional or integration checks at the relevant boundary: malformed input, a competing generation, owner death, a failed durable event, an incompatible signer, or a changed Android user serial. A test that only reproduces an implementation detail does not establish the resulting workflow behavior. Follow the existing temporary-fixture and cleanup patterns.
 
-Vitest resolves most workspace package imports to TypeScript source. Some integrations deliberately execute compiled CLI entrypoints, isolated workers or packaged public declarations. After changing those paths or their dependencies, rebuild before running the integration:
+node:test resolves most workspace package imports to TypeScript source. Some integrations deliberately execute compiled CLI entrypoints, isolated workers or packaged public declarations. After changing those paths or their dependencies, rebuild before running the integration:
 
 ```sh
-pnpm build
-pnpm exec vitest run tests/cli/entrypoint.test.ts tests/extensions/manager.test.ts \
-  tests/extension-sdk/consumer.test.ts
+pnpm test tests/cli/entrypoint.test.ts tests/extensions/manager.test.ts tests/extension-sdk/consumer.test.ts
 ```
 
-Re-run `pnpm build:native` after supervisor changes before exercising TypeScript/native integrations. A source test passing while a child still executes older `dist` output is incomplete evidence. Watch mode does not replace these builds.
+Re-run `pnpm build` after supervisor changes before exercising TypeScript/native integrations. A source test passing while a child still executes older `dist` output is incomplete evidence. Watch mode does not replace these builds.
 
 Check types and the edited file's style during the loop:
 
@@ -121,42 +109,44 @@ pnpm exec eslint packages/engine/src/handoff-service.ts
 pnpm exec prettier --check packages/engine/src/handoff-service.ts
 ```
 
-Replace the example file with the files you edited. `typecheck` builds production references and checks test and first-party JavaScript semantics, including unused locals/parameters. A Vitest pass alone does not perform those compiler checks.
+Replace the example file with the files you edited. `typecheck` builds production references and checks test and first-party JavaScript semantics, including unused locals/parameters. A node:test pass alone does not perform those compiler checks.
 
 ## Run the appropriate quality stages
 
 | Command              | What it verifies                                                                                                                                                                 |
 | -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `pnpm build`         | Compiles workspace packages and declarations                                                                                                                                     |
-| `pnpm check`         | Types, typed lint, formatting, package edges/cycles, development and strict production Knip graphs, complexity, Rustfmt/Clippy, shell syntax/ShellCheck and documentation checks |
-| `pnpm test`          | Runs the complete Vitest suite once                                                                                                                                              |
-| `pnpm test:native`   | Runs Rust fault tests on the static musl target                                                                                                                                  |
-| `pnpm test:coverage` | Runs the complete Vitest suite and merges worker/subprocess coverage before checking every module/package                                                                        |
+| `pnpm check`         | Types, typed lint, formatting, package edges/cycles, development and strict production TypeScript repository graphs, complexity, shell syntax/ShellCheck and documentation checks |
+| `pnpm test`          | Runs the complete node:test suite once                                                                                                                                              |
+| `pnpm test:supervisor`   | Runs supervisor unit, receipt-failure and ownership integration tests                                                                                                                                  |
+| `pnpm test:coverage` | Runs the complete node:test suite and merges worker/subprocess coverage before checking every module/package                                                                        |
 | `pnpm check:helpers` | Compiles the Java verifier and all three Android helpers, then signs and verifies their APKs                                                                                     |
 | `pnpm docs:check`    | Checks documentation references and obsolete workflow/tooling patterns                                                                                                           |
-| `pnpm quality`       | Runs `check`, native tests, complete coverage and helper checks, then validates final metrics/source identity and writes the aggregate report                                    |
+| `pnpm quality`       | Runs static checks, supervisor tests, complete coverage and helper checks, then validates final metrics/source identity and writes the aggregate report                                    |
 
-For a native-only edit, `pnpm test:native` gives the focused fault result; `pnpm check` also requires rustfmt and Clippy with warnings denied. For a helper or Java-verifier edit, run `pnpm check:helpers`; Java compilation uses `-Xlint:all -Werror`. Generated stable, preview and OCI shell launchers receive syntax and ShellCheck checks too.
+For a supervisor edit, `pnpm test:supervisor` gives the focused fault result; `pnpm check` also checks TypeScript types, lint and complexity. For a helper or Java-verifier edit, run `pnpm check:helpers`; Java compilation uses `-Xlint:all -Werror`. Generated stable, preview and OCI shell launchers receive syntax and ShellCheck checks too.
 
 The required gates remain:
 
 - Every TS/JS production function: classic ESLint cyclomatic complexity at most 10, nesting at most 4, and at most 80 nonblank, noncomment lines.
-- Every first-party Rust/Java function: cyclomatic complexity at most 10 using the pinned Rust Code Analysis analyzer. Rust cognitive complexity is reported separately; the pinned analyzer does not provide Java cognitive complexity.
+- Every first-party Java function: cyclomatic complexity at most 10 using java-parser 3.0.1, with methods, constructors and lambdas measured independently. Invalid Java source fails the gate.
 - Every TypeScript executable module and application package: at least 90% line and 85% branch coverage, including release tooling, workers and entrypoints. Application source is not excluded to make the totals pass.
 
-Coverage percentages supplement explicit safety scenarios. Required regressions include reused Android user IDs with a changed serial, permission drift before finalization, child cleanup ownership, inherited secret sentinels, an exact asset named `all`, and capability-based emulator provenance. Storage and execution checks include worker death, malformed records, atomic event/state failures, stale configuration, cancellation, escaped descendants, durable fences and retryable owner-scoped recovery. Extension checks cover bounded archive/input/IPC handling and external compile/bundle/package/offline execution.
+Coverage percentages supplement explicit safety scenarios. Storage and execution checks include worker death, malformed records, atomic event/state failures, stale configuration, cancellation, escaped descendants, durable fences and retryable owner-scoped recovery. Extension checks cover bounded archive/input/IPC handling and external compile/bundle/package/offline execution.
 
 ## Separate focused coverage from acceptance coverage
 
-To inspect a component during development, send its diagnostic report to a separate directory:
+The aggregate runner accepts file patterns for diagnostic coverage:
 
 ```sh
-pnpm exec vitest run tests/engine --coverage \
-  --coverage.reportsDirectory=/tmp/pxv-engine-coverage \
-  --coverage.reporter=json --coverage.reporter=text-summary
+pnpm test:coverage 'tests/engine/**/*.test.ts'
 ```
 
-This is a filtered diagnostic run. The configured coverage include still spans application source, so untouched modules can show zero coverage. Direct Vitest coverage also lacks the aggregate harness's complete worker/subprocess merge. Do not present its totals as the full quality result or add exclusions to hide unexecuted modules.
+This filtered run writes to the shared coverage locations and normally fails the
+whole-application thresholds because other modules were not exercised. It replaces
+`.quality/tests.json` and coverage evidence; rerun the unfiltered gate before relying
+on those files. The runner does not support Vitest coverage flags or a separate
+report directory. Do not add exclusions to hide unexecuted modules.
 
 Use the unfiltered command for the actual gate:
 
@@ -164,7 +154,7 @@ Use the unfiltered command for the actual gate:
 PXV_REQUIRE_CRYPTO=1 pnpm test:coverage
 ```
 
-Vitest collects coverage for its own test workers. The aggregate harness enables
+node:test collects coverage for its own test workers. The aggregate harness enables
 native Node tracing only for application workers and subprocesses spawned by the
 tests, avoiding a second trace of the test-pool supervisor during forced teardown.
 Application workers flush coverage and their owners await exit before teardown;
@@ -172,21 +162,9 @@ fixture executables containing no application code are not traced. Empty or
 incomplete trace files receive bounded retries. Persistent malformed traces name
 the offending files and fail the coverage report rather than being discarded.
 
-The harness writes raw application worker/subprocess traces to `.quality/v8`, source-maps them onto the executable Vitest maps, and reports the merged result in `.quality/coverage.json` and `coverage/coverage-final.json`. Type/comment lines never become statements, and unmatched child branch ranges never imply coverage. Do not override the aggregate command's coverage output directory: the merge expects the configured `coverage/coverage-final.json` path. Run one aggregate quality/coverage process per checkout at a time because these output locations are shared.
+The harness writes raw application worker/subprocess traces to `.quality/v8`, source-maps them onto the executable node:test maps, and reports the merged result in `.quality/coverage.json` and `coverage/coverage-final.json`. Type/comment lines never become statements, and unmatched child branch ranges never imply coverage. Do not override the aggregate command's coverage output directory: the merge expects the configured `coverage/coverage-final.json` path. Run one aggregate quality/coverage process per checkout at a time because these output locations are shared.
 
 ## Diagnose failures without weakening the gate
-
-| Symptom                                                   | Next check                                                                                                      |
-| --------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
-| Engine or runtime version rejected                        | Check the active Node/pnpm/Rust versions and PATH against the pins above                                        |
-| Missing or incompatible analyzer                          | Run `pnpm quality:setup` explicitly; check `PXV_QUALITY_TOOLS` is consistent across setup and checks            |
-| Native supervisor missing or stale                        | Run `pnpm build:native`; retain the static musl target and reviewed flags                                       |
-| APK crypto/helper setup failure                           | Check `ANDROID_HOME`, platform 35, Build Tools 35.0.0 and JDK/OpenSSH availability; keep `PXV_REQUIRE_CRYPTO=1` |
-| Compiled child behavior differs from source               | Run `pnpm build`, then repeat the selected integration                                                          |
-| No tests selected                                         | List the file/test filter and check the current test names                                                      |
-| Low coverage in a filtered run                            | Inspect the selected component, then run unfiltered `pnpm test:coverage` for acceptance                         |
-| Type/lint/dead-code failure despite green tests           | Run `pnpm typecheck` and `pnpm check`; fix the reported contract, boundary or unused code                       |
-| Aggregate report says source changed or evidence is stale | Stop edits/watch processes that write source, then rerun the complete aggregate against the final bytes         |
 
 The full check requires genuine SSH/JAR/APK verification. `PXV_REQUIRE_CRYPTO=1` makes that expectation explicit; skipping Android cryptography does not qualify a merge or release. Repair missing prerequisites rather than treating a skip as a pass. Failure tests deliberately create process exits, malformed records and rejected operations; evaluate the test assertion and retained evidence rather than classifying every injected child failure as a suite failure.
 
@@ -197,7 +175,7 @@ Keep developer fixture data synthetic. Do not copy recipient credentials, real d
 Once implementation, tests and documentation are ready, stop editing source and run:
 
 ```sh
-pnpm build:native
+pnpm build
 PXV_REQUIRE_CRYPTO=1 pnpm quality
 ```
 
@@ -215,6 +193,17 @@ pnpm build:preview --formats portable,deb,npm,oci
 
 This creates uniquely named previews and does not publish, push, install globally or replace stable launchers. Test portable execution from an arbitrary working directory/read-only installation, offline npm installation with lifecycle scripts disabled, actual Debian installation inside a disposable container, and an OCI read-only root under an arbitrary UID. Verify checksums/signatures, notices, SBOM and source/toolchain provenance. Keep test signing material outside the source/candidate.
 
-The supervisor must be static Linux x86_64 with the reviewed musl target. Release validation rejects dynamic ELF binaries, including ones that happen to run on a newer build host. Distribution acceptance includes a real synthetic native lease, owned child execution, a cleanup-proven durable receipt and zero remaining reservations on both the host and Debian 12 runtime. `tools/check-native-baseline.mjs` provides that synthetic check; CI mounts it and the compiled runtime into the container. Printing a version or initializing a project alone does not prove native ownership compatibility.
+The supervisor uses the reviewed Koffi Linux glibc x64 prebuild. Release validation checks ELF identity, dependencies and symbol versions, then executes the installed runtime and addon on Debian 12 and Ubuntu 24.04. `tools/check-native-baseline.mjs` accepts an explicit packaged-runtime module path. After building, run `node tools/check-packaged-runtime.mjs BUILD_RESULT.json` with the JSON printed by the release CLI to exercise every selected supported format on both baselines; Docker and a locally loaded OCI image are required. CI uses candidate bytes as a non-root user with a read-only root; it does not mount workspace dist code.
 
 These tests can qualify code and package behavior without a phone. They do not establish GrapheneOS image provenance, live Docker USB/host-ADB transport behavior, localized UI support, cross-user isolation, routing/failure recovery, backup restoration or recipient custody. Retain separate live evidence through the [canary, backup and recovery guide](CANARY_BACKUP_RECOVERY.md), using the [verification boundaries](VERIFICATION.md).
+
+
+Coverage uses ast-v8-to-istanbul 1.0.7 with @babel/parser 8.0.7 and executable source maps. `NODE_V8_COVERAGE` traces include test processes, workers, supervisors and subprocesses. Missing maps fail the gate; the default module and package thresholds are 90% line and 85% branch coverage. `.quality/tests.json`, `coverage/coverage-final.json` and source-bound report freshness retain their consumer contracts.
+
+The repository graph uses the TypeScript compiler API with explicit SDK, CLI, worker, supervisor and tool entries. Development and production checks reject unreachable files, unused exports/dependencies, missing dependencies, unresolved imports and stale documented exemptions. Java complexity uses java-parser 3.0.1; parser failures fail qualification. Methods, constructors and lambdas have separate cyclomatic measurements capped at 10.
+
+Dependency checks retain the importing package's ownership: a sibling package's declaration cannot satisfy a missing dependency, and runtime imports cannot rely on development-only declarations in the production graph. Type-only imports can use development declarations. CommonJS loads and resolution calls, including aliased `createRequire` loaders, are checked alongside ESM imports. The reviewed `requireContexts` in `tools/repository-graph.json` describe code that intentionally locates the runtime's own dependencies; implicit compiler/tool dependencies are scoped to their declaring manifest. Test-only exports have exact production exemptions that become stale if the finding disappears. Types referenced by consumed public signatures remain available without treating local function calls as export consumers.
+
+Supervisor execution and cleanup deadlines use a monotonic clock, so host wall-clock adjustments cannot extend commands or prematurely exhaust cleanup.
+
+pxv supports Linux only. The dependency audit detects PE and Mach-O payloads solely to reject foreign native artifacts, even if their hashes appear in the review catalog. Linux native binaries and WASM still require a matching hash and documented review.

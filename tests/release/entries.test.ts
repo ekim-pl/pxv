@@ -1,4 +1,4 @@
-import { afterEach, expect, it } from 'vitest';
+import { afterEach, expect, it } from './../test-api.js';
 import { mkdtemp, rm, readFile, writeFile, access } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { CommandRunner } from '@pxv/runtime';

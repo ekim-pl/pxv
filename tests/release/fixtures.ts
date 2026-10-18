@@ -1,5 +1,6 @@
 import { lstat, chmod, readdir, rm } from 'node:fs/promises';
 import { copyFile, cp, mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { symlink } from 'node:fs/promises';
 import { join } from 'node:path';
 const source = process.cwd();
 export async function fixture(brand = 'alpha'): Promise<string> {
@@ -18,11 +19,6 @@ export async function fixture(brand = 'alpha'): Promise<string> {
   await writeFile(join(root, 'product.json'), JSON.stringify(product));
   await copyFile(join(source, 'package.json'), join(root, 'package.json'));
   await copyFile(join(source, 'LICENSE'), join(root, 'LICENSE'));
-  await copyFile(join(source, 'rust-toolchain.toml'), join(root, 'rust-toolchain.toml'));
-  await cp(join(source, 'native', 'supervisor'), join(root, 'native', 'supervisor'), {
-    recursive: true,
-    filter: (path) => !path.includes('/target'),
-  });
   await cp(join(source, 'resources', 'third-party'), join(root, 'resources', 'third-party'), {
     recursive: true,
   });
@@ -46,6 +42,7 @@ export async function fixture(brand = 'alpha'): Promise<string> {
   await cp(join(source, 'packages', 'runtime', 'src'), join(root, 'packages', 'runtime', 'src'), {
     recursive: true,
   });
+  await symlink(join(source, 'packages/runtime/node_modules'), join(root, 'packages/runtime/node_modules'));
   await mkdir(join(root, 'packages', 'extensions', 'src'), { recursive: true });
   await writeFile(join(root, 'packages', 'extensions', 'src', 'index.ts'), 'export const apiVersion=1;');
   await writeFile(

@@ -30,12 +30,11 @@ fixtures/live-lock.json
 
 android/setup/build/
 
-# TypeScript builds and native outputs
+# TypeScript builds and generated artifacts
 node_modules/
 **/dist/
 *.tsbuildinfo
 coverage/
-native/supervisor/target/
 .pxv-preview/
 .quality/
 

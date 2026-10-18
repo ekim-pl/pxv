@@ -28,8 +28,11 @@ class ReleaseArguments {
         : ['--formats', '--source-root', '--output-root', '--supervisor', '--signing-key', '--postject'],
     );
     const switches = new Set(this.command === 'promote' ? ['--dry-run'] : ['--release', '--no-oci-load']);
+    const seen = new Set<string>();
     for (let index = 0; index < this.args.length; index++) {
       const argument = this.args[index]!;
+      if (seen.has(argument)) throw new Error(`Duplicate release argument: ${argument}`);
+      seen.add(argument);
       if (values.has(argument)) {
         this.required(argument.slice(2));
         index++;
@@ -55,11 +58,11 @@ class ReleaseArguments {
 function candidateOptions(args: ReleaseArguments): CandidateOptions {
   const sourceRoot = args.value('source-root'),
     outputRoot = args.value('output-root'),
-    nativeBinary = args.value('supervisor');
+    supervisorEntry = args.value('supervisor');
   return {
     ...(sourceRoot ? { sourceRoot } : {}),
     ...(outputRoot ? { outputRoot } : {}),
-    ...(nativeBinary ? { nativeBinary } : {}),
+    ...(supervisorEntry ? { supervisorEntry } : {}),
     preview: !args.has('release'),
   };
 }
@@ -79,7 +82,7 @@ function formatOptions(args: ReleaseArguments): BuildFormatsOptions {
 export async function runRelease(argv: string[], dependencies: ReleaseServices = services): Promise<void> {
   if (argv.includes('--help')) {
     dependencies.write(
-      'Build preview (portable by default): --formats portable[,oci] [--source-root PATH] [--output-root PATH] [--signing-key KEY] [--no-oci-load]\nOptional compatibility formats: deb,npm,sea (experimental; explicit opt-in only)\nStable artifacts: --release --signing-key KEY\nPublish verified npm artifact: promote --artifacts PATH --package FILE.tgz --registry HTTPS --allowed-signers FILE --signer ID [--dry-run]\n',
+      'Build preview (portable by default): --formats portable[,oci] [--source-root PATH] [--output-root PATH] [--supervisor FILE.js] [--signing-key KEY] [--no-oci-load]\nOptional compatibility formats: deb,npm,sea (experimental; explicit opt-in only)\nStable artifacts: --release --signing-key KEY\nPublish verified npm artifact: promote --artifacts PATH --package FILE.tgz --registry HTTPS --allowed-signers FILE --signer ID [--dry-run]\n',
     );
     return;
   }

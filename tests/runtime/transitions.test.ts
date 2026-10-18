@@ -1,7 +1,7 @@
 import { mkdtemp } from 'node:fs/promises';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from './../test-api.js';
 import { SqliteStore } from '@pxv/runtime';
 import { encodeRecord, encodeTransition, type StoreTransition } from '../../packages/runtime/src/store.js';
 import { openDatabase, StorageHandler } from '../../packages/runtime/src/storage-handler.js';

@@ -1,27 +1,38 @@
-import { toPolicyDocument } from '@pxv/contracts';
-import { ChildProcess } from 'node:child_process';
+import type * as TestModule0 from '../../packages/cli/src/context.js';
+import type * as TestModule1 from '@pxv/contracts';
+import type * as TestModule2 from 'node:child_process';
+import type * as TestModule3 from 'node:fs/promises';
+import type * as TestModule4 from 'node:os';
+import type * as TestModule5 from 'node:path';
+import type * as TestModule6 from '@pxv/engine';
+import type * as TestModule7 from '@pxv/runtime';
+import type * as TestModule8 from '@pxv/mcp';
+import type * as TestModule9 from '@modelcontextprotocol/sdk/client/index.js';
+import type * as TestModule10 from '@modelcontextprotocol/sdk/inMemory.js';
+import type * as TestModule11 from '../../packages/cli/src/run-command.js';
+import type * as TestModule12 from '../../packages/cli/src/backend.js';
+import type * as TestModule13 from '@pxv/extensions';
+import type * as TestModule14 from '../engine/fixtures.js';
+import type * as TestModule15 from '../contracts/fixtures.js';
+import { importModule } from './../test-api.js';
+globalThis.__pxvTestFile = import.meta.url;
+
 import type * as RuntimeModule from '@pxv/runtime';
 import type * as ChildProcessModule from 'node:child_process';
-import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createProject, loadProject, saveInventory, WorkflowEngine } from '@pxv/engine';
-import { SqliteStore } from '@pxv/runtime';
-import { createMcpServer } from '@pxv/mcp';
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
-import { agentCommand } from '../../packages/cli/src/run-command.js';
-import type { ApplicationCliContext } from '../../packages/cli/src/arguments.js';
-import { agentBackend, liveAgentBackend } from '../../packages/cli/src/backend.js';
-import * as Context from '../../packages/cli/src/context.js';
-import { ExtensionManager } from '@pxv/extensions';
-import { resolvePolicy, type ExtensionLock } from '@pxv/contracts';
-import { MemoryPort, basePolicy } from '../engine/fixtures.js';
-import { device, policy as setupPolicy, product } from '../contracts/fixtures.js';
 
-const { detachedSpawn } = vi.hoisted(() => ({ detachedSpawn: vi.fn<typeof ChildProcessModule.spawn>() }));
+import { afterEach, beforeEach, describe, expect, it, vi } from './../test-api.js';
+
+import type { ApplicationCliContext } from '../../packages/cli/src/arguments.js';
+
+const { detachedSpawn } = vi.hoisted(() => ({
+  detachedSpawn:
+    vi.fn<(...args: Parameters<typeof ChildProcessModule.spawn>) => ChildProcessModule.ChildProcess>(),
+}));
 type RunPage = Awaited<ReturnType<WorkflowEngine['listRuns']>>;
+vi.mock('../../packages/cli/src/context.js', async (original) => {
+  const actual = await original<typeof TestModule0>();
+  return { ...actual, application: vi.fn(actual.application) };
+});
 vi.mock('node:child_process', async (importOriginal) => {
   const actual = await importOriginal<typeof ChildProcessModule>();
   return {
@@ -50,7 +61,84 @@ vi.mock('@pxv/runtime', async (original) => {
 vi.mock('../../packages/cli/src/host.js', () => ({
   inspectHost: () => Promise.resolve({ supported: true }),
 }));
+// Module exports are called without a receiver.
 
+const { toPolicyDocument } = await importModule<typeof TestModule1>('@pxv/contracts', import.meta.url);
+// Module exports are called without a receiver.
+
+const { ChildProcess } = await importModule<typeof TestModule2>('node:child_process', import.meta.url);
+// Module exports are called without a receiver.
+
+const { mkdtemp, mkdir, readFile, rm, writeFile } = await importModule<typeof TestModule3>(
+  'node:fs/promises',
+  import.meta.url,
+);
+// Module exports are called without a receiver.
+
+const { tmpdir } = await importModule<typeof TestModule4>('node:os', import.meta.url);
+// Module exports are called without a receiver.
+// eslint-disable-next-line @typescript-eslint/unbound-method
+const { join } = await importModule<typeof TestModule5>('node:path', import.meta.url);
+// Module exports are called without a receiver.
+
+const { createProject, loadProject, saveInventory, WorkflowEngine } = await importModule<typeof TestModule6>(
+  '@pxv/engine',
+  import.meta.url,
+);
+// Module exports are called without a receiver.
+
+const { SqliteStore } = await importModule<typeof TestModule7>('@pxv/runtime', import.meta.url);
+// Module exports are called without a receiver.
+
+const { createMcpServer } = await importModule<typeof TestModule8>('@pxv/mcp', import.meta.url);
+// Module exports are called without a receiver.
+
+const { Client } = await importModule<typeof TestModule9>(
+  '@modelcontextprotocol/sdk/client/index.js',
+  import.meta.url,
+);
+// Module exports are called without a receiver.
+
+const { InMemoryTransport } = await importModule<typeof TestModule10>(
+  '@modelcontextprotocol/sdk/inMemory.js',
+  import.meta.url,
+);
+// Module exports are called without a receiver.
+
+const { agentCommand } = await importModule<typeof TestModule11>(
+  '../../packages/cli/src/run-command.js',
+  import.meta.url,
+);
+// Module exports are called without a receiver.
+
+const { agentBackend, liveAgentBackend } = await importModule<typeof TestModule12>(
+  '../../packages/cli/src/backend.js',
+  import.meta.url,
+);
+// Module exports are called without a receiver.
+
+const Context = await importModule<typeof TestModule0>('../../packages/cli/src/context.js', import.meta.url);
+// Module exports are called without a receiver.
+
+const { ExtensionManager } = await importModule<typeof TestModule13>('@pxv/extensions', import.meta.url);
+// Module exports are called without a receiver.
+
+const { resolvePolicy } = await importModule<typeof TestModule1>('@pxv/contracts', import.meta.url);
+// Module exports are called without a receiver.
+
+const { MemoryPort, basePolicy } = await importModule<typeof TestModule14>(
+  '../engine/fixtures.js',
+  import.meta.url,
+);
+// Module exports are called without a receiver.
+
+const {
+  device,
+  policy: setupPolicy,
+  product,
+} = await importModule<typeof TestModule15>('../contracts/fixtures.js', import.meta.url);
+
+import type { ExtensionLock } from '@pxv/contracts';
 describe('MCP/CLI backend ports and detached execution', () => {
   let root = '';
   let store: SqliteStore;
@@ -545,3 +633,17 @@ describe('MCP/CLI backend ports and detached execution', () => {
     }
   });
 });
+
+type ChildProcess = InstanceType<typeof ChildProcess>;
+
+type WorkflowEngine = InstanceType<typeof WorkflowEngine>;
+
+type SqliteStore = typeof SqliteStore.prototype;
+
+type Client = InstanceType<typeof Client>;
+
+type InMemoryTransport = InstanceType<typeof InMemoryTransport>;
+
+type ExtensionManager = InstanceType<typeof ExtensionManager>;
+
+type MemoryPort = InstanceType<typeof MemoryPort>;

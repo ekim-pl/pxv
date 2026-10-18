@@ -14,7 +14,6 @@ Use the pinned [host toolchain](HOST_DEPENDENCIES.md), then run:
 
 ```sh
 pnpm install --frozen-lockfile
-pnpm build:native
 pnpm build
 pnpm whitelabel:scaffold -- --config ./brand/acme.json --output-dir /tmp/acme-review
 ```
@@ -83,3 +82,6 @@ explicitly and follow the [publication checklist](PUBLICATION_CHECKLIST.md) for
 signature, exact-artifact and live acceptance requirements. Keep extension sources,
 registry authentication, customer inventories, credentials and backup data outside
 Community sources and release artifacts.
+
+
+Release candidates and release provenance use schema 2. They record Node, supervisor JavaScript, Koffi version/platform/Node-API version, loader/addon hashes and artifact hashes. Schema 1 candidates must be regenerated. Portable, Debian, npm, OCI and experimental SEA formats include the supervisor bundle, Koffi loader and selected glibc x64 prebuild with reviewed notices. Existing ownership records, IPC protocol and receipts remain schema/protocol 1; policies are unversioned. Never clear host control state to regenerate a candidate. Engine integrity binds source/build bytes and the selected supervisor, addon and loader.

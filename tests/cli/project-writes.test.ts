@@ -2,7 +2,7 @@ import { toPolicyDocument } from '@pxv/contracts';
 import { mkdtemp, mkdir, writeFile, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
+import { afterEach, beforeEach, describe, it, expect, vi } from './../test-api.js';
 import { createProject } from '@pxv/engine';
 import { ExtensionManager } from '@pxv/extensions';
 import type { ExtensionLock, PolicyDocument } from '@pxv/contracts';

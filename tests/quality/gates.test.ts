@@ -2,7 +2,7 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { mkdtemp, mkdir, writeFile, rm, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { afterEach, expect, test } from 'vitest';
+import { afterEach, expect, test } from './../test-api.js';
 import ts from 'typescript';
 import { checkBoundaries } from '../../tools/lib/boundaries.mjs';
 import { runBuildCommand } from '../../tools/lib/build-command.mjs';

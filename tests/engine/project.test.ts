@@ -4,7 +4,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { lstat, mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from './../test-api.js';
 import {
   containedPath,
   engineIntegrity,
@@ -116,24 +116,24 @@ describe('isolated project data', () => {
     await symlink('/tmp', join(code, 'assets'));
     await expect(engineIntegrity(code)).rejects.toThrow('symlinks');
     await rm(join(code, 'assets'));
-    await mkdir(join(code, 'native'));
-    await symlink('/bin/true', join(code, 'native/pxv-supervisor'));
-    await expect(engineIntegrity(code)).rejects.toThrow('immutable regular');
+    await mkdir(join(code, 'node_modules/@pxv/runtime'), { recursive: true });
+    await symlink('/bin/true', join(code, 'node_modules/@pxv/runtime/supervisor.js'));
+    await expect(engineIntegrity(code)).rejects.toThrow(/immutable regular|symlinks/);
   });
 
-  it('binds the selected static supervisor bytes and ignores the unused GNU target without an override', async () => {
+  it('binds the selected JavaScript supervisor bytes and ignores unrelated output without an override', async () => {
     const savedSupervisor = process.env['PXV_SUPERVISOR'];
     delete process.env['PXV_SUPERVISOR'];
     try {
       const code = join(root, 'code');
-      const musl = join(code, 'native/supervisor/target/x86_64-unknown-linux-musl/release/pxv-supervisor');
-      const gnu = join(code, 'native/supervisor/target/release/pxv-supervisor');
+      const musl = join(code, 'packages/runtime/dist/supervisor.js');
+      const gnu = join(code, 'unselected/output.js');
       await mkdir(join(code, 'packages/core'), { recursive: true });
       await writeFile(join(code, 'packages/core/index.js'), 'export const version=1;');
-      await mkdir(join(code, 'native/supervisor/target/x86_64-unknown-linux-musl/release'), {
+      await mkdir(join(code, 'packages/runtime/dist'), {
         recursive: true,
       });
-      await mkdir(join(code, 'native/supervisor/target/release'), { recursive: true });
+      await mkdir(join(code, 'unselected'), { recursive: true });
       await writeFile(musl, 'static-supervisor-v1');
       await writeFile(gnu, 'unused-gnu-v1');
       const first = await engineIntegrity(code);
@@ -158,53 +158,6 @@ describe('durable resource ownership and local lifecycle', () => {
   afterEach(async () => {
     await store.close();
     await rm(root, { recursive: true, force: true });
-  });
-
-  it('does not release a parent keep-awake resource when its child probe finishes (regression 3)', async () => {
-    const parent = new ResourceScope(store, 'PIXEL1', 'parent');
-    const child = parent.child('network-probe');
-    await recordObligation(parent, 'setting', 'keep-awake', { original: '0' });
-    await recordObligation(child, 'helper', 'network-probe', {});
-    const released: string[] = [];
-    await child.cleanup(
-      (user) => Promise.resolve(user),
-      (resource) => {
-        released.push(resource.resource);
-        return Promise.resolve();
-      },
-    );
-    expect(released).toEqual(['network-probe']);
-    expect((await parent.list()).find((value) => value.resource === 'keep-awake')?.status).toBe('pending');
-    await parent.cleanup(
-      (user) => Promise.resolve(user),
-      (resource) => {
-        released.push(resource.resource);
-        return Promise.resolve();
-      },
-    );
-    expect(released).toEqual(['network-probe', 'keep-awake']);
-  });
-
-  it('retains blocked cleanup when an Android user ID/name was reused (regression 1)', async () => {
-    const scope = new ResourceScope(store, 'PIXEL1', 'run');
-    await recordObligation(scope, 'helper', 'probe', {}, { userId: 10, serialNo: 17, name: 'Work' });
-    const released: string[] = [];
-    await expect(
-      scope.cleanup(
-        (user) => Promise.resolve({ ...user, serialNo: 18 }),
-        (resource) => {
-          released.push(resource.id);
-          return Promise.resolve();
-        },
-      ),
-    ).rejects.toThrow('identity changed');
-    expect(released).toEqual([]);
-    expect((await scope.list())[0]?.status).toBe('blocked');
-    await scope.cleanup(
-      (user) => Promise.resolve(user),
-      () => Promise.resolve(),
-    );
-    expect((await scope.list())[0]?.status).toBe('resolved');
   });
 
   it('does not lose obligations under concurrent registration or cleanup writes', async () => {

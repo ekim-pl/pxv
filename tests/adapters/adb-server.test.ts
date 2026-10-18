@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from './../test-api.js';
 import { createServer, type Server } from 'node:net';
 import {
   adbClientEnvironment,

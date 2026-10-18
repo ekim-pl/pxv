@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from './../test-api.js';
 import { runRelease } from '../../packages/release/src/release-service.js';
 import type { Candidate } from '../../packages/release/src/candidate.js';
 const candidate = {
@@ -51,7 +51,7 @@ describe('release command composition', () => {
       preview: false,
       sourceRoot: '/source',
       outputRoot: '/output',
-      nativeBinary: '/native',
+      supervisorEntry: '/native',
     });
     expect(deps.buildFormats).toHaveBeenLastCalledWith(candidate, {
       formats: ['sea'],
@@ -102,6 +102,8 @@ describe('release command composition', () => {
       ['--formats', '--release'],
       ['--unknown'],
       ['--formats', 'unrecognized'],
+      ['--formats', 'portable', '--formats', 'npm'],
+      ['--release', '--release'],
       ['promote', '--release'],
     ].map((args) => ({ args })),
   )('rejects malformed flags before work starts: %j', async ({ args }) => {

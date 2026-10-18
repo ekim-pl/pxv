@@ -66,7 +66,11 @@ function documentLinks(text) {
 }
 for (const file of files) {
   const text = await readFile(join(root, file), 'utf8');
-  if (/\b(?:python3?\s+-m|pip3?\s+install|pxv_app|fdroidcl|PXV_PYTHON)\b/u.test(text))
+  if (
+    /(?<!\w)(?:python3?\s+-m|pip3?\s+install|pxv_app|fdroidcl|PXV_PYTHON|--coverage\.(?:reportsDirectory|reporter)|rustfmt|[Cc]lippy)\b/u.test(
+      text,
+    )
+  )
     errors.push(`${file}: obsolete application command`);
   for (const link of documentLinks(text)) {
     if (/^(?:[a-z][a-z0-9+.-]*:|\/)/iu.test(link)) continue;

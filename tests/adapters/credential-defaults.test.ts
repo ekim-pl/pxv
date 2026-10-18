@@ -14,7 +14,7 @@ import {
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { inspect } from 'node:util';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from './../test-api.js';
 import type { AndroidUserIdentity, ExecutionPolicy, ProfilePolicy, SelectedTarget } from '@pxv/contracts';
 import {
   AdapterError,

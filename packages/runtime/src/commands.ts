@@ -41,7 +41,7 @@ export class CommandRunner implements Runtime {
 
 async function runInspection(args: string[], options: CommandOptions): Promise<CommandResult> {
   const source = options.inputFile
-    ? await open(options.inputFile, constants.O_RDONLY | constants.O_NOFOLLOW)
+    ? await open(options.inputFile, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK)
     : undefined;
   if (source && !(await source.stat()).isFile()) {
     await source.close();
@@ -61,6 +61,7 @@ async function runInspection(args: string[], options: CommandOptions): Promise<C
       let interrupted = false;
       let killTimer: ReturnType<typeof setTimeout> | undefined;
       const kill = (): void => {
+        if (interrupted) return;
         interrupted = true;
         const terminate = (signal: NodeJS.Signals): void => {
           try {
@@ -91,7 +92,7 @@ async function runInspection(args: string[], options: CommandOptions): Promise<C
       });
       child.stdin?.end(options.input);
       const timer = setTimeout(kill, options.timeoutMs ?? 120_000);
-      options.signal?.addEventListener('abort', kill, { once: true });
+      observeAbort(options.signal, kill);
       const cleanup = (): void => {
         clearTimeout(timer);
         if (killTimer) clearTimeout(killTimer);
@@ -109,6 +110,12 @@ async function runInspection(args: string[], options: CommandOptions): Promise<C
   } finally {
     await source?.close();
   }
+}
+
+/** Opening input files yields; cancellation may precede listener registration. */
+function observeAbort(signal: AbortSignal | undefined, cancel: () => void): void {
+  signal?.addEventListener('abort', cancel, { once: true });
+  if (signal?.aborted) cancel();
 }
 
 interface NativeReply {
@@ -180,9 +187,17 @@ class NativeSession {
     );
   }
   #fail(error: Error): void {
+    if (
+      this.#failure &&
+      !['ECONNRESET', 'EPIPE'].includes((this.#failure as NodeJS.ErrnoException).code ?? '')
+    )
+      return;
     this.#failure = error;
     for (const waiter of this.#waiters) waiter.reject(error);
     this.#waiters.clear();
+  }
+  get failure(): Error | undefined {
+    return this.#failure;
   }
   send(message: Record<string, unknown>): void {
     if (this.#failure) throw this.#failure;
@@ -220,12 +235,12 @@ export class DeviceLease {
     this.#running = true;
     const id = randomUUID();
     const cancel = (): void => {
-      this.#session.send({ type: 'cancel', id });
+      if (!this.#session.failure) this.#session.send({ type: 'cancel', id });
     };
     try {
       this.#session.send(nativeCommand(id, args, options));
       await this.authorize(id, options);
-      options.signal?.addEventListener('abort', cancel, { once: true });
+      observeAbort(options.signal, cancel);
       const reply = await this.#session.wait('result', id);
       if (!reply.cleanup_proven)
         throw new RecoveryRequiredError('Native command cleanup could not be proven');
@@ -287,19 +302,15 @@ export async function supervisorPath(): Promise<string> {
   const candidates = process.env['PXV_SUPERVISOR']
     ? [process.env['PXV_SUPERVISOR']]
     : [
-        resolve(
-          dirname(fileURLToPath(import.meta.url)),
-          '../../../native/supervisor/target/x86_64-unknown-linux-musl/release/pxv-supervisor',
-        ),
-        resolve(dirname(process.execPath), 'pxv-supervisor'),
-        resolve(dirname(fileURLToPath(import.meta.url)), '../native/pxv-supervisor'),
+        resolve(dirname(fileURLToPath(import.meta.url)), 'supervisor.js'),
+        resolve(dirname(fileURLToPath(import.meta.url)), '../dist/supervisor.js'),
       ];
   for (const path of candidates) {
     if (!path) continue;
     try {
       const stat = await lstat(path);
       if (!stat.isFile() || stat.isSymbolicLink()) continue;
-      await access(path, constants.X_OK);
+      await access(path, constants.R_OK);
       return path;
     } catch (error) {
       if (
@@ -309,7 +320,7 @@ export async function supervisorPath(): Promise<string> {
         throw error;
     }
   }
-  throw new Error('Linux native supervisor is required for mutations; build native/supervisor first');
+  throw new Error('Linux native supervisor is required for mutations; run pnpm build first');
 }
 
 export async function withDeviceLease<T>(
@@ -356,10 +367,13 @@ async function acquireLease<T>(
   if (!/^[A-Za-z0-9_-]{1,160}$/.test(operationId)) throw new Error('Invalid operation identity');
   const keys = deviceLeaseKeys(deviceKey, transportKey);
   await mkdir(controlRoot, { recursive: true, mode: 0o700 });
-  const child = spawn(await supervisorPath(), ['--control-root', resolve(controlRoot)], {
+  const child = spawn(process.execPath, [await supervisorPath(), '--control-root', resolve(controlRoot)], {
     stdio: ['ignore', 'ignore', 'pipe', 'pipe'],
     detached: true,
-    env: { PATH: '/usr/bin:/bin' },
+    env: {
+      PATH: '/usr/bin:/bin',
+      ...(process.env['NODE_V8_COVERAGE'] ? { NODE_V8_COVERAGE: process.env['NODE_V8_COVERAGE'] } : {}),
+    },
   });
   const ipc = child.stdio[3] as Duplex | null;
   if (!ipc) {
@@ -377,7 +391,7 @@ async function acquireLease<T>(
   await session.wait('ready').catch(async (error: unknown) => {
     session.disconnect();
     await session.closed;
-    throw error;
+    throw session.failure ?? error;
   });
   const lease = new DeviceLease(session, operationId);
   try {

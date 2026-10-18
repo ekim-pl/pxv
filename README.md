@@ -13,7 +13,8 @@ physical confirmations remain explicit checkpoints.
 
 Preparing and using your own phone? Follow the English
 [self-managed phone guide](docs/SELF_MANAGED_PHONE.md) for one person acting as both
-operator and end user, with Owner-only or multiple Android profiles.
+operator and end user, with Owner-only or multiple Android profiles. For a complete
+one-person test with five profiles, use the [five-profile acceptance procedure](docs/SELF_SERVICE_FIVE_PROFILE_TEST.md).
 
 | Audience | English | Polski |
 | --- | --- | --- |
@@ -38,14 +39,16 @@ links the focused references, recovery procedures and verification boundaries.
 
 ## Build and check
 
-Use **Node 24.22.0**, **pnpm 12.11.2** and the pinned Rust toolchain. Android helper
+Use **Node 24.22.0**, **pnpm 12.11.2**. Android helper
 and cryptographic checks need Java 17+, Android platform 35, Build Tools 35.0.0 and
 OpenSSH. See [host dependencies](docs/HOST_DEPENDENCIES.md).
+
+The official Node binary is the explicit upstream Rust exception: it includes a Rust-derived TypeScript parser. Tests use esbuild through synchronous module hooks instead. Project-managed Rust payloads are prohibited, including optional and transitive development dependencies.
 
 ```sh
 pnpm install --frozen-lockfile
 pnpm quality:setup
-pnpm build:native
+pnpm build
 PXV_REQUIRE_CRYPTO=1 pnpm quality
 pnpm pxv host doctor
 ```

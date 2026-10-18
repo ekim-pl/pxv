@@ -2,7 +2,7 @@ import { toPolicyDocument } from '@pxv/contracts';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from './../test-api.js';
 import { requiredAttestations, type SelectedTarget } from '@pxv/contracts';
 import { SqliteStore } from '@pxv/runtime';
 import { createProject, loadProject, saveInventory, type WorkflowState } from '@pxv/engine';

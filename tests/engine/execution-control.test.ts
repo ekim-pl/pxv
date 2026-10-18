@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from './../test-api.js';
 import type { Store } from '@pxv/runtime';
 import { ExecutionControl } from '../../packages/engine/src/execution-control.js';
 const backing = (get: Store['get']): Store => ({ get }) as Store;

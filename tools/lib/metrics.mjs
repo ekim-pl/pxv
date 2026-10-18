@@ -1,9 +1,10 @@
+import { parse } from 'java-parser';
 import { ESLint } from 'eslint';
 import { execFileSync } from 'node:child_process';
 import { readdir, readFile, readlink, lstat, mkdir, writeFile } from 'node:fs/promises';
 import { join, relative } from 'node:path';
 import { createHash } from 'node:crypto';
-import { qualityExecutable, qualityTools } from './quality-tools.mjs';
+import { qualityTools } from './quality-tools.mjs';
 
 /** @param {string} directory @param {RegExp} pattern @returns {Promise<string[]>} */
 export async function sourceFiles(directory, pattern) {
@@ -38,12 +39,7 @@ async function javascriptMetrics(root) {
       },
     ],
   });
-  const files = await eslint.lintFiles([
-    'packages/*/src/**/*.ts',
-    'tools/**/*.mjs',
-    'eslint.config.mjs',
-    'vitest.config.ts',
-  ]);
+  const files = await eslint.lintFiles(['packages/*/src/**/*.ts', 'tools/**/*.mjs', 'eslint.config.mjs']);
   const modules = files.map((result) => javascriptModule(root, result));
   return { modules, failures: modules.flatMap((module) => module.failures) };
 }
@@ -78,58 +74,53 @@ function javascriptModule(root, result) {
   );
   return { path, language: path.endsWith('.ts') ? 'typescript' : 'javascript', depth, functions, failures };
 }
-/** @typedef {{name:string,kind:string,start_line:number,end_line:number,spaces:RcaSpace[],metrics:{cyclomatic:{sum:number},cognitive:{sum:number}}}} RcaSpace */
-/** @param {RcaSpace} space @returns {{name:string,line:number,cyclomatic:number,cognitive:number}[]} */
-function rcaFunctions(space) {
-  const nested = space.spaces.flatMap(rcaFunctions);
-  if (space.kind !== 'function' && space.kind !== 'closure') return nested;
-  const children = space.spaces.reduce((sum, item) => sum + item.metrics.cyclomatic.sum, 0);
-  return [
-    {
-      name: space.name,
-      line: space.start_line,
-      cyclomatic: space.metrics.cyclomatic.sum - children,
-      cognitive: space.metrics.cognitive.sum,
-    },
-    ...nested,
-  ];
+/** Measure each executable independently; nested lambdas do not inflate their parent.
+ * @param {import('java-parser').CstNode} node
+ * @returns {number} */
+function javaDecisions(node) {
+  if (['methodDeclaration', 'constructorDeclaration', 'lambdaExpression'].includes(node.name)) return 0;
+  let count = 0;
+  for (const values of Object.values(node.children))
+    for (const child of values) {
+      if ('children' in child) count += javaDecisions(child);
+      else if (['if', 'for', 'while', 'catch', 'case', '?', '&&', '||'].includes(child.image)) count++;
+    }
+  return count;
+}
+/** @param {import('java-parser').CstNode} node
+ * @returns {{name:string,line:number,cyclomatic:number}[]} */
+function javaFunctions(node) {
+  const nested = Object.values(node.children)
+    .flat()
+    .filter((v) => 'children' in v)
+    .flatMap((v) => javaFunctions(v));
+  if (!['methodDeclaration', 'constructorDeclaration', 'lambdaExpression'].includes(node.name)) return nested;
+  const complexity = Object.values(node.children)
+    .flat()
+    .filter((v) => 'children' in v)
+    .reduce((sum, v) => sum + javaDecisions(v), 1);
+  return [{ name: node.name, line: node.location?.startLine ?? 1, cyclomatic: complexity }, ...nested];
 }
 /** @param {string} root */
 async function nativeMetrics(root) {
-  const executable = await qualityExecutable('rca');
   const paths = [
-    ...(await sourceFiles(join(root, 'native/supervisor'), /\.rs$/u)),
     ...(await sourceFiles(join(root, 'android'), /\.java$/u)),
     join(root, 'resources/VerifyRepositoryIndex.java'),
   ];
-  const modules = paths.map((path) => {
-    const parseErrors = execFileSync(executable, ['-f', 'ERROR', '-p', path], {
-      encoding: 'utf8',
-      timeout: 60_000,
-      maxBuffer: 16 * 1024 * 1024,
-    });
-    if (parseErrors.trim())
-      throw new Error(`Native metric parser rejected ${relative(root, path)}: ${parseErrors}`);
-    /** @type {RcaSpace} */
-    const result = JSON.parse(
-      execFileSync(executable, ['-m', '-p', path, '-O', 'json'], {
-        encoding: 'utf8',
-        timeout: 60_000,
-        maxBuffer: 16 * 1024 * 1024,
-      }),
-    );
-    const functions = rcaFunctions(result),
+  const modules = [];
+  for (const path of paths) {
+    const functions = javaComplexity(await readFile(path, 'utf8')),
       file = relative(root, path);
-    return {
+    modules.push({
       path: file,
-      language: path.endsWith('.rs') ? 'rust' : 'java',
-      cognitiveMetric: path.endsWith('.rs') ? 'rust-code-analysis' : 'unsupported by pinned analyzer',
-      functions: functions.map((fn) => ({ ...fn, cognitive: path.endsWith('.rs') ? fn.cognitive : null })),
+      language: 'java',
+      depth: 0,
+      functions,
       failures: functions
         .filter((f) => f.cyclomatic > 10)
         .map((f) => `${file}:${f.line}: complexity ${f.cyclomatic}`),
-    };
-  });
+    });
+  }
   return { modules, failures: modules.flatMap((m) => m.failures) };
 }
 /** @param {string} root */
@@ -159,7 +150,16 @@ export async function sourceIdentity(root) {
 }
 /** @param {string} root @returns {Promise<Record<string,string>>} */
 async function installedVersions(root) {
-  const names = ['@typescript/native', 'typescript', 'typescript-eslint', 'eslint', 'knip', 'vitest'];
+  const names = [
+    '@typescript/native',
+    'typescript',
+    'typescript-eslint',
+    'eslint',
+    'java-parser',
+    'expect',
+    'ast-v8-to-istanbul',
+    '@babel/parser',
+  ];
   const entries = await Promise.all(
     names.map(async (name) => {
       /** @type {{version:string}} */
@@ -172,7 +172,7 @@ async function installedVersions(root) {
 /** @returns {Record<string,string>} */
 function nativeVersions() {
   return Object.fromEntries(
-    ['rustc', 'cargo', 'javac', 'pnpm'].map((name) => [
+    ['javac', 'pnpm'].map((name) => [
       name,
       execFileSync(name, [name === 'javac' ? '-version' : '--version'], {
         encoding: 'utf8',
@@ -202,7 +202,7 @@ export async function writeMetrics(root) {
     thresholds: { cyclomatic: 10, javascriptDepth: 4, javascriptFunctionLines: 80 },
     methods: {
       javascript: 'ESLint classic cyclomatic complexity; nonblank noncomment function lines',
-      native: 'Pinned Rust Code Analysis; local cyclomatic excluding nested function totals',
+      native: 'java-parser CST cyclomatic complexity; methods, constructors and lambdas independently',
     },
     modules,
     failures: [...javascript.failures, ...native.failures],
@@ -210,4 +210,9 @@ export async function writeMetrics(root) {
   await mkdir(join(root, '.quality'), { recursive: true });
   await writeFile(join(root, '.quality/metrics.json'), JSON.stringify(report, null, 2) + '\n');
   return report;
+}
+
+/** @param {string} source */
+export function javaComplexity(source) {
+  return javaFunctions(parse(source));
 }

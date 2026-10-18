@@ -1,14 +1,21 @@
-import { toPolicyDocument } from '@pxv/contracts';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
-import { tmpdir } from 'node:os';
+import type * as TestModule0 from '@pxv/contracts';
+import type * as TestModule1 from 'node:fs/promises';
+import type * as TestModule2 from 'node:path';
+import type * as TestModule3 from 'node:os';
+import type * as TestModule4 from '../contracts/fixtures.js';
+import type * as TestModule5 from '../../packages/cli/src/cli.js';
+import type * as TestModule6 from '../../packages/cli/src/handoff-command.js';
+import { importModule } from './../test-api.js';
+globalThis.__pxvTestFile = import.meta.url;
+
+import { afterEach, beforeEach, describe, expect, it, vi } from './../test-api.js';
+
 import type { ProjectContext } from '@pxv/engine';
 import type * as EngineModule from '@pxv/engine';
 import type * as RuntimeModule from '@pxv/runtime';
 import type * as AdapterModule from '@pxv/adapters';
 import type { ExtensionLock } from '@pxv/contracts';
-import { device, policy, product, project as config } from '../contracts/fixtures.js';
+
 const mocks = vi.hoisted(() => ({
   takeCoverage: vi.fn(),
   resourceRoot: vi.fn(),
@@ -100,9 +107,41 @@ vi.mock('@pxv/extensions', () => ({
   },
 }));
 vi.mock('@pxv/mcp', () => ({ serveStdio: mocks.serveStdio }));
-import { runCli, type CliIo } from '../../packages/cli/src/cli.js';
+// Module exports are called without a receiver.
+
+const { toPolicyDocument } = await importModule<typeof TestModule0>('@pxv/contracts', import.meta.url);
+// Module exports are called without a receiver.
+
+const { mkdir, mkdtemp, readFile, rm, writeFile } = await importModule<typeof TestModule1>(
+  'node:fs/promises',
+  import.meta.url,
+);
+// Module exports are called without a receiver.
+// eslint-disable-next-line @typescript-eslint/unbound-method
+const { join } = await importModule<typeof TestModule2>('node:path', import.meta.url);
+// Module exports are called without a receiver.
+
+const { tmpdir } = await importModule<typeof TestModule3>('node:os', import.meta.url);
+// Module exports are called without a receiver.
+
+const {
+  device,
+  policy,
+  product,
+  project: config,
+} = await importModule<typeof TestModule4>('../contracts/fixtures.js', import.meta.url);
+// Module exports are called without a receiver.
+
+const { runCli } = await importModule<typeof TestModule5>('../../packages/cli/src/cli.js', import.meta.url);
+// Module exports are called without a receiver.
+
+const { handoffCommand, lifecycleCommand } = await importModule<typeof TestModule6>(
+  '../../packages/cli/src/handoff-command.js',
+  import.meta.url,
+);
+
 import type { ApplicationCliContext } from '../../packages/cli/src/arguments.js';
-import { handoffCommand, lifecycleCommand } from '../../packages/cli/src/handoff-command.js';
+
 let root: string;
 let resources: string;
 let projectRoot: string;
@@ -151,6 +190,7 @@ const prepared = {
   reviewSummary: 'exact-summary',
   expiresAt: '2026-10-17T00:00:00Z',
 };
+import type { CliIo } from '../../packages/cli/src/cli.js';
 beforeEach(async () => {
   for (const mock of [...Object.values(mocks), ...Object.values(store), ...Object.values(engine)])
     mock.mockReset();

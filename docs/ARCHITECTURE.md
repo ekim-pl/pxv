@@ -27,7 +27,7 @@ reuse, and no automatic garbage collection removes historical references. Execut
 still makes and authenticates private staging copies. APK observations deduplicate
 only within one measurement; user membership and permission checks remain separate.
 
-1. Resolve a versioned policy, product descriptor, project marker, inventory, engine identity and extension locks.
+1. Resolve a validated policy, product descriptor, project marker, inventory, engine identity and extension locks.
 2. Read a live target observation and authenticated artifact metadata.
 3. Freeze artifact bytes and an exact reviewed plan; bind global APK effects and manual checkpoints.
 4. Acquire project ownership, check source/build freshness, and persist submission and the run atomically with an idempotency key.
@@ -95,7 +95,7 @@ reset service.
 
 ## Native ownership
 
-The Rust Linux supervisor owns nonblocking kernel locks, child-subreaper adoption, pidfd-based process termination, a private IPC authorization gate and durable receipts. Command arguments/environment/stdin cross private IPC and are never persisted in command specifications. A command's durable record contains redacted ownership/effect status. Owner death, failed mutation and uncertain cleanup preserve recovery reservations; interrupted mutations are never automatically replayed.
+The TypeScript Linux supervisor owns nonblocking kernel locks, child-subreaper adoption, pidfd-based process termination, a private IPC authorization gate and durable receipts. Command arguments/environment/stdin cross private IPC and are never persisted in command specifications. A command's durable record contains redacted ownership/effect status. Owner death, failed mutation and uncertain cleanup preserve recovery reservations; interrupted mutations are never automatically replayed.
 
 Recovery acquires inherited fences under the same kernel locks, verifies prior process cleanup or a changed host boot, and performs typed cleanup against stable user identity. A failed cleanup retains the fence, including when it failed before starting another command. Native receipts and application recovery obligations solve different parts of the problem and neither can substitute for the other.
 
@@ -127,3 +127,12 @@ changes require translated regressions and new acceptance evidence. Portable is 
 default output; optional formats derive from the same frozen candidate. Previews
 have isolated identities and projects. Release tooling cannot publish through an
 ordinary build.
+
+
+Release candidates and release provenance use schema 2. They record Node, supervisor JavaScript, Koffi version/platform/Node-API version, loader/addon hashes and artifact hashes. Schema 1 candidates must be regenerated. Portable, Debian, npm, OCI and experimental SEA formats include the supervisor bundle, Koffi loader and selected glibc x64 prebuild with reviewed notices. Existing ownership records, IPC protocol and receipts remain schema/protocol 1; policies are unversioned. Never clear host control state to regenerate a candidate. Engine integrity binds source/build bytes and the selected supervisor, addon and loader.
+
+
+Build tooling that imports a workspace `dist/*.js` entrypoint is checked against
+its corresponding `src/*.ts` exports by the repository graph. This keeps compiled
+integration entrypoints explicit without hiding unused source exports. Public SDK
+entries and documented test-only exports remain separately configured.

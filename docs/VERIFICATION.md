@@ -25,7 +25,7 @@ identity matches the checkout. Run [the strict quality workflow](TESTING.md) aga
 after edits; do not copy earlier test counts or coverage totals into a new claim.
 Source-bound reports retain the actual tools, component results, coverage and
 function metrics. Distribution verification belongs in the separate
-`.quality/distribution.json` record so evidence does not become an input to its own
+`.quality/packaged-runtime.json` record so evidence does not become an input to its own
 candidate digest.
 
 Physical-device and exact-build GrapheneOS emulator acceptance require a recorded
@@ -43,3 +43,6 @@ items pending. Use the [canary and recovery runbook](CANARY_BACKUP_RECOVERY.md).
 
 Follow the [publication checklist](PUBLICATION_CHECKLIST.md) before promoting any
 artifact. Ordinary builds do not publish or establish live acceptance.
+
+
+Release candidates and release provenance use schema 2. They record Node, supervisor JavaScript, Koffi version/platform/Node-API version, loader/addon hashes and artifact hashes. Schema 1 candidates must be regenerated. Portable, Debian, npm, OCI and experimental SEA formats include the supervisor bundle, Koffi loader and selected glibc x64 prebuild with reviewed notices. Existing ownership records, IPC protocol and receipts remain schema/protocol 1; policies are unversioned. Never clear host control state to regenerate a candidate. Engine integrity binds source/build bytes and the selected supervisor, addon and loader.

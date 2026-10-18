@@ -1,12 +1,41 @@
-import { mkdtemp, writeFile, rm } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { stdin, stdout } from 'node:process';
-import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
-import { product } from '../contracts/fixtures.js';
+import type * as TestModule0 from 'node:fs/promises';
+import type * as TestModule1 from 'node:os';
+import type * as TestModule2 from 'node:path';
+import type * as TestModule3 from 'node:process';
+import type * as TestModule4 from '../contracts/fixtures.js';
+import type * as TestModule5 from '../../packages/cli/src/arguments.js';
+import { importModule } from './../test-api.js';
+globalThis.__pxvTestFile = import.meta.url;
+
+import { afterEach, beforeEach, describe, it, expect, vi } from './../test-api.js';
+
 const prompt = vi.hoisted(() => ({ question: vi.fn(), close: vi.fn() }));
 vi.mock('node:readline/promises', () => ({ createInterface: () => prompt }));
-import { confirmation, parseCli, introductoryCommand } from '../../packages/cli/src/arguments.js';
+// Module exports are called without a receiver.
+
+const { mkdtemp, writeFile, rm } = await importModule<typeof TestModule0>(
+  'node:fs/promises',
+  import.meta.url,
+);
+// Module exports are called without a receiver.
+
+const { tmpdir } = await importModule<typeof TestModule1>('node:os', import.meta.url);
+// Module exports are called without a receiver.
+// eslint-disable-next-line @typescript-eslint/unbound-method
+const { join } = await importModule<typeof TestModule2>('node:path', import.meta.url);
+// Module exports are called without a receiver.
+
+const { stdin, stdout } = await importModule<typeof TestModule3>('node:process', import.meta.url);
+// Module exports are called without a receiver.
+
+const { product } = await importModule<typeof TestModule4>('../contracts/fixtures.js', import.meta.url);
+// Module exports are called without a receiver.
+
+const { confirmation, parseCli, introductoryCommand } = await importModule<typeof TestModule5>(
+  '../../packages/cli/src/arguments.js',
+  import.meta.url,
+);
+
 let root: string;
 let saved: PropertyDescriptor | undefined;
 beforeEach(async () => {

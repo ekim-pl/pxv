@@ -1,6 +1,6 @@
 import { mkdir, mkdtemp, readFile, stat, symlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { describe, expect, test } from 'vitest';
+import { describe, expect, test } from './../test-api.js';
 import { atomicWritePrivate, hashFile, readBounded } from '../../packages/runtime/src/index.js';
 
 describe('private durable files', () => {

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi } from './../test-api.js';
 import { ExtensionDownloader, registryUrl } from '../../packages/extensions/src/download.js';
 const url = new URL('https://registry.example/package.tgz');
 describe('bounded private registry downloads', () => {

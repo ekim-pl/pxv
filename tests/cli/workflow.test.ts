@@ -1,14 +1,17 @@
-import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import type * as TestModule0 from 'node:fs/promises';
+import type * as TestModule1 from 'node:net';
+import type * as TestModule2 from 'node:path';
+import type * as TestModule3 from 'node:os';
+import type * as TestModule4 from '@pxv/cli';
+import type * as TestModule5 from '@pxv/runtime';
+import type * as TestModule6 from '../contracts/fixtures.js';
+import { importModule } from './../test-api.js';
+globalThis.__pxvTestFile = import.meta.url;
+import { afterEach, beforeEach, expect, it, vi } from './../test-api.js';
 import type { SpawnOptions } from 'node:child_process';
 import type * as ChildProcessModule from 'node:child_process';
-import { mkdtemp, mkdir, writeFile, readFile, readdir, rm } from 'node:fs/promises';
-import { createServer, type Server } from 'node:net';
-import { join } from 'node:path';
-import { tmpdir } from 'node:os';
-import { runCli, type CliIo } from '@pxv/cli';
-import { recoveryReservations, SqliteStore, supervisorPath } from '@pxv/runtime';
+
 import type { PolicyDocument } from '@pxv/contracts';
-import { product } from '../contracts/fixtures.js';
 
 const workerClosures = vi.hoisted(() => new Map<string, { closed: Promise<void>; didClose: boolean }[]>());
 vi.mock('node:child_process', async (original) => {
@@ -32,6 +35,34 @@ vi.mock('node:child_process', async (original) => {
     }),
   };
 });
+// Module exports are called without a receiver.
+
+const { mkdtemp, mkdir, writeFile, readFile, readdir, rm } = await importModule<typeof TestModule0>(
+  'node:fs/promises',
+  import.meta.url,
+);
+// Module exports are called without a receiver.
+
+const { createServer } = await importModule<typeof TestModule1>('node:net', import.meta.url);
+// Module exports are called without a receiver.
+// eslint-disable-next-line @typescript-eslint/unbound-method
+const { join } = await importModule<typeof TestModule2>('node:path', import.meta.url);
+// Module exports are called without a receiver.
+
+const { tmpdir } = await importModule<typeof TestModule3>('node:os', import.meta.url);
+// Module exports are called without a receiver.
+
+const { runCli } = await importModule<typeof TestModule4>('@pxv/cli', import.meta.url);
+// Module exports are called without a receiver.
+
+const { recoveryReservations, SqliteStore, supervisorPath } = await importModule<typeof TestModule5>(
+  '@pxv/runtime',
+  import.meta.url,
+);
+// Module exports are called without a receiver.
+
+const { product } = await importModule<typeof TestModule6>('../contracts/fixtures.js', import.meta.url);
+
 async function waitForWorkerClose(runId?: string): Promise<void> {
   const records = runId ? (workerClosures.get(runId) ?? []) : [...workerClosures.values()].flat();
   if (runId) expect(records.length).toBeGreaterThan(0);
@@ -47,6 +78,8 @@ let server: Server;
 let saved: NodeJS.ProcessEnv;
 let output: string[];
 let io: CliIo;
+import type { Server } from 'node:net';
+import type { CliIo } from '@pxv/cli';
 beforeEach(async () => {
   root = await mkdtemp(join(tmpdir(), 'pxv-cli-live-fixture-'));
   resources = join(root, 'resources');
@@ -455,3 +488,5 @@ it('starts a durable acknowledged worker, closes the client store and deduplicat
   await runCli(args(['agent', 'cancel', '--run', submitted.id]), io);
   expect(output.at(-1)).toContain('cancellationRequested');
 });
+
+type SqliteStore = typeof SqliteStore.prototype;

@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from './../test-api.js';
 import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import type { RepositoryPolicy } from '@pxv/contracts';

@@ -30,8 +30,20 @@ export async function inspectHost(runner = new CommandRunner()): Promise<{
     ),
     supervisor: await supervisorPath()
       .then(async (path) => {
-        const result = await runner.run([path, '--version'], { timeoutMs: 5000, check: false });
-        return result.code === 0 && result.stdout.trim() === 'pxv-supervisor 0.1.0';
+        const result = await runner.run([process.execPath, path, '--build-info'], {
+          timeoutMs: 5000,
+          check: false,
+        });
+        const info = JSON.parse(result.stdout) as Record<string, unknown>;
+        return (
+          result.code === 0 &&
+          info['protocol'] === 1 &&
+          info['addon'] === '3.3.3' &&
+          info['nodeApi'] === 8 &&
+          info['platform'] === 'linux_x64' &&
+          info['pidfd'] === true &&
+          info['subreaper'] === true
+        );
       })
       .catch(() => false),
   };

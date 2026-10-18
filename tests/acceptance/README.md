@@ -1,10 +1,15 @@
-# Acceptance contracts
+# Workflow inventory
 
-The JSON fixtures describe workflow scope and the six reviewed Python defects without
-depending on either implementation language. `tests/contracts/acceptance.test.ts`
-executes the shared contract regressions; engine, runtime and adapter suites exercise
-the same behaviors with durable state, native processes and recorded command fixtures.
+`workflow-inventory.json` describes supported independent profile layouts and the
+required live evidence. `tests/contracts/acceptance.test.ts` validates the layouts
+against the policy packs.
 
-The workflow inventory also lists required live evidence. Passing offline fixture
-tests does not establish GrapheneOS emulator or physical Pixel acceptance. Retain
-actual EN/PL device recordings separately when qualifying a policy or UI adapter.
+Passing offline fixture tests does not establish GrapheneOS emulator or physical
+Pixel acceptance. Retain actual EN/PL device recordings separately when qualifying
+a policy or UI adapter.
+
+
+For the one-person physical walkthrough, use the
+[five-profile self-service procedure](../../docs/SELF_SERVICE_FIVE_PROFILE_TEST.md)
+and copy [the blank results sheet](self-service-five-results.md) into the external
+private test directory. The committed sheet contains no completed device evidence.

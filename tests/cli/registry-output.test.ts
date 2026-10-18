@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from './../test-api.js';
 import type { ProjectCliContext } from '../../packages/cli/src/arguments.js';
 import { registryOutputPath } from '../../packages/cli/src/registry-output.js';
 

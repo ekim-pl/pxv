@@ -1,0 +1,91 @@
+{
+  "id": "self-service-five",
+  "name": "One-person five-profile acceptance starter",
+  "capabilities": [
+    "normal_credentials",
+    "network",
+    "backup"
+  ],
+  "requiredAttestations": [
+    "routes",
+    "network_failure_tests",
+    "backup_recovery",
+    "recipient_acceptance",
+    "operator_signoff"
+  ],
+  "repositories": [],
+  "apps": {},
+  "profiles": [
+    {
+      "id": "owner",
+      "name": "Owner",
+      "kind": "owner",
+      "settings": [],
+      "permissions": [],
+      "vpn": {
+        "packageId": null,
+        "alwaysOn": false,
+        "lockdown": false
+      },
+      "defaultLocale": "en-US",
+      "apps": []
+    },
+    {
+      "id": "contacts",
+      "name": "contacts",
+      "kind": "secondary",
+      "settings": [],
+      "permissions": [],
+      "vpn": {
+        "packageId": null,
+        "alwaysOn": false,
+        "lockdown": false
+      },
+      "defaultLocale": "pl-PL",
+      "apps": []
+    },
+    {
+      "id": "google",
+      "name": "google",
+      "kind": "secondary",
+      "settings": [],
+      "permissions": [],
+      "vpn": {
+        "packageId": null,
+        "alwaysOn": false,
+        "lockdown": false
+      },
+      "defaultLocale": "pl-PL",
+      "apps": []
+    },
+    {
+      "id": "testing",
+      "name": "testing",
+      "kind": "secondary",
+      "settings": [],
+      "permissions": [],
+      "vpn": {
+        "packageId": null,
+        "alwaysOn": false,
+        "lockdown": false
+      },
+      "defaultLocale": "pl-PL",
+      "apps": []
+    },
+    {
+      "id": "onion",
+      "name": "onion",
+      "kind": "secondary",
+      "settings": [],
+      "permissions": [],
+      "vpn": {
+        "packageId": null,
+        "alwaysOn": false,
+        "lockdown": false
+      },
+      "defaultLocale": "pl-PL",
+      "apps": []
+    }
+  ],
+  "deviceSettings": []
+}

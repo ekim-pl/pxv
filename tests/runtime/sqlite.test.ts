@@ -1,7 +1,7 @@
 import { mkdtemp, readFile, stat, symlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import { describe, expect, test } from 'vitest';
+import { describe, expect, test } from './../test-api.js';
 import { SqliteStore } from '../../packages/runtime/src/index.js';
 
 describe('dedicated SQLite worker', () => {

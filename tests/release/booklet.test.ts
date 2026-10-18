@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { marked } from 'marked';
-import { describe, expect, test } from 'vitest';
+import { describe, expect, test } from './../test-api.js';
 import {
   toPolicyDocument,
   validatePolicy,

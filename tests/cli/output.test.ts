@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from './../test-api.js';
 import { cliOutput } from '../../packages/cli/src/output.js';
 
 describe('CLI output contracts', () => {

@@ -6,7 +6,7 @@ import { join } from 'node:path';
 /** @typedef {{stage:string,status:'passed'|'failed',error?:string}} Stage */
 /** @typedef {{path:string,current:boolean,status:'present'|'unavailable',value:unknown,fingerprint?:string,error?:string}} Evidence */
 /** @typedef {{run(stage:string):Promise<void>,metrics(root:string):Promise<Metrics>,source(root:string):Promise<Source>,now?:()=>Date}} Dependencies */
-const STAGES = ['check', 'test:native', 'test:coverage', 'check:helpers'];
+const STAGES = ['check', 'test:supervisor', 'test:coverage', 'check:helpers'];
 /** @type {[string,string][]} */
 const EVIDENCE = [
   ['deadcode', 'check'],

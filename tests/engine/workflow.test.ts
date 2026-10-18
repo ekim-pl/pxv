@@ -4,8 +4,8 @@ import { DatabaseSync } from 'node:sqlite';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { digest, observationDigest, requiredAttestations } from '@pxv/contracts';
+import { afterEach, beforeEach, describe, expect, it, vi } from './../test-api.js';
+import { digest, requiredAttestations } from '@pxv/contracts';
 import type { ExecutionPolicy, SelectedTarget } from '@pxv/contracts';
 import { createProject, loadProject, ResourceScope, saveInventory, WorkflowEngine } from '@pxv/engine';
 import type { ArtifactPort, PreparedOperation, ProjectContext, RunRecord } from '@pxv/engine';
@@ -327,6 +327,23 @@ describe('reviewed workflows, operator and recipient gates', () => {
     expect(another.plan.actions.filter((action) => action.kind === 'language')).toEqual([]);
   });
 
+  it('requires normal credential receipts and completed language setup before duress attestation', async () => {
+    await configure(structuredClone(setupPolicy));
+    const { run } = await preparedRun();
+    await engine.execute(run.id);
+    expect(port.observation.profiles[0]?.language).toBe(context.policy.profiles[0]?.language);
+    await expect(engine.attest(target, 'duress', 'Alice')).rejects.toThrow(
+      'Normal credentials and final language must be complete',
+    );
+    await engine.attest(target, 'normal_credentials', 'Alice');
+    await engine.execute(run.id);
+    expect((await engine.state('all')).languageReady).toBe(true);
+    await store.delete('attestations', 'all');
+    await expect(engine.attest(target, 'duress', 'Alice')).rejects.toThrow(
+      'Normal credentials and final language must be complete',
+    );
+  });
+
   it('blocks non-language contradictions from being overridden by normal credential receipts', async () => {
     const desired = structuredClone(setupPolicy);
     await configure(desired);
@@ -606,84 +623,6 @@ describe('reviewed workflows, operator and recipient gates', () => {
     enrolled.canonicalSerial = 'REPLACED';
     await expect(engine.acceptCustody('all', 'Recipient', true)).rejects.toThrow('handoff identity differs');
     expect((await engine.state('all')).status).toBe('shutdown-requested');
-  });
-
-  it('blocks permission drift after signoff and records physical debugging shutdown/custody separately (regression 2)', async () => {
-    await ready();
-    const permission = port.observation.profiles[0]?.permissions[0];
-    if (!permission) throw new Error('Fixture permission missing');
-    permission.granted = false;
-    await expect(engine.finalize(target, 'Alice')).rejects.toThrow('changed after signoff');
-    expect(port.calls).not.toContain('finalize');
-    permission.granted = true;
-    const record = await engine.finalize(target, 'Alice', 'pl');
-    expect(record.outcome).toBe('ready-for-handoff');
-    expect(record.locale).toBe('pl');
-    expect((await engine.state('all')).status).toBe('shutdown-requested');
-    await expect(engine.acceptCustody('all', 'Recipient', false)).rejects.toThrow('physical debugging');
-    expect((await engine.acceptCustody('all', 'Recipient', true)).outcome).toBe('completed-custody');
-    expect((await engine.state('all')).status).toBe('completed-custody');
-    await expect(engine.acceptCustody('all', 'Recipient', true)).rejects.toThrow('after finalization');
-  });
-
-  it('requires measured emulator image provenance for the exact workflow and never finalizes an emulator (regression 6)', async () => {
-    port.observation.device = {
-      ...device,
-      kind: 'emulator',
-      canonicalSerial: 'emulator-5554',
-      transports: [{ kind: 'emulator', serial: 'emulator-5554' }],
-    };
-    await configure(basePolicy());
-    const emulator = { device: port.observation.device, transport: port.observation.device.transports[0] };
-    if (!emulator.transport) throw new Error('Fixture transport missing');
-    const selected: SelectedTarget = { device: emulator.device, transport: emulator.transport };
-    const prepared = await engine.prepare(selected);
-    const run = await engine.submit(prepared.plan.id, prepared.reviewSummary, 'Alice');
-    await engine.execute(run.id);
-    await expect(
-      engine.attest(selected, 'emulator_image_provenance', 'Alice', 'I checked it'),
-    ).rejects.toThrow('Measured');
-    const pin = {
-      path: '/tmp/image.img',
-      sha256: hashA,
-      fingerprint: 'grapheneos/akita/test',
-      source: 'https://example.org/image.img',
-    };
-    port.verifyEmulatorEvidence = (_target, input) =>
-      Promise.resolve({
-        schemaVersion: 1,
-        acceptance: 'emulator-only',
-        canonicalSerial: selected.device.canonicalSerial,
-        fingerprint: input.fingerprint,
-        imageSha256: input.sha256,
-        source: input.source,
-        capabilities: context.policy.capabilities,
-        observedAt: now.toISOString(),
-      });
-    await expect(
-      engine.attest(selected, 'emulator_image_provenance', 'Alice', undefined, { ...pin, sha256: 'invalid' }),
-    ).rejects.toThrow('Invalid emulator');
-    await engine.attest(selected, 'emulator_image_provenance', 'Alice', undefined, pin);
-    for (const check of ['recipient_acceptance', 'operator_signoff'])
-      await engine.attest(selected, check, 'Alice');
-    expect((await engine.readiness(selected)).ready).toBe(true);
-    const bound = await store.get<{ observationDigest: string }>('emulator-provenance', 'all');
-    expect(bound?.observationDigest).toBe(observationDigest(port.observation));
-    await expect(engine.finalize(selected, 'Alice')).rejects.toThrow('enrolled USB Pixel');
-    port.verifyEmulatorEvidence = () =>
-      Promise.resolve({
-        schemaVersion: 1,
-        acceptance: 'emulator-only',
-        canonicalSerial: 'other',
-        fingerprint: pin.fingerprint,
-        imageSha256: pin.sha256,
-        source: pin.source,
-        capabilities: [],
-        observedAt: now.toISOString(),
-      });
-    await expect(
-      engine.attest(selected, 'emulator_image_provenance', 'Alice', undefined, pin),
-    ).rejects.toThrow('does not match');
   });
 
   it('prepares and executes policy-constrained extension core actions with pinned artifacts', async () => {

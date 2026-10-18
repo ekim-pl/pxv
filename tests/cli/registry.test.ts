@@ -1,21 +1,62 @@
-import { toPolicyDocument } from '@pxv/contracts';
-import { chmod, mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import * as guides from '@pxv/guides';
-import {
-  createProject,
-  invalidateRegistryBindings,
-  loadProject,
-  readRegistryGeneration,
-  saveInventory,
-  type ProjectContext,
-} from '@pxv/engine';
-import { readEncryptedRegistry, SqliteStore } from '@pxv/runtime';
-import { validatePhoneRegistryDocument, type PhoneRegistryRecord } from '@pxv/contracts';
-import { runCli, type CliIo } from '../../packages/cli/src/cli.js';
-import { device, policy, product } from '../contracts/fixtures.js';
+import type * as TestModule0 from '@pxv/guides';
+import type * as TestModule1 from '@pxv/contracts';
+import type * as TestModule2 from 'node:fs/promises';
+import type * as TestModule3 from 'node:path';
+import type * as TestModule4 from '@pxv/engine';
+import type * as TestModule5 from '@pxv/runtime';
+import type * as TestModule6 from '../../packages/cli/src/cli.js';
+import type * as TestModule7 from '../contracts/fixtures.js';
+import { importModule } from './../test-api.js';
+globalThis.__pxvTestFile = import.meta.url;
 
+import { afterEach, beforeEach, describe, expect, it, vi } from './../test-api.js';
+vi.mock('@pxv/guides', async (original) => {
+  const actual = await original<typeof TestModule0>();
+  return { ...actual, writeCredentialInsert: vi.fn(actual.writeCredentialInsert) };
+});
+
+// Module exports are called without a receiver.
+
+const { toPolicyDocument } = await importModule<typeof TestModule1>('@pxv/contracts', import.meta.url);
+// Module exports are called without a receiver.
+
+const { chmod, mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } = await importModule<
+  typeof TestModule2
+>('node:fs/promises', import.meta.url);
+// Module exports are called without a receiver.
+// eslint-disable-next-line @typescript-eslint/unbound-method
+const { join } = await importModule<typeof TestModule3>('node:path', import.meta.url);
+// Module exports are called without a receiver.
+
+const guides = await importModule<typeof TestModule0>('@pxv/guides', import.meta.url);
+import type { ProjectContext } from '@pxv/engine';
+// Module exports are called without a receiver.
+
+const { createProject, invalidateRegistryBindings, loadProject, readRegistryGeneration, saveInventory } =
+  await importModule<typeof TestModule4>('@pxv/engine', import.meta.url);
+// Module exports are called without a receiver.
+
+const { readEncryptedRegistry, SqliteStore } = await importModule<typeof TestModule5>(
+  '@pxv/runtime',
+  import.meta.url,
+);
+import type { PhoneRegistryRecord } from '@pxv/contracts';
+// Module exports are called without a receiver.
+
+const { validatePhoneRegistryDocument } = await importModule<typeof TestModule1>(
+  '@pxv/contracts',
+  import.meta.url,
+);
+import type { CliIo } from '../../packages/cli/src/cli.js';
+// Module exports are called without a receiver.
+
+const { runCli } = await importModule<typeof TestModule6>('../../packages/cli/src/cli.js', import.meta.url);
+// Module exports are called without a receiver.
+
+const { device, policy, product } = await importModule<typeof TestModule7>(
+  '../contracts/fixtures.js',
+  import.meta.url,
+);
 describe('local encrypted registry operator commands', () => {
   let root: string;
   let resources: string;

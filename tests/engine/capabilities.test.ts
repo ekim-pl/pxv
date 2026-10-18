@@ -4,7 +4,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from './../test-api.js';
 import { digest, requiredAttestations } from '@pxv/contracts';
 import type { RecipePolicy, NetworkProbePolicy, ExecutionPolicy, SelectedTarget } from '@pxv/contracts';
 import { createProject, loadProject, ResourceScope, saveInventory, WorkflowEngine } from '@pxv/engine';

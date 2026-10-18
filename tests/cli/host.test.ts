@@ -1,8 +1,12 @@
-import { mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { bootstrapTool, inspectHost } from '../../packages/cli/src/host.js';
+import type * as TestModule0 from 'node:fs/promises';
+import type * as TestModule1 from 'node:os';
+import type * as TestModule2 from 'node:path';
+import type * as TestModule3 from '../../packages/cli/src/host.js';
+import { importModule } from './../test-api.js';
+globalThis.__pxvTestFile = import.meta.url;
+
+import { afterEach, beforeEach, describe, expect, it, vi } from './../test-api.js';
+
 import type * as RuntimeModule from '@pxv/runtime';
 
 const mocks = vi.hoisted(() => ({
@@ -23,6 +27,24 @@ vi.mock('@pxv/runtime', async (importOriginal) => ({
   ...(await importOriginal<typeof RuntimeModule>()),
   supervisorPath: mocks.supervisor,
 }));
+// Module exports are called without a receiver.
+
+const { mkdtemp, readdir, rm, writeFile } = await importModule<typeof TestModule0>(
+  'node:fs/promises',
+  import.meta.url,
+);
+// Module exports are called without a receiver.
+
+const { tmpdir } = await importModule<typeof TestModule1>('node:os', import.meta.url);
+// Module exports are called without a receiver.
+// eslint-disable-next-line @typescript-eslint/unbound-method
+const { join } = await importModule<typeof TestModule2>('node:path', import.meta.url);
+// Module exports are called without a receiver.
+
+const { bootstrapTool, inspectHost } = await importModule<typeof TestModule3>(
+  '../../packages/cli/src/host.js',
+  import.meta.url,
+);
 
 describe('host diagnosis and explicit archive bootstrap controller', () => {
   let root = '';
@@ -32,7 +54,11 @@ describe('host diagnosis and explicit archive bootstrap controller', () => {
     mocks.bootstrap.mockResolvedValue('/private/tools/approved');
     mocks.probe.mockResolvedValue(undefined);
     const supervisor = join(root, 'supervisor');
-    await writeFile(supervisor, "#!/bin/sh\nprintf 'pxv-supervisor 0.1.0\\n'\n", { mode: 0o755 });
+    await writeFile(
+      supervisor,
+      'console.log(JSON.stringify({ protocol:1,addon:"3.3.3",nodeApi:8,platform:"linux_x64",pidfd:true,subreaper:true }));',
+      { mode: 0o755 },
+    );
     mocks.supervisor.mockResolvedValue(supervisor);
   });
   afterEach(async () => {

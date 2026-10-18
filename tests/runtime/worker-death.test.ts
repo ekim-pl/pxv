@@ -1,9 +1,14 @@
-import { mkdtemp } from 'node:fs/promises';
-import { join } from 'node:path';
+import type * as TestModule0 from 'node:fs/promises';
+import type * as TestModule1 from 'node:path';
+import type * as TestModule2 from 'node:sqlite';
+import type * as TestModule3 from '@pxv/runtime';
+import { importModule } from './../test-api.js';
+globalThis.__pxvTestFile = import.meta.url;
+
 import type { Worker as WorkerType } from 'node:worker_threads';
 import type * as WorkerApi from 'node:worker_threads';
-import { afterEach, describe, expect, it, vi } from 'vitest';
-import { DatabaseSync } from 'node:sqlite';
+import { afterEach, describe, expect, it, vi } from './../test-api.js';
+
 const workers = vi.hoisted(() => [] as WorkerType[]);
 const startup = vi.hoisted(() => ({ source: undefined as string | undefined }));
 vi.mock('node:worker_threads', async (importOriginal) => {
@@ -18,7 +23,19 @@ vi.mock('node:worker_threads', async (importOriginal) => {
     },
   };
 });
-import { SqliteStore } from '@pxv/runtime';
+// Module exports are called without a receiver.
+
+const { mkdtemp } = await importModule<typeof TestModule0>('node:fs/promises', import.meta.url);
+// Module exports are called without a receiver.
+// eslint-disable-next-line @typescript-eslint/unbound-method
+const { join } = await importModule<typeof TestModule1>('node:path', import.meta.url);
+// Module exports are called without a receiver.
+
+const { DatabaseSync } = await importModule<typeof TestModule2>('node:sqlite', import.meta.url);
+// Module exports are called without a receiver.
+
+const { SqliteStore } = await importModule<typeof TestModule3>('@pxv/runtime', import.meta.url);
+
 afterEach(() => {
   startup.source = undefined;
   vi.useRealTimers();
@@ -74,3 +91,7 @@ describe('storage worker crash boundaries', () => {
     }
   });
 });
+
+type DatabaseSync = InstanceType<typeof DatabaseSync>;
+
+type SqliteStore = typeof SqliteStore.prototype;

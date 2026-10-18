@@ -1,0 +1,177 @@
+{
+  "entries": [
+    "packages/cli/src/main.ts",
+    "packages/release/src/cli.ts",
+    "packages/contracts/src/index.ts",
+    "packages/extension-sdk/src/index.ts",
+    "packages/runtime/src/worker.ts",
+    "packages/runtime/src/supervisor.ts",
+    "packages/extensions/src/worker.ts",
+    "eslint.config.mjs",
+    "packages/cli/src/index.ts",
+    "packages/release/src/index.ts",
+    "packages/release/src/docs.ts",
+    "tools/bootstrap-quality.mjs",
+    "tools/build-android.mjs",
+    "tools/check-boundaries.mjs",
+    "tools/check-deadcode.mjs",
+    "tools/check-dependencies.mjs",
+    "tools/check-docs.mjs",
+    "tools/check-helpers.mjs",
+    "tools/check-native-baseline.mjs",
+    "tools/check-quality.mjs",
+    "tools/personal-recovery.mjs",
+    "tools/quality.mjs",
+    "tools/run-coverage.mjs",
+    "tools/run-tests.mjs",
+    "tools/test-hooks.mjs",
+    "tools/optional/publishing/rebuild.mjs",
+    "tools/optional/branding/scaffold.mjs",
+    "tools/check-packaged-runtime.mjs"
+  ],
+  "public": [
+    "packages/contracts/src/index.ts",
+    "packages/extension-sdk/src/index.ts",
+    "packages/release/src/docs.ts",
+    "eslint.config.mjs"
+  ],
+  "dependencies": [
+    {
+      "package": "package.json",
+      "name": "@types/node",
+      "reason": "Implicit compiler types or executable used by workspace scripts."
+    },
+    {
+      "package": "package.json",
+      "name": "@types/istanbul-lib-coverage",
+      "reason": "Implicit compiler types or executable used by workspace scripts."
+    },
+    {
+      "package": "package.json",
+      "name": "@types/sinonjs__fake-timers",
+      "reason": "Implicit compiler types or executable used by workspace scripts."
+    },
+    {
+      "package": "package.json",
+      "name": "@typescript/native",
+      "reason": "Implicit compiler types or executable used by workspace scripts."
+    },
+    {
+      "package": "package.json",
+      "name": "prettier",
+      "reason": "Implicit compiler types or executable used by workspace scripts."
+    }
+  ],
+  "exemptions": [
+    {
+      "mode": "production",
+      "finding": "Unused export: packages/runtime/src/supervisor-process.ts#parseChildren",
+      "reason": "Export consumed by isolated unit and integration tests in the development graph; production use is internal to this module."
+    },
+    {
+      "mode": "production",
+      "finding": "Unused export: packages/runtime/src/supervisor-process.ts#ownedDescendant",
+      "reason": "Export consumed by isolated unit and integration tests in the development graph; production use is internal to this module."
+    },
+    {
+      "mode": "production",
+      "finding": "Unused export: packages/runtime/src/supervisor-process.ts#signalPid",
+      "reason": "Export consumed by isolated unit and integration tests in the development graph; production use is internal to this module."
+    },
+    {
+      "mode": "production",
+      "finding": "Unused export: packages/runtime/src/supervisor-protocol.ts#validateMessage",
+      "reason": "Export consumed by isolated unit and integration tests in the development graph; production use is internal to this module."
+    },
+    {
+      "mode": "production",
+      "finding": "Unused export: packages/runtime/src/supervisor-storage.ts#digest",
+      "reason": "Export consumed by isolated unit and integration tests in the development graph; production use is internal to this module."
+    },
+    {
+      "mode": "production",
+      "finding": "Unused export: packages/release/src/formats.ts#dockerfile",
+      "reason": "Export consumed by isolated unit and integration tests in the development graph; production use is internal to this module."
+    },
+    {
+      "mode": "production",
+      "finding": "Unused export: packages/release/src/index.ts#dockerfile",
+      "reason": "Export consumed by isolated unit and integration tests in the development graph; production use is internal to this module."
+    },
+    {
+      "mode": "production",
+      "finding": "Unused export: packages/release/src/index.ts#assertLinuxX64Addon",
+      "reason": "Export consumed by isolated unit and integration tests in the development graph; production use is internal to this module."
+    },
+    {
+      "mode": "production",
+      "finding": "Unused export: packages/release/src/native.ts#assertLinuxX64Addon",
+      "reason": "Export consumed by isolated unit and integration tests in the development graph; production use is internal to this module."
+    },
+    {
+      "mode": "production",
+      "finding": "Unused export: packages/mcp/src/index.ts#createMcpServer",
+      "reason": "Export consumed by isolated unit and integration tests in the development graph; production use is internal to this module."
+    },
+    {
+      "mode": "production",
+      "finding": "Unused export: packages/guides/src/credential-insert.ts#renderCredentialInsert",
+      "reason": "Export consumed by isolated unit and integration tests in the development graph; production use is internal to this module."
+    },
+    {
+      "mode": "production",
+      "finding": "Unused export: packages/guides/src/index.ts#renderHandoff",
+      "reason": "Export consumed by isolated unit and integration tests in the development graph; production use is internal to this module."
+    },
+    {
+      "mode": "production",
+      "finding": "Unused export: packages/extensions/src/archive.ts#inspectArchive",
+      "reason": "Export consumed by isolated unit and integration tests in the development graph; production use is internal to this module."
+    },
+    {
+      "mode": "production",
+      "finding": "Unused export: packages/extensions/src/worker-handler.ts#executeExtension",
+      "reason": "Export consumed by isolated unit and integration tests in the development graph; production use is internal to this module."
+    },
+    {
+      "mode": "production",
+      "finding": "Unused export: tools/test-hooks.mjs#sourceURL",
+      "reason": "Export consumed by isolated unit and integration tests in the development graph; production use is internal to this module."
+    },
+    {
+      "mode": "production",
+      "finding": "Unused export: tools/test-hooks.mjs#state",
+      "reason": "Export consumed by isolated unit and integration tests in the development graph; production use is internal to this module."
+    },
+    {
+      "mode": "production",
+      "finding": "Unused export: tools/lib/dependency-audit.mjs#auditLock",
+      "reason": "Export consumed by isolated unit and integration tests in the development graph; production use is internal to this module."
+    },
+    {
+      "mode": "production",
+      "finding": "Unused export: tools/lib/metrics.mjs#javaComplexity",
+      "reason": "Export consumed by isolated unit and integration tests in the development graph; production use is internal to this module."
+    },
+    {
+      "mode": "production",
+      "finding": "Unused export: tools/lib/personal-cli.mjs#terminalRun",
+      "reason": "Export consumed by isolated unit and integration tests in the development graph; production use is internal to this module."
+    },
+    {
+      "mode": "production",
+      "finding": "Unused export: tools/lib/personal-master.mjs#completedEvidence",
+      "reason": "Export consumed by isolated unit and integration tests in the development graph; production use is internal to this module."
+    },
+    {
+      "mode": "production",
+      "finding": "Unused export: tools/lib/personal-workflows.mjs#restoreSources",
+      "reason": "Export consumed by isolated unit and integration tests in the development graph; production use is internal to this module."
+    }
+  ],
+  "requireContexts": {
+    "packages/release/src/native.ts": "packages/runtime/package.json",
+    "packages/engine/src/integrity.ts": "packages/runtime/package.json",
+    "tests/release/native.test.ts": "packages/runtime/package.json"
+  }
+}

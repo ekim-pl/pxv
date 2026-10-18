@@ -84,3 +84,13 @@ Use the repository host's private reporting mechanism when available. Include th
 affected version, a minimal disposable fixture, impact and redacted evidence.
 Never attach real recipient secrets or private fleet inventories to a public issue.
 Fork maintainers must replace example support identities before distribution.
+
+## Supervisor and native dependencies
+
+The ownership gateway is a separate TypeScript process launched with the selected Node executable, a minimal environment and private IPC on fd 3. Its private Linux interface uses the reviewed Koffi 3.3.3 glibc x64 Node-API 8 prebuild for kernel locks, subreaper setup, pidfds, descriptor flags and nonblocking adopted-child reaping. It validates kernel capabilities before acquiring ownership. Node/libuv retains responsibility for directly spawned children; command processes do not inherit IPC or lock descriptors.
+
+Koffi executes with the supervisor's operating-system privileges. It is not a sandbox. The frozen dependency policy disables its installer, and distributions omit installer scripts and unused platform addons. Missing or incompatible prebuilds fail closed with reinstall instructions. Engine integrity includes the selected supervisor JavaScript, addon and loader bytes, so changing them invalidates reviewed execution.
+
+IPC protocol 1 and ownership/receipt schema 1 remain compatible with Rust-produced records. Recovery verifies locks, process identity, host boot identity and cleanup evidence, and retains reservations whenever completion or cleanup is uncertain. Candidate and release-provenance schema 2 require regeneration of old candidates; policies remain unversioned. Never clear host control state to rebuild a distribution.
+
+The official Node 24.22.0 binary is the explicit upstream Rust exception. Its embedded Rust-derived TypeScript parser remains part of that official distribution; tests transpile through esbuild and synchronous module hooks. Project-managed Rust payloads, including transitive development executables, addons and WASM, are rejected by dependency and artifact checks.

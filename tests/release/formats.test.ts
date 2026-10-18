@@ -1,5 +1,5 @@
 import { qualityExecutable } from '../../tools/lib/quality-tools.mjs';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from './../test-api.js';
 import { lstat, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { Runtime } from '@pxv/runtime';
@@ -20,7 +20,7 @@ beforeAll(async () => {
   candidate = await createCandidate({
     sourceRoot: root,
     outputRoot: output,
-    nativeBinary: await supervisorPath(),
+    supervisorEntry: await supervisorPath(),
   });
 }, 30_000);
 

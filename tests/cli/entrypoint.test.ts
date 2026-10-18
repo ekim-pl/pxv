@@ -3,7 +3,7 @@ import { promisify } from 'node:util';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { afterEach, describe, it, expect, vi } from 'vitest';
+import { afterEach, describe, it, expect, vi } from './../test-api.js';
 import { startCli } from '../../packages/cli/src/entrypoint.js';
 const execute = promisify(execFile);
 const roots: string[] = [];

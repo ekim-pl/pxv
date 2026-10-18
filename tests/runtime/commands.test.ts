@@ -1,9 +1,9 @@
 import { CommandError } from '../../packages/runtime/src/command-contracts.js';
-import { spawn } from 'node:child_process';
+import { spawn, execFileSync } from 'node:child_process';
 import { chmod, mkdtemp, readFile, readdir, stat, symlink, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
-import { describe, expect, test, vi } from 'vitest';
+import { describe, expect, test, vi } from './../test-api.js';
 import {
   CommandRunner,
   deviceLeaseKeys,
@@ -77,6 +77,13 @@ describe('checked runtime', () => {
     });
     await expect(runner.run(command, { input: 'x', inputFile: file })).rejects.toThrow('mutually exclusive');
     await expect(runner.run(command, { inputFile: directory })).rejects.toThrow('regular file');
+    const fifo = join(directory, 'fifo');
+    execFileSync('mkfifo', [fifo]);
+    await expect(runner.run(command, { inputFile: fifo })).rejects.toThrow('regular file');
+    const cancelled = new AbortController();
+    const pending = runner.run(command, { inputFile: file, signal: cancelled.signal, check: false });
+    cancelled.abort();
+    expect((await pending).code).toBe(124);
   });
   test('inspection cancellation, spawn failure and output bounds terminate promptly', async () => {
     const aborted = new AbortController();
@@ -408,7 +415,7 @@ describe('Linux native ownership', () => {
     expect(() => deviceLeaseKeys('', 'usb')).toThrow('identities');
     expect(await recoveryReservations(join(root, 'absent'))).toEqual([]);
   });
-  test('native executable discovery fails closed for missing, symlink and nonexecutable overrides', async () => {
+  test('native executable discovery fails closed for missing, symlink and unreadable overrides', async () => {
     const root = await mkdtemp('/tmp/pxv-native-');
     const actual = await supervisorPath();
     const link = join(root, 'link');
@@ -420,7 +427,7 @@ describe('Linux native ownership', () => {
       await expect(supervisorPath()).rejects.toThrow('required');
       const denied = join(root, 'denied');
       await writeFile(denied, 'no');
-      await chmod(denied, 0o600);
+      await chmod(denied, 0o000);
       vi.stubEnv('PXV_SUPERVISOR', denied);
       await expect(supervisorPath()).rejects.toThrow('required');
       vi.stubEnv('PXV_CONTROL_ROOT', join(root, 'shared'));

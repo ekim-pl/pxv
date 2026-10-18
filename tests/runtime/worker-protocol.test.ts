@@ -1,5 +1,8 @@
-import { runInNewContext } from 'node:vm';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type * as TestModule0 from 'node:vm';
+import { importModule } from './../test-api.js';
+globalThis.__pxvTestFile = import.meta.url;
+
+import { afterEach, beforeEach, describe, expect, it, vi } from './../test-api.js';
 import type { StorageRequest } from '../../packages/runtime/src/storage-handler.js';
 const fixture = vi.hoisted(() => ({
   parent: true,
@@ -39,6 +42,10 @@ vi.mock('../../packages/runtime/src/storage-handler.ts', () => ({
     }
   },
 }));
+// Module exports are called without a receiver.
+
+const { runInNewContext } = await importModule<typeof TestModule0>('node:vm', import.meta.url);
+
 beforeEach(() => {
   vi.resetModules();
   vi.clearAllMocks();
@@ -51,7 +58,7 @@ afterEach(() => vi.unstubAllEnvs());
 describe('storage worker protocol failure reporting', () => {
   it('reports a failed database close and still releases its port', async () => {
     vi.stubEnv('NODE_V8_COVERAGE', '/unused-coverage');
-    await import('../../packages/runtime/src/worker.js');
+    await importModule('../../packages/runtime/src/worker.js', import.meta.url);
     fixture.requestError = new Error('database close failed');
     fixture.listener!({ id: 10, method: 'close', args: [] });
     expect(fixture.postMessage).toHaveBeenLastCalledWith({ id: 10, error: 'database close failed' });
@@ -60,7 +67,7 @@ describe('storage worker protocol failure reporting', () => {
   });
   it('releases its port even when coverage flushing fails', async () => {
     vi.stubEnv('NODE_V8_COVERAGE', '/unused-coverage');
-    await import('../../packages/runtime/src/worker.js');
+    await importModule('../../packages/runtime/src/worker.js', import.meta.url);
     fixture.takeCoverage.mockImplementationOnce(() => {
       throw new Error('coverage failed');
     });
@@ -71,7 +78,7 @@ describe('storage worker protocol failure reporting', () => {
     'reports replies, errors and ordered closure with coverage enabled=%s',
     async (traced) => {
       vi.stubEnv('NODE_V8_COVERAGE', traced ? '/unused-coverage' : undefined);
-      await import('../../packages/runtime/src/worker.js');
+      await importModule('../../packages/runtime/src/worker.js', import.meta.url);
       expect(fixture.postMessage).toHaveBeenCalledWith({ ready: true });
       const listener = fixture.listener;
       if (!listener) throw new Error('Storage worker did not subscribe');
@@ -107,9 +114,11 @@ describe('storage worker protocol failure reporting', () => {
     runInNewContext('new Error("foreign-startup-fault")') as Error,
   ])('reports initialization failure without accepting requests %#', async (error) => {
     fixture.openError = error;
-    await import('../../packages/runtime/src/worker.js');
+    await importModule('../../packages/runtime/src/worker.js', import.meta.url);
     expect(fixture.postMessage).toHaveBeenCalledWith({
       ready: false,
+      // Cross-realm errors intentionally follow the worker stringification contract.
+      // eslint-disable-next-line @typescript-eslint/no-base-to-string
       error: error instanceof Error ? error.message : String(error),
     });
     expect(fixture.close).toHaveBeenCalledOnce();
@@ -117,6 +126,8 @@ describe('storage worker protocol failure reporting', () => {
   });
   it('refuses to run outside a dedicated worker', async () => {
     vi.doMock('node:worker_threads', () => ({ parentPort: null, workerData: {} }));
-    await expect(import('../../packages/runtime/src/worker.js')).rejects.toThrow('requires a parent');
+    await expect(importModule('../../packages/runtime/src/worker.js', import.meta.url)).rejects.toThrow(
+      'requires a parent',
+    );
   });
 });

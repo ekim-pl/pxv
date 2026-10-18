@@ -1,7 +1,8 @@
 import { readFile } from 'node:fs/promises';
-import { describe, expect, test } from 'vitest';
-import { assertStaticLinuxX64Elf } from '../../packages/release/src/native.js';
-import { supervisorPath } from '../../packages/runtime/src/index.js';
+import { describe, expect, test } from './../test-api.js';
+import { assertLinuxX64Addon } from '../../packages/release/src/native.js';
+import { createRequire } from 'node:module';
+const require = createRequire(new URL('../../packages/runtime/package.json', import.meta.url));
 
 function elf(): Buffer {
   const value = Buffer.alloc(256);
@@ -23,13 +24,17 @@ function elf(): Buffer {
   return value;
 }
 describe('portable native baseline', () => {
-  test('accepts the actual static supervisor and valid static PIE', async () => {
-    assertStaticLinuxX64Elf(await readFile(await supervisorPath()));
-    assertStaticLinuxX64Elf(elf());
+  test('accepts the selected Linux x64 addon and a valid shared ELF', async () => {
+    assertLinuxX64Addon(
+      await readFile(
+        require.resolve('@koromix/koffi-linux-x64').replace(/index.js$/u, 'linux_x64/koffi.node'),
+      ),
+    );
+    assertLinuxX64Addon(elf());
   });
   test('rejects the host dynamic Node binary rather than relying on host execution', async () => {
     const bytes = await readFile(process.execPath);
-    expect(() => assertStaticLinuxX64Elf(bytes)).toThrow('static');
+    expect(() => assertLinuxX64Addon(bytes)).toThrow('addon');
   });
   test.each([
     (b: Buffer) => b.fill(0, 0, 4),
@@ -61,7 +66,7 @@ describe('portable native baseline', () => {
     (b: Buffer) => b.writeBigUInt64LE(100n, 152),
     (b: Buffer) => b.writeBigUInt64LE(0n, 152),
     (b: Buffer) => b.writeBigUInt64LE(15n, 152),
-    (b: Buffer) => b.writeBigInt64LE(1n, 176),
+    (b: Buffer) => b.writeBigInt64LE(29n, 176),
     (b: Buffer) => b.writeBigInt64LE(15n, 176),
     (b: Buffer) => b.writeBigInt64LE(29n, 176),
     (b: Buffer) => b.writeBigInt64LE(20n, 176),
@@ -69,14 +74,14 @@ describe('portable native baseline', () => {
   ])('fails closed on malformed or dynamic ELF %#', (mutate) => {
     const bytes = elf();
     mutate(bytes);
-    expect(() => assertStaticLinuxX64Elf(bytes)).toThrow('static');
+    expect(() => assertLinuxX64Addon(bytes)).toThrow('addon');
   });
   test('rejects truncated headers', () =>
-    expect(() => assertStaticLinuxX64Elf(Buffer.alloc(4))).toThrow('static'));
-  test('accepts a terminated non-loader dynamic table in static PIE', () => {
+    expect(() => assertLinuxX64Addon(Buffer.alloc(4))).toThrow('addon'));
+  test('accepts a terminated dynamic table without a runtime search path', () => {
     const bytes = elf();
     bytes.writeBigUInt64LE(32n, 152);
     bytes.writeBigInt64LE(30n, 176);
-    assertStaticLinuxX64Elf(bytes);
+    assertLinuxX64Addon(bytes);
   });
 });

@@ -1,6 +1,6 @@
 import { mkdtemp, readFile, symlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from './../test-api.js';
 import { commitProjectFile, hashFile } from '@pxv/runtime';
 
 describe('project configuration revision commits', () => {

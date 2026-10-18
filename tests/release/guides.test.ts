@@ -1,5 +1,5 @@
 import { mkdtemp, readFile, readdir, stat, writeFile } from 'node:fs/promises';
-import { describe, expect, test } from 'vitest';
+import { describe, expect, test } from './../test-api.js';
 import type { HandoffRecord, ProductDescriptor } from '@pxv/contracts';
 import { resolvePolicy, validatePolicy } from '@pxv/contracts';
 import { project } from '../contracts/fixtures.js';

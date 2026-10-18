@@ -1,17 +1,23 @@
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
-import { stdin } from 'node:process';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { SeedvaultAdapter } from '@pxv/adapters';
+import type * as TestModule0 from 'node:fs/promises';
+import type * as TestModule1 from 'node:path';
+import type * as TestModule2 from 'node:process';
+import type * as TestModule3 from '@pxv/adapters';
+import type * as TestModule4 from '../../packages/cli/src/seedvault-command.js';
+import type * as TestModule5 from '../../packages/cli/src/seedvault-port.js';
+import type * as TestModule6 from '../../packages/cli/src/workflow-port.js';
+import type * as TestModule7 from '../contracts/fixtures.js';
+import { importModule } from './../test-api.js';
+globalThis.__pxvTestFile = import.meta.url;
+
+import { afterEach, beforeEach, describe, expect, it, vi } from './../test-api.js';
+
 import type { SeedvaultInspection, RecoveryObligation } from '@pxv/contracts';
 import type { ExecutionContext, SeedvaultWorkflowPort } from '@pxv/engine';
 import type * as EngineModule from '@pxv/engine';
 import type { ApplicationCliContext } from '../../packages/cli/src/arguments.js';
-import { seedvaultCommand } from '../../packages/cli/src/seedvault-command.js';
-import { createSeedvaultPort } from '../../packages/cli/src/seedvault-port.js';
-import { createWorkflowPort } from '../../packages/cli/src/workflow-port.js';
+
 import type { ApplicationDependencies } from '../../packages/cli/src/dependencies.js';
-import { device, product } from '../contracts/fixtures.js';
+
 type SeedvaultExecutionContext = Parameters<SeedvaultWorkflowPort['executeProfile']>[3];
 
 const mocks = vi.hoisted(() => ({
@@ -28,6 +34,46 @@ vi.mock('@pxv/engine', async (original) => ({
 vi.mock('node:readline/promises', () => ({
   createInterface: () => ({ question: mocks.question, close: mocks.close }),
 }));
+// Module exports are called without a receiver.
+
+const { mkdtemp, rm, writeFile } = await importModule<typeof TestModule0>(
+  'node:fs/promises',
+  import.meta.url,
+);
+// Module exports are called without a receiver.
+// eslint-disable-next-line @typescript-eslint/unbound-method
+const { join } = await importModule<typeof TestModule1>('node:path', import.meta.url);
+// Module exports are called without a receiver.
+
+const { stdin } = await importModule<typeof TestModule2>('node:process', import.meta.url);
+// Module exports are called without a receiver.
+
+const { SeedvaultAdapter } = await importModule<typeof TestModule3>('@pxv/adapters', import.meta.url);
+// Module exports are called without a receiver.
+
+const { seedvaultCommand } = await importModule<typeof TestModule4>(
+  '../../packages/cli/src/seedvault-command.js',
+  import.meta.url,
+);
+// Module exports are called without a receiver.
+
+const { createSeedvaultPort } = await importModule<typeof TestModule5>(
+  '../../packages/cli/src/seedvault-port.js',
+  import.meta.url,
+);
+// Module exports are called without a receiver.
+
+const { createWorkflowPort } = await importModule<typeof TestModule6>(
+  '../../packages/cli/src/workflow-port.js',
+  import.meta.url,
+);
+// Module exports are called without a receiver.
+
+const { device, product } = await importModule<typeof TestModule7>(
+  '../contracts/fixtures.js',
+  import.meta.url,
+);
+
 const target = { device, transport: device.transports[0]! };
 const source = {
   profileId: 'owner',
@@ -300,3 +346,5 @@ it('routes owned Seedvault cleanup through its typed adapter and preserves clean
   ).rejects.toThrow('remote work remains');
   expect(fallback).not.toHaveBeenCalled();
 });
+
+type SeedvaultAdapter = InstanceType<typeof SeedvaultAdapter>;

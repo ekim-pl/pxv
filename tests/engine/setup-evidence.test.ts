@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from './../test-api.js';
 import { observationDigest, type OperatorAttestation } from '@pxv/contracts';
 import { checkLanguageDelta, normalReceiptMatches } from '../../packages/engine/src/setup-evidence.js';
 import { hashA, hashB, observation } from '../contracts/fixtures.js';

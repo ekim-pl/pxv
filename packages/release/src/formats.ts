@@ -1,6 +1,6 @@
 import { dockerEntrypoint } from './launchers.js';
-import { createHash, randomUUID } from 'node:crypto';
-import { chmod, copyFile, lstat, mkdir, readFile, readdir, symlink, writeFile } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
+import { chmod, copyFile, lstat, mkdir, readdir, symlink, writeFile } from 'node:fs/promises';
 import { basename, dirname, join, resolve } from 'node:path';
 import { canonicalJson, parseDocument } from '@pxv/contracts';
 import { CommandRunner, hashFile, readBounded, type Runtime } from '@pxv/runtime';
@@ -42,7 +42,7 @@ function npmLauncher(manifest: CandidateManifest): string {
   const preview = manifest.preview
     ? `process.env.PXV_ROOT??=join(process.env.XDG_STATE_HOME??join(homedir(),'.local','state'),'pxv','previews',${JSON.stringify(manifest.id)});`
     : '';
-  return `#!/usr/bin/env node\nimport{dirname,join}from'node:path';import{fileURLToPath}from'node:url';import{homedir}from'node:os';const root=dirname(fileURLToPath(import.meta.url));process.env.PXV_RESOURCE_ROOT=root;process.env.PXV_SUPERVISOR=join(root,'native','pxv-supervisor');${preview}\nawait import('./lib/main.js');\n`;
+  return `#!/usr/bin/env node\nimport{dirname,join}from'node:path';import{fileURLToPath}from'node:url';import{homedir}from'node:os';const root=dirname(fileURLToPath(import.meta.url));process.env.PXV_RESOURCE_ROOT=root;process.env.PXV_SUPERVISOR=join(root,'node_modules','@pxv/runtime','supervisor.js');${preview}\nawait import('./lib/main.js');\n`;
 }
 
 /** @internal Generated container contract, checked independently before Docker execution. */
@@ -56,7 +56,7 @@ export function dockerfile(manifest: CandidateManifest): string {
     ),
     'COPY candidate /opt/pxv',
     'COPY entrypoint.sh /usr/local/bin/pxv-entrypoint',
-    'ENV HOME=/tmp PXV_RESOURCE_ROOT=/opt/pxv PXV_SUPERVISOR=/opt/pxv/native/pxv-supervisor PXV_ROOT=/project PXV_CONTROL_ROOT=/control PXV_EXTENSION_ROOT=/extensions PXV_DOCKER_MODE=host-adb ANDROID_HOME=/opt/android-sdk ANDROID_SDK_ROOT=/opt/android-sdk PATH=/opt/platform-tools:/opt/android-sdk/build-tools/35.0.0:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin ADB_MDNS_AUTO_CONNECT=0',
+    'ENV HOME=/tmp PXV_RESOURCE_ROOT=/opt/pxv PXV_SUPERVISOR=/opt/pxv/node_modules/@pxv/runtime/supervisor.js PXV_ROOT=/project PXV_CONTROL_ROOT=/control PXV_EXTENSION_ROOT=/extensions PXV_DOCKER_MODE=host-adb ANDROID_HOME=/opt/android-sdk ANDROID_SDK_ROOT=/opt/android-sdk PATH=/opt/platform-tools:/opt/android-sdk/build-tools/35.0.0:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin ADB_MDNS_AUTO_CONNECT=0',
     `LABEL org.opencontainers.image.title=${JSON.stringify(manifest.product.name)} org.opencontainers.image.version=${JSON.stringify(manifest.version)} org.opencontainers.image.licenses="MIT" org.opencontainers.image.revision=${JSON.stringify(manifest.source.revision ?? 'working-tree')} org.pxv.source-digest=${JSON.stringify(manifest.sourceDigest)}`,
     'WORKDIR /project',
     'USER 65532:65532',
@@ -104,8 +104,13 @@ async function npm(candidate: Candidate, output: string, runner: Runtime): Promi
         cpu: ['x64'],
         engines: { node: NODE_VERSION },
         bin: { [candidate.manifest.command]: 'npm-bin.mjs' },
-        dependencies: { '@pxv/runtime': '0.1.0', '@pxv/extensions': '0.1.0' },
-        bundledDependencies: ['@pxv/runtime', '@pxv/extensions'],
+        dependencies: {
+          '@pxv/runtime': '0.1.0',
+          '@pxv/extensions': '0.1.0',
+          koffi: '3.3.3',
+          '@koromix/koffi-linux-x64': '3.3.3',
+        },
+        bundledDependencies: ['@pxv/runtime', '@pxv/extensions', 'koffi', '@koromix/koffi-linux-x64'],
       },
       null,
       2,
@@ -239,7 +244,7 @@ async function sea(
   const source = join(directory, 'bootstrap.cjs');
   await uniqueWrite(
     source,
-    `const{spawnSync}=require('node:child_process');const{join,dirname}=require('node:path');const root=process.env.PXV_SEA_RESOURCES;if(!root)throw new Error('Set PXV_SEA_RESOURCES to the matching immutable candidate');const child=spawnSync(join(root,'bin','node'),[join(root,'lib','main.js'),...process.argv.slice(2)],{stdio:'inherit',env:{...process.env,PXV_RESOURCE_ROOT:root,PXV_SUPERVISOR:join(root,'native','pxv-supervisor')}});process.exit(child.status??1);\n`,
+    `const{spawnSync}=require('node:child_process');const{join,dirname}=require('node:path');const root=process.env.PXV_SEA_RESOURCES;if(!root)throw new Error('Set PXV_SEA_RESOURCES to the matching immutable candidate');const child=spawnSync(join(root,'bin','node'),[join(root,'lib','main.js'),...process.argv.slice(2)],{stdio:'inherit',env:{...process.env,PXV_RESOURCE_ROOT:root,PXV_SUPERVISOR:join(root,'node_modules','@pxv/runtime','supervisor.js')}});process.exit(child.status??1);\n`,
   );
   const blob = join(directory, 'sea.blob');
   const config = join(directory, 'sea-config.json');
@@ -324,7 +329,7 @@ async function writeProvenance(
     provenancePath,
     JSON.stringify(
       {
-        schemaVersion: 1,
+        schemaVersion: 2,
         candidateId: candidate.manifest.id,
         sourceDigest: candidate.manifest.sourceDigest,
         toolchain: candidate.manifest.toolchain,
@@ -394,7 +399,7 @@ export async function buildFormats(
 }
 
 interface ReleaseProvenance {
-  schemaVersion: 1;
+  schemaVersion: 2;
   candidateId: string;
   sourceDigest: string;
   toolchain: CandidateManifest['toolchain'];
@@ -417,22 +422,20 @@ function matches(value: unknown, pattern: RegExp): boolean {
 }
 function toolchainVersions(toolchain: Record<string, unknown>): void {
   if (
-    !matches(toolchain.node, /^\d+\.\d+\.\d+$/u) ||
+    toolchain.node !== NODE_VERSION ||
     !matches(toolchain.typescript, /^(?:npm:(?:@[a-z0-9._-]+\/)?[a-z0-9._-]+@)?\d+\.\d+\.\d+$/u)
   )
     throw new Error('Invalid release provenance toolchain');
-  if (!matches(toolchain.pnpm, /^pnpm@\d+\.\d+\.\d+$/u))
-    throw new Error('Invalid release provenance toolchain');
-  if (!matches(toolchain.rust, /^\d+\.\d+\.\d+$/u)) throw new Error('Invalid release provenance toolchain');
+  if (toolchain.pnpm !== 'pnpm@12.11.2') throw new Error('Invalid release provenance toolchain');
   if (
-    toolchain.nativeTarget !== 'x86_64-unknown-linux-musl' ||
-    toolchain.nativeLinkage !== 'static' ||
-    toolchain.muslVersion !== '1.2.5'
+    toolchain.addonVersion !== '3.3.3' ||
+    toolchain.addonPlatform !== 'linux_x64' ||
+    toolchain.addonNodeApi !== 8
   )
-    throw new Error('Invalid release provenance native baseline');
+    throw new Error('Invalid release provenance addon baseline');
 }
 function toolchainDigests(toolchain: Record<string, unknown>): void {
-  for (const key of ['nodeSha256', 'supervisorSha256', 'rustStdArchiveSha256', 'muslLibcSha256'])
+  for (const key of ['nodeSha256', 'supervisorSha256', 'addonSha256', 'loaderSha256'])
     if (!matches(toolchain[key], RELEASE_HASH)) throw new Error('Invalid release provenance toolchain');
   for (const key of ['dockerBase', 'buildkitImage'])
     if (!matches(toolchain[key], /^[a-zA-Z0-9/._:-]+@sha256:[a-f0-9]{64}$/u))
@@ -465,12 +468,11 @@ function validateToolchain(value: unknown): void {
     'supervisorSha256',
     'typescript',
     'pnpm',
-    'rust',
-    'nativeTarget',
-    'nativeLinkage',
-    'rustStdArchiveSha256',
-    'muslVersion',
-    'muslLibcSha256',
+    'addonVersion',
+    'addonPlatform',
+    'addonNodeApi',
+    'addonSha256',
+    'loaderSha256',
     'dockerBase',
     'buildkitImage',
     'debianSnapshot',
@@ -528,8 +530,10 @@ function validateProvenance(value: unknown): ReleaseProvenance {
     'artifacts',
     'signed',
   ]);
+  if (record.schemaVersion !== 2)
+    throw new Error('Release provenance schema 2 required; regenerate the candidate and distributions');
   if (
-    record.schemaVersion !== 1 ||
+    record.schemaVersion !== 2 ||
     !matches(record.candidateId, RELEASE_FILE) ||
     !matches(record.sourceDigest, RELEASE_HASH) ||
     !matches(record.candidateManifestSha256, RELEASE_HASH) ||
@@ -605,12 +609,17 @@ export async function promoteNpm(options: PromotionOptions): Promise<void> {
   const packageFile = resolve(options.packageFile);
   if (dirname(packageFile) !== directory || !packageFile.endsWith('.tgz'))
     throw new Error('Promotion requires a reviewed npm artifact from this candidate');
+  const provenance = validateProvenance(
+    parseDocument((await readBounded(join(directory, 'provenance.json'), 1024 * 1024)).toString('utf8')),
+  );
+  if (
+    !provenance.signed ||
+    !provenance.artifacts.some(
+      (artifact) => artifact.format === 'npm' && artifact.file === basename(packageFile),
+    )
+  )
+    throw new Error('Promotion requires an npm artifact identified by signed release provenance');
   const checksums = await readBounded(join(directory, 'SHA256SUMS'), 1024 * 1024);
-  const expected = createHash('sha256')
-    .update(await readFile(packageFile))
-    .digest('hex');
-  if (!checksums.toString('utf8').includes(`${expected}  ${basename(packageFile)}\n`))
-    throw new Error('Package is absent from signed release checksums');
   await runner.run(
     [
       'ssh-keygen',

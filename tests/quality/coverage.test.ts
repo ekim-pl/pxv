@@ -2,9 +2,8 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { execFileSync } from 'node:child_process';
-import { pathToFileURL, fileURLToPath } from 'node:url';
 import { readdir } from 'node:fs/promises';
-import { afterEach, expect, test } from 'vitest';
+import { afterEach, expect, test } from './../test-api.js';
 import { completeCoverage } from '../../tools/lib/coverage.mjs';
 
 const temporary: string[] = [];
@@ -21,21 +20,18 @@ async function fixture(): Promise<{ root: string; traces: string }> {
   return { root, traces };
 }
 
-test('native coverage starts in application workers without tracing their test harness', async () => {
+test('V8 coverage includes test processes and application workers', async () => {
   const { traces } = await fixture();
-  const setup = pathToFileURL(
-    fileURLToPath(new URL('../../tools/lib/coverage-setup.mjs', import.meta.url)),
-  ).href;
   const contracts = new URL('../../packages/contracts/dist/index.js', import.meta.url).href;
   const policy = new URL('../../packages/contracts/dist/policy.js', import.meta.url).href;
   const workerCode = `import {digest} from ${JSON.stringify(contracts)}; digest({coverage:true});`;
-  const code = `import {Worker} from 'node:worker_threads'; await import(${JSON.stringify(setup)}); const worker=new Worker(new URL('data:text/javascript,'+encodeURIComponent(${JSON.stringify(workerCode)}))); await new Promise((resolve,reject)=>{worker.once('error',reject);worker.once('exit',resolve);});`;
+  const code = `import {Worker} from 'node:worker_threads'; const worker=new Worker(new URL('data:text/javascript,'+encodeURIComponent(${JSON.stringify(workerCode)}))); await new Promise((resolve,reject)=>{worker.once('error',reject);worker.once('exit',resolve);});`;
   execFileSync(process.execPath, ['--input-type=module', '-e', code], {
-    env: { PXV_CHILD_V8_COVERAGE_DIRECTORY: traces },
+    env: { NODE_V8_COVERAGE: traces },
   });
   const files = await readdir(traces);
   expect(files.length).toBeGreaterThan(0);
-  expect(files.every((name) => !name.endsWith('-0.json'))).toBe(true);
+  expect(files.some((name) => name.endsWith('-0.json'))).toBe(true);
   const scripts = await Promise.all(
     files.map(async (name) => {
       const trace = JSON.parse(await readFile(join(traces, name), 'utf8')) as { result: { url: string }[] };

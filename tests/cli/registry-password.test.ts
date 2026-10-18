@@ -1,4 +1,7 @@
-import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import type * as TestModule0 from '../../packages/cli/src/registry-password.js';
+import { importModule } from './../test-api.js';
+globalThis.__pxvTestFile = import.meta.url;
+import { afterEach, beforeEach, expect, it, vi } from './../test-api.js';
 import type { Writable } from 'node:stream';
 import type { ProjectCliContext } from '../../packages/cli/src/arguments.js';
 
@@ -14,7 +17,12 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@pxv/runtime', () => ({ readRegistryPrivateFile: mocks.read }));
 vi.mock('node:process', () => ({ stdin: mocks.stdin, stderr: mocks.stderr }));
 vi.mock('node:readline/promises', () => ({ createInterface: mocks.create }));
-import { registryPassword } from '../../packages/cli/src/registry-password.js';
+// Module exports are called without a receiver.
+
+const { registryPassword } = await importModule<typeof TestModule0>(
+  '../../packages/cli/src/registry-password.js',
+  import.meta.url,
+);
 
 interface PromptOptions {
   output: Writable;

@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from './../test-api.js';
 import type { AndroidAdapter } from '@pxv/adapters';
 import { SeedvaultConnectionAdapter, seedvaultEndpoint } from '@pxv/adapters';
 import { device } from '../contracts/fixtures.js';

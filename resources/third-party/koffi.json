@@ -1,0 +1,15 @@
+{
+  "version": "3.3.3",
+  "platform": "linux_x64",
+  "nodeApi": 8,
+  "files": {
+    "koffi/package.json": "32348b820c55b8da99c14edd319eb4bc393c26f0bd405201031fd5b94d5c3046",
+    "koffi/index.cjs": "a200e15ec168d00cb3155794808a98243051c61dd7f6989c23c57ee220c918b9",
+    "koffi/src/koffi/index.cjs": "36c3d1ee2d0bf767c1c1acd9c00c71361496bdfd05c4519d08cab5afcccae170",
+    "koffi/LICENSE.txt": "22bcbbbacd739b026a8dc484f62a31484ce4c4e31f3408b60b29b4e41d62b290",
+    "@koromix/koffi-linux-x64/package.json": "50b5ac938de0e4d75c895002eeeeb52219fd94f054d0d9446180e3b7f9db824d",
+    "@koromix/koffi-linux-x64/index.js": "fbe4d645feb0d4232176a3352a2ac6bd145fc496af7ebc2b86cae793cb778b11",
+    "@koromix/koffi-linux-x64/linux_x64/koffi.node": "2fcc0e86bc8f4244303e01a0878c2738cb768b84c40f1cd31694fa9c2d16baf1",
+    "koffi/src/koffi/src/static.cjs": "522a9d98e271b565de4013910b8c81bb061a34d3460e43fd9a92daab8fbadddc"
+  }
+}
