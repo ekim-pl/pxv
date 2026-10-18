@@ -1,5 +1,9 @@
 # Documentation
 
+If you prepare and use your own phone, start with the English
+[self-managed phone guide](SELF_MANAGED_PHONE.md). It combines operator and user
+duties for one phone with Owner-only or multiple Android profiles.
+
 The canonical workflows are the English and Polish guides:
 
 | Audience | English | Polski |

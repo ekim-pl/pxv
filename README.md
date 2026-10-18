@@ -11,6 +11,10 @@ physical confirmations remain explicit checkpoints.
 
 ## Guides
 
+Preparing and using your own phone? Follow the English
+[self-managed phone guide](docs/SELF_MANAGED_PHONE.md) for one person acting as both
+operator and end user, with Owner-only or multiple Android profiles.
+
 | Audience | English | Polski |
 | --- | --- | --- |
 | Operator: single phone and fleet | [Operator guide](guides/source/markdown/operator-en.md) | [Instrukcja operatora](guides/source/markdown/operator-pl.md) |
