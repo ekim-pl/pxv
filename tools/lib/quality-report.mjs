@@ -71,14 +71,22 @@ function deadcodePassed(value) {
     ) && value.every((row) => record(row)?.status === 'passed')
   );
 }
+/** @param {Record<string,unknown>} data */
+function testsPassed(data) {
+  return (
+    data.success === true &&
+    data.numFailedTests === 0 &&
+    data.numFailedTestSuites === 0 &&
+    data.numSkippedTests === 0
+  );
+}
 /** @param {string} name @param {unknown} value */
 function evidenceValid(name, value) {
   const data = record(value);
   if (!data) return false;
   if (name === 'deadcode') return deadcodePassed(data.reports);
   if (name === 'helpers') return data.status === 'passed';
-  if (name === 'tests')
-    return data.success === true && data.numFailedTests === 0 && data.numFailedTestSuites === 0;
+  if (name === 'tests') return testsPassed(data);
   return (
     Array.isArray(data.failures) &&
     data.failures.length === 0 &&
@@ -204,7 +212,7 @@ function evidenceSummary(report) {
 /** @param {unknown} value */
 function testSummary(value) {
   const data = record(value);
-  return `Tests: ${cell(data?.numPassedTests ?? 'unavailable')} passed / ${cell(data?.numTotalTests ?? 'unavailable')} total; ${cell(data?.numFailedTests ?? 'unavailable')} failed.`;
+  return `Tests: ${cell(data?.numPassedTests ?? 'unavailable')} passed / ${cell(data?.numTotalTests ?? 'unavailable')} total; ${cell(data?.numFailedTests ?? 'unavailable')} failed; ${cell(data?.numSkippedTests ?? 'unavailable')} skipped.`;
 }
 /** @param {Awaited<ReturnType<typeof qualityReport>>} report @param {string} name */
 function currentEvidence(report, name) {

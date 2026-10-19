@@ -20,7 +20,14 @@ const evidence: Record<string, unknown> = {
     ],
   },
   coverage,
-  tests: { success: true, numFailedTests: 0, numFailedTestSuites: 0, numPassedTests: 12, numTotalTests: 12 },
+  tests: {
+    success: true,
+    numFailedTests: 0,
+    numFailedTestSuites: 0,
+    numPassedTests: 12,
+    numSkippedTests: 0,
+    numTotalTests: 12,
+  },
   helpers: { status: 'passed' },
 };
 async function writeEvidence(root: string, name: string, value: unknown = evidence[name]) {
@@ -96,8 +103,31 @@ describe('quality report acceptance evidence', () => {
       tools: { node: '24.22.0' },
     });
     const markdown = await readFile(join(root, '.quality/report.md'), 'utf8');
-    expect(markdown).toContain('Tests: 12 passed / 12 total; 0 failed.');
+    expect(markdown).toContain('Tests: 12 passed / 12 total; 0 failed; 0 skipped.');
     expect(markdown).toContain('| packages/example/src/index.ts | typescript | 1 | 2 | 100% | 90% |');
+  });
+  it('renders current skipped counts while rejecting incomplete acceptance', async () => {
+    const { root, dependencies } = await fixture();
+    const originalRun = dependencies.run;
+    dependencies.run = async (stage) => {
+      await originalRun(stage);
+      if (stage === 'test:coverage')
+        await writeEvidence(root, 'tests', {
+          success: true,
+          numPassedTests: 11,
+          numFailedTests: 0,
+          numFailedTestSuites: 0,
+          numSkippedTests: 1,
+          numTotalTests: 12,
+        });
+    };
+    const report = await qualityReport(root, dependencies);
+    expect(report.status).toBe('failed');
+    expect(report.evidence['tests']?.current).toBe(true);
+    expect(report.failures).toContain('Current tests evidence did not pass');
+    expect(await readFile(join(root, '.quality/report.md'), 'utf8')).toContain(
+      'Tests: 11 passed / 12 total; 0 failed; 1 skipped.',
+    );
   });
   it('writes a failed report if the final metric gate rejects a module', async () => {
     const { root, dependencies, metrics } = await fixture();
@@ -163,7 +193,10 @@ describe('quality report acceptance evidence', () => {
     ['deadcode', { reports: [] }],
     ['coverage', { ...coverage, failures: ['uncovered module'] }],
     ['helpers', { status: 'failed' }],
-    ['tests', { success: false, numFailedTests: 1, numFailedTestSuites: 0 }],
+    ['tests', { success: false, numFailedTests: 1, numFailedTestSuites: 0, numSkippedTests: 0 }],
+    ['tests', { success: true, numFailedTests: 0, numFailedTestSuites: 0 }],
+    ['tests', { ...(evidence['tests'] as object), numSkippedTests: 1 }],
+    ['tests', { ...(evidence['tests'] as object), numSkippedTests: '0' }],
   ])('rejects failed or incomplete %s evidence after its stage succeeds', async (name, value) => {
     const { root, dependencies } = await fixture();
     const originalRun = dependencies.run;

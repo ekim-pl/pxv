@@ -33,6 +33,25 @@ jobs:
           pnpm install --frozen-lockfile
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'platforms;android-35' 'build-tools;35.0.0'
           pnpm quality:setup
+      - name: Install and preflight real PDF regression dependencies
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes poppler-utils fonts-dejavu-core fonts-liberation
+          pnpm --filter @pxv/release exec playwright install --with-deps chromium
+          pxv_chromium="$(pnpm --filter @pxv/release exec node --input-type=module -e 'import { chromium } from "playwright"; console.log(chromium.executablePath())')"
+          test -x "$pxv_chromium"
+          "$pxv_chromium" --version
+          pnpm --filter @pxv/release exec node --input-type=module -e 'import { chromium } from "playwright"; const browser = await chromium.launch({ executablePath: process.argv[1], headless: true }); await browser.close();' "$pxv_chromium"
+          for pxv_poppler in pdfinfo pdftotext pdftoppm pdftohtml; do
+            command -v "$pxv_poppler"
+            "$pxv_poppler" -v
+          done
+          test -d "$ANDROID_HOME"
+          test -x "$JAVA_HOME/bin/java"
+          echo "PXV_CHROMIUM=$pxv_chromium" >> "$GITHUB_ENV"
+          echo "PXV_ANDROID_HOME=$ANDROID_HOME" >> "$GITHUB_ENV"
+          echo "PXV_JAVA_HOME=$JAVA_HOME" >> "$GITHUB_ENV"
       - name: Audit frozen dependencies against current advisories
         run: |
           mkdir -p .quality

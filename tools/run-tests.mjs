@@ -15,9 +15,13 @@ const stream = run({
   execArgv: ['--import', new URL('./test-hooks.mjs', import.meta.url).href],
 });
 let passed = 0,
-  failed = 0;
+  failed = 0,
+  skipped = 0;
 stream.on('test:pass', (event) => {
-  if (event.details.type !== 'suite') passed++;
+  if (event.details.type !== 'suite') {
+    if (event.skip) skipped++;
+    else passed++;
+  }
 });
 stream.on('test:fail', (event) => {
   if (event.details.type !== 'suite') {
@@ -34,7 +38,8 @@ stream.on('end', () => {
         success: failed === 0,
         numPassedTests: passed,
         numFailedTests: failed,
-        numTotalTests: passed + failed,
+        numSkippedTests: skipped,
+        numTotalTests: passed + failed + skipped,
         numFailedTestSuites: failed ? 1 : 0,
       },
       null,
