@@ -19,7 +19,15 @@ export const sessionXml = (settings: boolean, user = 0) =>
 
 export function mockCollectionAndroid(name: 'oblivion' | 'sessionid' | 'simcards') {
   const simulation = mockOblivionAndroid();
-  const state = Object.assign(simulation.state, { settings: false, subscriptions: subscriptions() });
+  const state = Object.assign(simulation.state, {
+    settings: false,
+    subscriptions: subscriptions(),
+    homeXml: undefined as string | undefined,
+    settingsXml: undefined as string | undefined,
+    activity: undefined as string | undefined,
+    focusUser: undefined as number | undefined,
+    focusWindows: undefined as string | undefined,
+  });
   const baseShell = simulation.shell.getMockImplementation()!;
   if (name === 'sessionid') {
     state.signer = SESSION_SIGNER;
@@ -41,13 +49,10 @@ export function mockCollectionAndroid(name: 'oblivion' | 'sessionid' | 'simcards
   simulation.shell.mockImplementation((target, args, options) => {
     if (args.join(' ') === 'dumpsys isub') return Promise.resolve(state.subscriptions);
     if (name !== 'sessionid') return baseShell(target, args, options);
-    if (args.join(' ') === 'dumpsys window windows')
-      return Promise.resolve(
-        `mCurrentFocus=Window{abc u${state.current} ${SESSION_PACKAGE}/org.thoughtcrime.securesms.preferences.${state.settings ? 'Settings' : 'Home'}Activity}`,
-      );
+    if (args.join(' ') === 'dumpsys window windows') return Promise.resolve(sessionFocus(state));
     if (args[0] === 'uiautomator') {
       if (state.failRead) throw new Error(sessionId);
-      return Promise.resolve(state.mainXml ?? sessionXml(state.settings, state.current));
+      return Promise.resolve(sessionSnapshot(state));
     }
     if (args[0] === 'input') {
       state.settings = true;
@@ -57,4 +62,29 @@ export function mockCollectionAndroid(name: 'oblivion' | 'sessionid' | 'simcards
     return baseShell(target, args, options);
   });
   return { ...simulation, state };
+}
+
+interface SessionUiState {
+  settings: boolean;
+  current: number;
+  homeXml: string | undefined;
+  settingsXml: string | undefined;
+  activity: string | undefined;
+  focusUser: number | undefined;
+  focusWindows: string | undefined;
+}
+
+function sessionFocus(state: SessionUiState): string {
+  const activity =
+    state.activity ??
+    `org.thoughtcrime.securesms.preferences.${state.settings ? 'Settings' : 'Home'}Activity`;
+  return (
+    state.focusWindows ??
+    `mCurrentFocus=Window{abc u${state.focusUser ?? state.current} ${SESSION_PACKAGE}/${activity}}`
+  );
+}
+
+function sessionSnapshot(state: SessionUiState): string {
+  const xml = state.settings ? state.settingsXml : state.homeXml;
+  return xml ?? sessionXml(state.settings, state.current);
 }

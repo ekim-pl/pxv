@@ -64,8 +64,15 @@ export async function prepareGuidePrivateInsert(
   };
 }
 
+function privateGuideScope(context: CliContext): void {
+  if (context.dockerMode || context.value('execution', 'host') !== 'host')
+    throw new Error('Private insert generation requires local host execution');
+  if (context.flag('all') || context.values['group'] !== undefined)
+    throw new Error('Private insert generation requires one exact --asset');
+}
+
 function privateGuideOptions(context: CliContext): string {
-  if (context.dockerMode) throw new Error('Private insert generation requires local host execution');
+  privateGuideScope(context);
   for (const name of ['project-root', 'asset', 'output-dir'] as const)
     if (context.values[name] === undefined) throw new Error(`Private insert generation requires --${name}`);
   if (context.values['policy'] !== undefined)

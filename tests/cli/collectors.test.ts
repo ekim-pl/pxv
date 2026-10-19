@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from '../test-api.js';
-import { mkdtemp, mkdir, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, readdir, rm, stat, symlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { parseCli } from '../../packages/cli/src/arguments.js';
@@ -344,5 +344,75 @@ describe('collected registry values in both private insert entry points', () => 
       await expect(guidesRebuildCommand(context, { execute })).rejects.toThrow();
     }
     expect(execute).not.toHaveBeenCalled();
+  });
+
+  it('rejects every private guide scope and path guard before starting the publisher', async () => {
+    const base = await parseCli(
+      args(
+        'guides',
+        'rebuild',
+        '--asset',
+        device.assetId,
+        '--private-insert-output',
+        join(project.root, 'secrets/insert.pdf'),
+        '--output-dir',
+        join(root, 'guides'),
+        '--chromium',
+        '/local/chromium',
+      ),
+      io,
+    );
+    const alias = join(root, 'shared-alias');
+    await symlink(join(project.root, 'secrets'), alias);
+    const blocker = join(root, 'regular-file');
+    await writeFile(blocker, 'not a directory');
+    const invalid: Record<string, unknown>[] = [
+      { all: true },
+      { group: 'pilot' },
+      { execution: 'docker' },
+      { asset: 'not-enrolled' },
+      { 'private-insert-output': join(root, 'private.txt') },
+      { 'private-insert-output': join(project.root, 'public.pdf') },
+      { 'private-insert-output': join(resources, 'private.pdf') },
+      { 'output-dir': alias },
+      { 'private-insert-output': join(blocker, 'private.pdf') },
+      { 'project-root': undefined },
+      { chromium: '' },
+    ];
+    const savedChromium = process.env['PXV_CHROMIUM'];
+    delete process.env['PXV_CHROMIUM'];
+    const published: Record<string, unknown>[] = [];
+    try {
+      for (const patch of invalid) {
+        const values = { ...base.values, ...patch };
+        const context = {
+          ...base,
+          values,
+          flag: (name: Parameters<typeof base.flag>[0]) => values[name] === true,
+          value: (name: Parameters<typeof base.value>[0], fallback?: string) =>
+            typeof values[name] === 'string' ? values[name] : (fallback ?? ''),
+        };
+        const execute = vi.fn(() => Promise.resolve());
+        await expect(guidesRebuildCommand(context, { execute })).rejects.toThrow();
+        if (execute.mock.calls.length) published.push(patch);
+      }
+      expect(published).toEqual([]);
+      for (const name of ['asset', 'passphrase-file', 'locale']) {
+        const values = { [name]: 'unexpected-private-option' };
+        const execute = vi.fn(() => Promise.resolve());
+        await expect(guidesRebuildCommand({ ...base, values }, { execute })).rejects.toThrow(
+          'require --private-insert-output',
+        );
+        expect(execute).not.toHaveBeenCalled();
+      }
+      const execute = vi.fn(() => Promise.resolve());
+      await expect(guidesRebuildCommand({ ...base, dockerMode: 'direct' }, { execute })).rejects.toThrow(
+        'local host',
+      );
+      expect(execute).not.toHaveBeenCalled();
+    } finally {
+      if (savedChromium === undefined) delete process.env['PXV_CHROMIUM'];
+      else process.env['PXV_CHROMIUM'] = savedChromium;
+    }
   });
 });

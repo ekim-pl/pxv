@@ -91,12 +91,32 @@ describe('Oblivion private UI extraction', () => {
     await expect(collectOblivionKeys(android(), target, profiles, options())).rejects.toMatchObject({
       code: 'OBLIVION_COLLECTION_FAILED',
     });
-    state.mainXml = undefined;
-    state.dialogXml = oblivionXml(true).replaceAll('closeQrPopup', 'unrecognized');
-    await expect(collectOblivionKeys(android(), target, profiles, options())).rejects.toMatchObject({
-      code: 'OBLIVION_COLLECTION_FAILED',
-    });
     expect(state.current).toBe(0);
+  });
+
+  it('reaches the missing close-control guard with matching main and dialog keys', async () => {
+    const { state, shell } = mockOblivionAndroid();
+    state.mainXml = oblivionXml();
+    state.dialogXml = oblivionXml(true).replaceAll('closeQrPopup', 'unrecognized');
+    const opts = options();
+    let thrown: unknown;
+    try {
+      await collectOblivionKeys(android(), target, profiles, opts);
+    } catch (error) {
+      thrown = error;
+    }
+    expect(thrown).toMatchObject({ code: 'OBLIVION_COLLECTION_FAILED' });
+    expect(state.dialog).toBe(true);
+    expect(shell.mock.calls.filter(([, args]) => args[0] === 'input').map(([, args]) => args)).toEqual([
+      ['input', 'tap', '5', '5'],
+    ]);
+    expect(state.current).toBe(0);
+    expect(opts.retained).toHaveLength(1);
+    expect(opts.retained[0]?.status).toBe('resolved');
+    expect(String(thrown) + JSON.stringify(thrown) + JSON.stringify(opts.retained)).not.toContain(
+      syntheticOblivionKey,
+    );
+    expect(shell.mock.calls.some(([, args]) => args.includes('screencap'))).toBe(false);
   });
 
   it('refuses an unidentified original foreground user before creating recovery state', async () => {

@@ -54,6 +54,54 @@ describe('private Session account collection', () => {
     expect(opts.retained[0]?.status).toBe('resolved');
     expect(JSON.stringify(opts.retained)).not.toContain(sessionId);
   });
+  it('opens settings through the resource-id avatar fallback', async () => {
+    const { state, shell } = mockCollectionAndroid('sessionid');
+    state.homeXml = sessionXml(false).replace(
+      'content-desc="User settings"',
+      'resource-id="network.loki.messenger:id/profilePicture"',
+    );
+    const opts = options();
+    const result = await collectSessionIds(android(), target, profiles, opts);
+    expect(result.map((entry) => entry.value)).toEqual([sessionId, secondSessionId]);
+    expect(shell.mock.calls.filter(([, args]) => args[0] === 'input')).toHaveLength(2);
+    expect(state.current).toBe(0);
+    expect(opts.retained[0]?.status).toBe('resolved');
+  });
+  for (const failure of [
+    'missing-avatar',
+    'wrong-activity',
+    'wrong-user',
+    'missing-focus',
+    'ambiguous-focus',
+  ] as const) {
+    it(`rejects ${failure} even when a valid own-account ID is visible`, async () => {
+      const { state, shell } = mockCollectionAndroid('sessionid');
+      state.settingsXml = sessionXml(true);
+      if (failure === 'missing-avatar') state.homeXml = sessionXml(true);
+      if (failure === 'wrong-activity') state.activity = 'org.thoughtcrime.securesms.HomeActivity';
+      if (failure === 'wrong-user') state.focusUser = 99;
+      if (failure === 'missing-focus') state.focusWindows = 'mCurrentFocus=null';
+      if (failure === 'ambiguous-focus')
+        state.focusWindows =
+          'mCurrentFocus=Window{a u0 network.loki.messenger/.HomeActivity}\n' +
+          'mCurrentFocus=Window{b u0 network.loki.messenger/.HomeActivity}';
+      const opts = options();
+      let thrown: unknown;
+      try {
+        await collectSessionIds(android(), target, profiles, opts);
+      } catch (error) {
+        thrown = error;
+      }
+      expect(thrown).toMatchObject({ code: 'SESSION_COLLECTION_FAILED' });
+      expect(state.current).toBe(0);
+      expect(opts.retained[0]?.status).toBe('resolved');
+      expect(String(thrown) + JSON.stringify(thrown) + JSON.stringify(opts.retained)).not.toContain(
+        sessionId,
+      );
+      expect(shell.mock.calls.some(([, args]) => args.includes('screencap'))).toBe(false);
+      if (failure === 'missing-avatar') expect(state.settings).toBe(false);
+    });
+  }
   it('skips absent apps and offers private entry or an explicit skip on unsupported UI', async () => {
     const { state } = mockCollectionAndroid('sessionid');
     state.absent.add(10);
