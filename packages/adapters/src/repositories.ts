@@ -51,6 +51,7 @@ export interface RepositoryOptions {
 }
 export interface IndexOptions {
   signal?: AbortSignal;
+  /** Skip freshness-floor advancement; authenticated material may still be retained for later validation. */
   readOnly?: boolean;
 }
 
@@ -157,7 +158,7 @@ export class RepositoryService {
         : [{ name: 'index-v1.jar', source: jar, sha256: entrySha256, limit: 32 * 1024 * 1024 }];
       const format = isV2 ? 'v2' : 'v1';
       const signatureMaterialId = repositoryMaterialId(format, entrySha256, indexSha256);
-      const cacheRoot = options.readOnly ? undefined : this.cacheRoot;
+      const cacheRoot = this.cacheRoot;
       if (cacheRoot) await cacheSignedFiles(cacheRoot, signatureMaterialId, materialFiles);
       const evidence: RepositoryEvidence = {
         url,
