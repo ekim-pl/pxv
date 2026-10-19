@@ -124,7 +124,7 @@ it('builds with canonical SDK/JDK absent PATH, isolates signing, and rejects inv
   expect(pathJava.status).toBe(0);
   expect((await launches(log))[0]?.env).not.toHaveProperty('JAVA_HOME');
 });
-it('packages and installs the Android build helpers with canonical home selection intact', async () => {
+it('packages and installs the Android probe build helper with canonical home selection intact', async () => {
   const root = await fixture();
   temporary.push(root);
   const output = await scratch();

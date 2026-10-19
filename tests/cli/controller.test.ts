@@ -575,9 +575,10 @@ describe('operator controller dispatch without device access', () => {
     });
     expect(JSON.stringify(command)).not.toContain('sentinel-do-not-inherit');
     expect(JSON.stringify(command)).not.toContain('ANDROID_SDK_ROOT');
-    await expect(runCli(args(['host', 'build-helper', '--type', 'bad', '--yes']), io)).rejects.toThrow(
-      /Choose/,
-    );
+    await expect(
+      runCli(args(['host', 'build-helper', '--type', 'unsupported', '--yes']), io),
+    ).rejects.toThrow(/Choose probe/);
+    expect(mocks.runCommand).toHaveBeenCalledTimes(1);
     await expect(runCli(args(['host', 'unknown']), io)).rejects.toThrow(/Unknown host/);
   });
   it('launches helper builds with approved fallback homes and a default PATH without ambient secrets', async () => {
@@ -587,7 +588,7 @@ describe('operator controller dispatch without device access', () => {
     process.env['NPM_TOKEN'] = 'helper-secret-sentinel';
     mocks.runCommand.mockResolvedValue({ code: 0, stdout: '', stderr: 'helper diagnostic' });
 
-    expect(await runCli(args(['host', 'build-helper', '--type', 'setup', '--yes']), io)).toBe(0);
+    expect(await runCli(args(['host', 'build-helper', '--type', 'probe', '--yes']), io)).toBe(0);
     expect(mocks.runCommand.mock.calls[0]?.[1]).toEqual({
       env: { PATH: '/usr/bin:/bin', ANDROID_HOME: '/fallback sdk', JAVA_HOME: '/fallback jdk' },
       timeoutMs: 120_000,

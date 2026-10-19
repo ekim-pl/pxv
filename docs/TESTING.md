@@ -123,7 +123,7 @@ Replace the example file with the files you edited. `typecheck` builds productio
 | `pnpm test`            | Runs the complete node:test suite once                                                                                                                                            |
 | `pnpm test:supervisor` | Runs supervisor unit, receipt-failure and ownership integration tests                                                                                                             |
 | `pnpm test:coverage`   | Runs the complete node:test suite and merges worker/subprocess coverage before checking every module/package                                                                      |
-| `pnpm check:helpers`   | Compiles the Java verifier and all three Android helpers, then signs and verifies their APKs                                                                                      |
+| `pnpm check:helpers`   | Compiles the Java verifier and Android network probe, then signs and verifies its APK                                                                                           |
 | `pnpm docs:check`      | Builds first, then checks references, static shell command examples and obsolete workflow/tooling patterns                                                                        |
 | `pnpm quality`         | Runs static checks, supervisor tests, complete coverage and helper checks, then validates final metrics/source identity and writes the aggregate report                           |
 

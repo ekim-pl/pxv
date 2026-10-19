@@ -16,7 +16,6 @@ __pycache__/
 .ruff_cache/
 .DS_Store
 android/probe/build/
-android/e2e/build/
 *.egg-info/
 build/
 dist/
@@ -27,8 +26,6 @@ fixtures/live-lock.json
 .env
 .env.*
 !.env.example
-
-android/setup/build/
 
 # TypeScript builds and generated artifacts
 node_modules/

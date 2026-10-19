@@ -1,5 +1,0 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="org.pxv.setup" android:versionCode="1" android:versionName="1">
-    <uses-sdk android:minSdkVersion="28" android:targetSdkVersion="35" />
-    <application android:label="pxv temporary setup observer" android:allowBackup="false" android:usesCleartextTraffic="false" />
-    <instrumentation android:name="org.pxv.setup.LocaleObserver" android:targetPackage="org.pxv.setup" android:functionalTest="true" />
-</manifest>

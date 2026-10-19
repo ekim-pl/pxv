@@ -3,7 +3,7 @@ import { lstat, mkdir, readFile, readdir, rm, writeFile, chmod, access } from 'n
 import { join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { buildJavaEnvironment, buildJavaExecutable, runBuildCommand } from './build-command.mjs';
-/** @typedef {{component:string,root:string,resources:string,sdk:string,build:string,alias:string}} BuildInput */
+/** @typedef {{component:string,root:string,resources:string,sdk:string,build:string}} BuildInput */
 /** @typedef {(args:string[],cwd?:string)=>Promise<string>} BuildCommand */
 /** @param {string} path */
 const exists = async (path) =>
@@ -23,14 +23,11 @@ function input(argv, resources) {
     },
   });
   if (parsed.values.help) {
-    console.log(
-      'build-android --component probe|setup|e2e --project-root DIRECTORY [--resource-root DIRECTORY]',
-    );
+    console.log('build-android --component probe --project-root DIRECTORY [--resource-root DIRECTORY]');
     return undefined;
   }
   const component = parsed.values.component;
-  if (!component || !['probe', 'setup', 'e2e'].includes(component))
-    throw new Error('Choose probe, setup or e2e');
+  if (component !== 'probe') throw new Error('Choose probe');
   const sdk = process.env['PXV_ANDROID_HOME'] || process.env['ANDROID_HOME'];
   if (!sdk)
     throw new Error(
@@ -43,7 +40,6 @@ function input(argv, resources) {
     resources: resolve(parsed.values['resource-root'] ?? resources),
     sdk,
     build: join(root, 'android', component, 'build'),
-    alias: component === 'e2e' ? 'fixture' : component,
   };
 }
 /** @param {string} path */
@@ -64,7 +60,7 @@ async function privateBuildDirectory(value) {
 }
 /** @param {BuildInput} value */
 async function signing(value) {
-  const key = join(value.build, `${value.alias}.keystore`),
+  const key = join(value.build, `${value.component}.keystore`),
     passwordFile = join(value.build, 'signing-password');
   for (const path of [key, passwordFile]) await rejectSymlink(path);
   if ((await exists(key)) && !(await exists(passwordFile)))
@@ -96,7 +92,7 @@ async function ensureKey(value, material) {
       '-keypass:env',
       'PXV_SIGNING_PASSWORD',
       '-alias',
-      value.alias,
+      value.component,
       '-keyalg',
       'RSA',
       '-keysize',
@@ -110,7 +106,7 @@ async function ensureKey(value, material) {
 }
 /** @param {BuildInput} value */
 async function prepareOutputs(value) {
-  for (const name of ['classes', 'dex', 'generated']) {
+  for (const name of ['classes', 'dex']) {
     const path = join(value.build, name);
     await rejectSymlink(path);
     await rm(path, { recursive: true, force: true });
@@ -133,8 +129,7 @@ async function packageApk(value, run) {
   const { sdk, resources, component, build } = value,
     tools = join(sdk, 'build-tools/35.0.0');
   const androidJar = join(sdk, 'platforms/android-35/android.jar'),
-    classes = join(build, 'classes'),
-    generated = join(build, 'generated');
+    classes = join(build, 'classes');
   const unsigned = join(build, `${component}-unsigned.apk`),
     aapt = join(tools, 'aapt');
   const packaging = [
@@ -148,10 +143,8 @@ async function packageApk(value, run) {
     '-F',
     unsigned,
   ];
-  if (component === 'e2e') packaging.push('-m', '-J', generated, '-S', join(resources, 'android/e2e/res'));
   await run(packaging);
   const sources = await javaSources(join(resources, 'android', component, 'src'));
-  if (component === 'e2e') sources.push(...(await javaSources(generated)));
   await run([
     buildJavaExecutable('javac'),
     '--release',
@@ -172,7 +165,7 @@ async function packageApk(value, run) {
 }
 /** @param {BuildInput} value @param {{key:string,run:BuildCommand}} material @param {string} unsigned */
 async function signApk(value, material, unsigned) {
-  const output = join(value.build, `${value.alias}.apk`),
+  const output = join(value.build, `${value.component}.apk`),
     apksigner = join(value.sdk, 'build-tools/35.0.0/apksigner');
   await material.run([
     apksigner,
@@ -180,7 +173,7 @@ async function signApk(value, material, unsigned) {
     '--ks',
     material.key,
     '--ks-key-alias',
-    value.alias,
+    value.component,
     '--ks-pass',
     'env:PXV_SIGNING_PASSWORD',
     '--key-pass',

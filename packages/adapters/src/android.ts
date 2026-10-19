@@ -60,7 +60,7 @@ export interface InstallOptions extends OperationOptions {
 export interface CleanupOptions extends OperationOptions {
   operationId: string;
 }
-const HELPERS = new Set(['org.pxv.probe', 'org.pxv.setup', 'org.pxv.e2e.fixture']);
+const HELPERS = new Set(['org.pxv.probe']);
 const signalOptions = (signal?: AbortSignal): CommandOptions => (signal ? { signal } : {});
 
 function settingKey(value: string): string {

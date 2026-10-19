@@ -19,25 +19,24 @@ try {
     ],
     { env: buildJavaEnvironment() },
   );
-  for (const component of ['probe', 'setup', 'e2e']) {
-    const result = await runBuildCommand(
-      [
-        process.execPath,
-        'tools/build-android.mjs',
-        '--component',
-        component,
-        '--project-root',
-        directory,
-        '--resource-root',
-        process.cwd(),
-      ],
-      { env: process.env, timeoutMs: 120_000 },
-    );
-    const parsed = JSON.parse(result);
-    if (!/^[a-f0-9]{64}$/u.test(parsed.sha256) || !/^[a-f0-9]{64}$/u.test(parsed.signerSha256))
-      throw new Error('Helper signature evidence is missing');
-    helpers.push({ component, sha256: parsed.sha256, signerSha256: parsed.signerSha256 });
-  }
+  const component = 'probe';
+  const result = await runBuildCommand(
+    [
+      process.execPath,
+      'tools/build-android.mjs',
+      '--component',
+      component,
+      '--project-root',
+      directory,
+      '--resource-root',
+      process.cwd(),
+    ],
+    { env: process.env, timeoutMs: 120_000 },
+  );
+  const parsed = JSON.parse(result);
+  if (!/^[a-f0-9]{64}$/u.test(parsed.sha256) || !/^[a-f0-9]{64}$/u.test(parsed.signerSha256))
+    throw new Error('Helper signature evidence is missing');
+  helpers.push({ component, sha256: parsed.sha256, signerSha256: parsed.signerSha256 });
   await mkdir('.quality', { recursive: true });
   await writeFile(
     '.quality/helpers.json',
@@ -47,7 +46,7 @@ try {
       2,
     ) + '\n',
   );
-  process.stdout.write('Java verifier and all three Android helpers compiled; APK signatures verified.\n');
+  process.stdout.write('Java verifier and Android probe compiled; APK signature verified.\n');
 } finally {
   await rm(directory, { recursive: true, force: true });
 }
