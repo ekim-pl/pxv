@@ -10,7 +10,7 @@ ESLint's JavaScript API. See [host setup](docs/HOST_DEPENDENCIES.md) and
 pnpm install --frozen-lockfile
 pnpm quality:setup
 pnpm build
-PXV_REQUIRE_CRYPTO=1 pnpm quality
+PXV_REQUIRE_CRYPTO=1 PXV_CHROMIUM=/usr/bin/google-chrome pnpm quality
 ```
 
 `PXV_REQUIRE_CRYPTO=1` requires genuine APK verification. The explicit local

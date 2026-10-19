@@ -1,6 +1,7 @@
 import { readdir, readFile, access } from 'node:fs/promises';
 import { dirname, extname, join, resolve, relative } from 'node:path';
 import { marked } from 'marked';
+import { checkCommandExamples } from './lib/doc-command-examples.mjs';
 const root = process.cwd();
 const files = [
   'README.md',
@@ -66,6 +67,7 @@ function documentLinks(text) {
 }
 for (const file of files) {
   const text = await readFile(join(root, file), 'utf8');
+  errors.push(...checkCommandExamples(text, file));
   if (
     /(?<!\w)(?:python3?\s+-m|pip3?\s+install|pxv_app|PXV_PYTHON|--coverage\.(?:reportsDirectory|reporter)|rustfmt|[Cc]lippy)\b/u.test(
       text,
@@ -96,5 +98,5 @@ if (errors.length) {
   process.exitCode = 1;
 } else
   process.stdout.write(
-    `Validated links, heading anchors and obsolete commands in ${files.length} public Markdown documents.\n`,
+    `Validated links, heading anchors, shell command examples and obsolete commands in ${files.length} public Markdown documents.\n`,
   );

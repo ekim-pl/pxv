@@ -14,16 +14,17 @@ the Debian/npm compatibility channels.
 
 Use the exact workspace versions; `.npmrc` enforces the Node/pnpm engine requirements.
 
-| Component           | Required setup                                                                                       |
-| ------------------- | ---------------------------------------------------------------------------------------------------- |
-| Host                | Linux x86_64; supported baselines are Ubuntu 24.04 and Debian 12                                     |
-| Node.js             | 24.22.0 LTS                                                                                          |
-| pnpm                | 12.11.2                                                                                              |
-| TypeScript compiler | 7.0.2, installed by the lockfile as `@typescript/native`                                             |
-| Java                | JDK 17 or newer, including `java`, `javac`, `jar` and `keytool`                                      |
-| Cryptography        | OpenSSH with `ssh-keygen -Y` signing/verification                                                    |
-| Android SDK         | Platform `android-35` and Build Tools `35.0.0`, including aapt, d8 and apksigner                     |
-| Basic build tools   | Git for source identity, tar/xz and the tools described in [host dependencies](HOST_DEPENDENCIES.md) |
+| Component           | Required setup                                                                                                   |
+| ------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| Host                | Linux x86_64; supported baselines are Ubuntu 24.04 and Debian 12                                                 |
+| Node.js             | 24.22.0 LTS                                                                                                      |
+| pnpm                | 12.11.2                                                                                                          |
+| TypeScript compiler | 7.0.2, installed by the lockfile as `@typescript/native`                                                         |
+| Java                | JDK 17 or newer, including `java`, `javac`, `jar` and `keytool`                                                  |
+| Cryptography        | OpenSSH with `ssh-keygen -Y` signing/verification                                                                |
+| Android SDK         | Platform `android-35` and Build Tools `35.0.0`, including aapt, d8 and apksigner                                 |
+| Browser/PDF tools   | Chrome or Chromium at an absolute `PXV_CHROMIUM` path; Poppler (`pdftotext`, `pdfinfo`, `pdftoppm`, `pdftohtml`) |
+| Basic build tools   | Git for source identity, tar/xz and the tools described in [host dependencies](HOST_DEPENDENCIES.md)             |
 
 Compilation uses TypeScript 7.0.2. The separately pinned TypeScript 6 API package supports type-aware linting; changing that package to match the compiler is not a setup step. TypeScript has stable releases rather than an LTS channel. Dependencies and analyzer versions are pinned in [package.json](../package.json), [runtime package](../packages/runtime/package.json) and [quality-tools.json](../tools/quality-tools.json).
 
@@ -40,10 +41,12 @@ The supervisor is a separate TypeScript process compiled by `pnpm build` in `@px
 
 ```sh
 export ANDROID_HOME="$HOME/Android/Sdk"
-export ANDROID_SDK_ROOT="$ANDROID_HOME"
+export PXV_CHROMIUM=/absolute/path/to/chrome
 export PXV_REQUIRE_CRYPTO=1
 unset PXV_SKIP_ANDROID_CRYPTO
 ```
+
+SDK/JDK and ADB precedence follows [environment selection](HOST_DEPENDENCIES.md#environment-selection), including empty-value fallback and failure on an invalid selected path. No `.env` file is loaded automatically.
 
 If the required SDK packages are absent, install them through your SDK manager after reviewing and accepting the applicable upstream licenses:
 
@@ -113,16 +116,16 @@ Replace the example file with the files you edited. `typecheck` builds productio
 
 ## Run the appropriate quality stages
 
-| Command              | What it verifies                                                                                                                                                                 |
-| -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `pnpm build`         | Compiles workspace packages and declarations                                                                                                                                     |
-| `pnpm check`         | Types, typed lint, formatting, package edges/cycles, development and strict production TypeScript repository graphs, complexity, shell syntax/ShellCheck and documentation checks |
-| `pnpm test`          | Runs the complete node:test suite once                                                                                                                                              |
-| `pnpm test:supervisor`   | Runs supervisor unit, receipt-failure and ownership integration tests                                                                                                                                  |
-| `pnpm test:coverage` | Runs the complete node:test suite and merges worker/subprocess coverage before checking every module/package                                                                        |
-| `pnpm check:helpers` | Compiles the Java verifier and all three Android helpers, then signs and verifies their APKs                                                                                     |
-| `pnpm docs:check`    | Checks documentation references and obsolete workflow/tooling patterns                                                                                                           |
-| `pnpm quality`       | Runs static checks, supervisor tests, complete coverage and helper checks, then validates final metrics/source identity and writes the aggregate report                                    |
+| Command                | What it verifies                                                                                                                                                                  |
+| ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pnpm build`           | Compiles workspace packages and declarations                                                                                                                                      |
+| `pnpm check`           | Types, typed lint, formatting, package edges/cycles, development and strict production TypeScript repository graphs, complexity, shell syntax/ShellCheck and documentation checks |
+| `pnpm test`            | Runs the complete node:test suite once                                                                                                                                            |
+| `pnpm test:supervisor` | Runs supervisor unit, receipt-failure and ownership integration tests                                                                                                             |
+| `pnpm test:coverage`   | Runs the complete node:test suite and merges worker/subprocess coverage before checking every module/package                                                                      |
+| `pnpm check:helpers`   | Compiles the Java verifier and all three Android helpers, then signs and verifies their APKs                                                                                      |
+| `pnpm docs:check`      | Builds first, then checks references, static shell command examples and obsolete workflow/tooling patterns                                                                        |
+| `pnpm quality`         | Runs static checks, supervisor tests, complete coverage and helper checks, then validates final metrics/source identity and writes the aggregate report                           |
 
 For a supervisor edit, `pnpm test:supervisor` gives the focused fault result; `pnpm check` also checks TypeScript types, lint and complexity. For a helper or Java-verifier edit, run `pnpm check:helpers`; Java compilation uses `-Xlint:all -Werror`. Generated stable, preview and OCI shell launchers receive syntax and ShellCheck checks too.
 
@@ -151,22 +154,26 @@ report directory. Do not add exclusions to hide unexecuted modules.
 Use the unfiltered command for the actual gate:
 
 ```sh
-PXV_REQUIRE_CRYPTO=1 pnpm test:coverage
+PXV_REQUIRE_CRYPTO=1 PXV_CHROMIUM=/usr/bin/google-chrome pnpm test:coverage
 ```
 
-node:test collects coverage for its own test workers. The aggregate harness enables
-native Node tracing only for application workers and subprocesses spawned by the
-tests, avoiding a second trace of the test-pool supervisor during forced teardown.
-Application workers flush coverage and their owners await exit before teardown;
-fixture executables containing no application code are not traced. Empty or
-incomplete trace files receive bounded retries. Persistent malformed traces name
-the offending files and fail the coverage report rather than being discarded.
+The aggregate harness traces the entire runner, test processes, application workers,
+supervisors and subprocesses through `NODE_V8_COVERAGE`. Executable source maps
+map those V8 traces onto application TypeScript with ast-v8-to-istanbul 1.0.7 and
+@babel/parser 8.0.7. Coverage therefore includes compiled child entrypoints as well
+as code imported by tests. Workers flush coverage before owners finish teardown;
+missing maps or persistently malformed/incomplete traces fail qualification.
 
-The harness writes raw application worker/subprocess traces to `.quality/v8`, source-maps them onto the executable node:test maps, and reports the merged result in `.quality/coverage.json` and `coverage/coverage-final.json`. Type/comment lines never become statements, and unmatched child branch ranges never imply coverage. Do not override the aggregate command's coverage output directory: the merge expects the configured `coverage/coverage-final.json` path. Run one aggregate quality/coverage process per checkout at a time because these output locations are shared.
+Raw traces live in `.quality/v8`; merged results are written to
+`.quality/coverage.json` and `coverage/coverage-final.json`. Type/comment lines are
+not statements and unmatched child branch ranges do not imply coverage. Run one
+aggregate quality/coverage process per checkout at a time because these evidence
+locations are shared. Keep `.quality/tests.json` and source-bound report freshness
+with the matching run.
 
 ## Diagnose failures without weakening the gate
 
-The full check requires genuine SSH/JAR/APK verification. `PXV_REQUIRE_CRYPTO=1` makes that expectation explicit; skipping Android cryptography does not qualify a merge or release. Repair missing prerequisites rather than treating a skip as a pass. Failure tests deliberately create process exits, malformed records and rejected operations; evaluate the test assertion and retained evidence rather than classifying every injected child failure as a suite failure.
+The full check requires genuine SSH/JAR/APK verification. `PXV_REQUIRE_CRYPTO=1` makes that expectation explicit; skipping Android cryptography does not qualify a merge or release. Strict acceptance requires zero skipped tests, including real browser/PDF scenarios. Set `PXV_REQUIRE_CRYPTO=1`, export an absolute `PXV_CHROMIUM` executable, install Poppler, and repair missing prerequisites rather than treating a skip as a pass. Retain explicit `numSkippedTests: 0` in strict test evidence from the actual unfiltered run; a focused pass does not establish this evidence. Failure tests deliberately create process exits, malformed records and rejected operations; evaluate the test assertion and retained evidence rather than classifying every injected child failure as a suite failure.
 
 Keep developer fixture data synthetic. Do not copy recipient credentials, real device serials, private registry tokens, production backups, ADB keys or signing keys into test fixtures, snapshots, logs or candidate resources. Tests should allocate their own temporary project/control directories and remove their generated material. Inspect a leaked test worker or temporary directory before removing only the resources owned by that test. Never clear a real operator's recovery reservation to make a development test proceed. Real-device visits continue to use shared host ownership across projects; follow the [canary and recovery procedure](CANARY_BACKUP_RECOVERY.md).
 
@@ -176,7 +183,7 @@ Once implementation, tests and documentation are ready, stop editing source and 
 
 ```sh
 pnpm build
-PXV_REQUIRE_CRYPTO=1 pnpm quality
+PXV_REQUIRE_CRYPTO=1 PXV_CHROMIUM=/usr/bin/google-chrome pnpm quality
 ```
 
 A dirty checkout is supported: the report binds the actual tracked/unignored source bytes as well as the Git revision. A clean working tree is not a substitute for running the checks. Any later source edit makes the earlier source-bound report historical; rerun the final gate for the new bytes.
@@ -196,7 +203,6 @@ This creates uniquely named previews and does not publish, push, install globall
 The supervisor uses the reviewed Koffi Linux glibc x64 prebuild. Release validation checks ELF identity, dependencies and symbol versions, then executes the installed runtime and addon on Debian 12 and Ubuntu 24.04. `tools/check-native-baseline.mjs` accepts an explicit packaged-runtime module path. After building, run `node tools/check-packaged-runtime.mjs BUILD_RESULT.json` with the JSON printed by the release CLI to exercise every selected supported format on both baselines; Docker and a locally loaded OCI image are required. CI uses candidate bytes as a non-root user with a read-only root; it does not mount workspace dist code.
 
 These tests can qualify code and package behavior without a phone. They do not establish GrapheneOS image provenance, live Docker USB/host-ADB transport behavior, localized UI support, cross-user isolation, routing/failure recovery, backup restoration or recipient custody. Retain separate live evidence through the [canary, backup and recovery guide](CANARY_BACKUP_RECOVERY.md), using the [verification boundaries](VERIFICATION.md).
-
 
 Coverage uses ast-v8-to-istanbul 1.0.7 with @babel/parser 8.0.7 and executable source maps. `NODE_V8_COVERAGE` traces include test processes, workers, supervisors and subprocesses. Missing maps fail the gate; the default module and package thresholds are 90% line and 85% branch coverage. `.quality/tests.json`, `coverage/coverage-final.json` and source-bound report freshness retain their consumer contracts.
 

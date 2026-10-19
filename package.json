@@ -19,7 +19,7 @@
     "pxv": "node packages/cli/dist/main.js",
     "docs:build": "pnpm build && node tools/optional/publishing/rebuild.mjs",
     "whitelabel:scaffold": "tsc -b && node tools/optional/branding/scaffold.mjs",
-    "docs:check": "node tools/check-docs.mjs",
+    "docs:check": "pnpm build && node tools/check-docs.mjs",
     "typecheck": "tsc -b && tsc -p tsconfig.eslint.json --noEmit --incremental false && tsc -p tsconfig.tools.json --noEmit --incremental false",
     "deadcode": "node tools/check-deadcode.mjs",
     "quality:setup": "node tools/bootstrap-quality.mjs",

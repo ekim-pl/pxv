@@ -1,4 +1,5 @@
 import type { ProductDescriptor } from '@pxv/contracts';
+import { parseArgs } from 'node:util';
 
 export const stringFlags = [
   'project-root',
@@ -63,6 +64,19 @@ export const booleanFlags = [
   'html-only',
   'no-render',
 ] as const;
+/** Parse and validate syntax without opening resources, projects or device services. */
+export function parseCommandArguments(argv: string[]): {
+  positionals: string[];
+  values: Record<string, unknown>;
+} {
+  const options: Record<string, { type: 'string' | 'boolean' }> = {};
+  for (const name of stringFlags) options[name] = { type: 'string' };
+  for (const name of booleanFlags) options[name] = { type: 'boolean' };
+  const { positionals, values } = parseArgs({ args: argv, options, allowPositionals: true, strict: true });
+  validateCommand(positionals, values);
+  return { positionals, values };
+}
+
 type Flag = (typeof stringFlags)[number] | (typeof booleanFlags)[number];
 interface CommandDefinition {
   name: string;

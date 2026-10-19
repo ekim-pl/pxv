@@ -2,11 +2,11 @@
 
 The eight Markdown sources under [source/markdown](source/markdown) are authoritative. The operator guides explain preparing and flashing a Pixel or fleet, applying predefined profiles, and keeping local records. The user guides explain receiving and using a phone with one Owner or multiple profiles. The separate phone-sized quick start covers first use, configuration, privacy and security; the private insert is a blank template for device credentials and recovery arrangements. A policy build adapts the phone-sized editions to the configured GrapheneOS profiles without changing these shared sources. English and Polish editions cover the same workflows.
 
-| Reader      | English                                          | Polski                                                 |
-| ----------- | ------------------------------------------------ | ------------------------------------------------------ |
-| Operator    | [Operator guide](source/markdown/operator-en.md) | [Instrukcja operatora](source/markdown/operator-pl.md) |
-| Device user | [User guide](source/markdown/user-en.md)         | [Instrukcja użytkownika](source/markdown/user-pl.md)   |
-| phone-sized guide for every phone | [Quick start](source/markdown/quickstart-en.md) | [Szybki start](source/markdown/quickstart-pl.md) |
+| Reader                              | English                                                | Polski                                                        |
+| ----------------------------------- | ------------------------------------------------------ | ------------------------------------------------------------- |
+| Operator                            | [Operator guide](source/markdown/operator-en.md)       | [Instrukcja operatora](source/markdown/operator-pl.md)        |
+| Device user                         | [User guide](source/markdown/user-en.md)               | [Instrukcja użytkownika](source/markdown/user-pl.md)          |
+| phone-sized guide for every phone   | [Quick start](source/markdown/quickstart-en.md)        | [Szybki start](source/markdown/quickstart-pl.md)              |
 | Private phone-sized insert template | [Credential insert](source/markdown/credentials-en.md) | [Wkładka z danymi dostępu](source/markdown/credentials-pl.md) |
 
 Use a phone's accepted handoff report for its actual policy, software and verification results. General guides do not certify a device. Never add credentials, customer information or device-specific records to guide sources or branding assets.
@@ -35,7 +35,7 @@ pxv guides rebuild --chromium /usr/bin/google-chrome
 
 For a workspace invocation, use `pnpm pxv guides rebuild`. The command runs `pnpm build`, then the [optional publishing tool](../tools/optional/publishing/rebuild.mjs). It requires no initialized project or device. Installed releases include the guide sources, but rebuilding requires the source checkout.
 
-```sh
+```text
 pxv guides rebuild [--policy FILE] [--output-dir DIR] [--chromium PATH] [--html-only] [--no-render]
 ```
 

@@ -279,3 +279,5 @@ Private evidence location/digest; remaining gaps and next approved action:
 Exclude passwords, recovery words, MFA seeds, raw account identifiers and private document contents. Hashes or a backup-enabled observation are not substitutes for the recorded restore comparison. Preserve historical acceptance records unchanged and attach new evidence to the newly tested candidate.
 
 External backup and installation links are reference material. Verify UI labels, app behavior and restore compatibility on the exact builds selected for each visit; the links do not qualify those builds.
+
+Host SDK/JDK and ADB selection follows [host dependencies](HOST_DEPENDENCIES.md#environment-selection). Export the same reviewed `PXV_HOST_ADB_HOST`/`PXV_HOST_ADB_PORT`, `PXV_ADB_SERVER_SOCKET` and `PXV_ADB_VENDOR_KEYS` settings used for the owned service before inspecting recovery state. pxv does not load `.env` automatically; native ADB variable names do not select a recovery endpoint. An invalid explicit tool override or selected helper SDK/JDK home fails without selecting a lower-priority home; host executable search sources are documented separately.

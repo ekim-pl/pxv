@@ -6,16 +6,15 @@ import { join, resolve } from 'node:path';
 import { stdin, stdout, stderr } from 'node:process';
 import { createInterface } from 'node:readline/promises';
 import { fileURLToPath } from 'node:url';
-import { parseArgs } from 'node:util';
 import type { application } from './context.js';
 import { productAt, resourceRoot } from './context.js';
 import {
   assertCommandFeature,
-  booleanFlags,
+  type booleanFlags,
   commandHelp,
-  stringFlags,
+  type stringFlags,
   textualCommand,
-  validateCommand,
+  parseCommandArguments,
 } from './command-registry.js';
 import { cliOutput } from './output.js';
 export interface CliIo {
@@ -28,10 +27,6 @@ const defaultIo: CliIo = {
   out: (value) => stdout.write(`${value}\n`),
   error: (value) => process.stderr.write(`${value}\n`),
 };
-const options: Record<string, { type: 'string' | 'boolean' }> = {};
-for (const name of stringFlags) options[name] = { type: 'string' };
-for (const name of booleanFlags) options[name] = { type: 'boolean' };
-
 export async function confirmation(
   io: CliIo,
   message: string,
@@ -91,10 +86,7 @@ export interface ApplicationCliContext extends ProjectCliContext {
 }
 
 export async function parseCli(argv: string[], io: CliIo = defaultIo): Promise<CliContext> {
-  const parsed = parseArgs({ args: argv, options, allowPositionals: true, strict: true });
-  const values: Record<string, unknown> = parsed.values;
-  const positionals = parsed.positionals;
-  validateCommand(positionals, values);
+  const { values, positionals } = parseCommandArguments(argv);
   const value = (name: (typeof stringFlags)[number], fallback?: string): string => {
     const found = values[name];
     if (typeof found === 'string') return found;
