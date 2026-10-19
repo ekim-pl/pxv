@@ -97,7 +97,7 @@ describe('private credential insert', () => {
     const values = [...html.matchAll(/<pre>(.*?)<\/pre>/gsu)].map((match) => match[1]!.replaceAll('\n', ''));
     expect(values.join('')).toContain('x'.repeat(16_380) + 'TAIL');
     expect(html).toContain('(continued)');
-    expect(html.match(/<header>Asset: phone-01/gu)?.length).toBeGreaterThan(30);
+    expect(html.match(/<section style="page:private/gu)?.length).toBeGreaterThan(30);
   });
   it('writes only a private PDF and cleans the isolated renderer directory', async () => {
     const destination = join(await root(), 'private', 'insert.pdf');
@@ -237,6 +237,15 @@ it('repeats private asset/profile headers on every real continuation panel (PXV_
   expect(text.match(/Asset: phone-01/gu)).toHaveLength(panelCount);
   expect((text.match(/x{3,}/gu) ?? []).join('')).toHaveLength(1600);
   expect(text).toContain('TAIL');
+  const xml = execFileSync('pdftohtml', ['-xml', '-zoom', '1', '-hidden', '-stdout', destination], {
+    encoding: 'utf8',
+  });
+  const fonts = new Map(
+    [...xml.matchAll(/<fontspec id="(\d+)" size="([\d.]+)"/gu)].map((font) => [font[1], Number(font[2])]),
+  );
+  for (const size of fonts.values()) expect(size).toBeGreaterThanOrEqual(8);
+  for (const run of xml.matchAll(/<text[^>]*font="(\d+)"[^>]*>(x{3,})<\/text>/gu))
+    expect(fonts.get(run[1])).toBeGreaterThanOrEqual(10);
   for (const sheet of text.split('\f').filter((value) => value.trim())) {
     if (sheet.includes('ordinary |')) {
       expect(sheet).not.toContain('DURESS-PIN');

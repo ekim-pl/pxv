@@ -3,6 +3,7 @@ import { constants } from 'node:fs';
 import { link, lstat, mkdir, mkdtemp, open, realpath, rename, rm, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { AdapterError, cancelled } from './command.js';
+import { copySnapshot, fileDigest, seal } from './files.js';
 
 interface CacheReference {
   schemaVersion: 1;
@@ -62,6 +63,68 @@ export async function linkCachedArtifact(source: string, destination: string): P
 export async function cachePlanDirectory(path: string): Promise<void> {
   await privateDirectory(dirname(path));
   await mkdir(path, { mode: 0o700 });
+}
+
+export interface SignedCacheFile {
+  name: string;
+  source: string;
+  sha256: string;
+  limit: number;
+}
+
+/** Retain signed repository inputs under an immutable content-derived directory. */
+export async function cacheSignedFiles(root: string, key: string, files: SignedCacheFile[]): Promise<void> {
+  validateSignedFiles(key, files);
+  const base = join(root, 'repository-signatures');
+  await privateDirectory(base);
+  const destination = join(base, key);
+  const verify = async (): Promise<void> => {
+    if ((await realpath(destination)) !== resolve(destination) || !(await lstat(destination)).isDirectory())
+      throw new AdapterError('Signed metadata cache must not traverse symlinks');
+    for (const file of files) {
+      const path = join(destination, file.name);
+      const metadata = await lstat(path);
+      if (
+        !metadata.isFile() ||
+        metadata.isSymbolicLink() ||
+        (await fileDigest(path, file.limit)) !== file.sha256
+      )
+        throw new AdapterError('Cached signed repository metadata has changed');
+    }
+  };
+  try {
+    await verify();
+    return;
+  } catch (error) {
+    if (!missing(error)) throw error;
+  }
+  const staging = await mkdtemp(join(base, '.signature-'));
+  try {
+    for (const file of files) {
+      const path = join(staging, file.name);
+      await copySnapshot(file.source, path, file.limit);
+      if ((await fileDigest(path, file.limit)) !== file.sha256)
+        throw new AdapterError('Signed repository metadata changed while caching');
+      await seal(path);
+    }
+    try {
+      await rename(staging, destination);
+    } catch (error) {
+      if (!exists(error)) throw error;
+      await verify();
+    }
+  } finally {
+    await rm(staging, { recursive: true, force: true });
+  }
+}
+
+function validateSignedFiles(key: string, files: SignedCacheFile[]): void {
+  if (!/^[a-f0-9]{64}$/.test(key) || !files.length)
+    throw new AdapterError('Invalid signed metadata cache identity');
+  for (const file of files) {
+    if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(file.name) || !contentPattern.test(file.sha256))
+      throw new AdapterError('Invalid signed metadata cache file');
+  }
 }
 
 async function privateDirectory(path: string): Promise<void> {

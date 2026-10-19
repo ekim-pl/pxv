@@ -6,9 +6,10 @@ import { AdapterError, sha256Pin, type CommandRunner, type CommandResult } from 
 import { download, fileDigest } from './files.js';
 import { extractZip } from './zip.js';
 
-export type HostTool = 'adb' | 'fastboot' | 'aapt' | 'apksigner' | 'java' | 'ssh-keygen';
+export type HostTool = 'adb' | 'fastboot' | 'aapt' | 'apksigner' | 'java' | 'ssh-keygen' | 'fdroidcl';
 export interface HostToolStatus {
   tool: HostTool;
+  optional?: boolean;
   path?: string;
   available: boolean;
   compatible: boolean;
@@ -37,6 +38,7 @@ const DEFINITIONS: Record<HostTool, string[]> = {
   apksigner: ['version'],
   java: ['-version'],
   'ssh-keygen': ['-?'],
+  fdroidcl: ['version'],
 };
 function versionAtLeast(version: string, minimum: number[]): boolean {
   const parts = version.split('.').map(Number);
@@ -82,6 +84,7 @@ export class HostTools {
     if (!path)
       return {
         tool,
+        ...(tool === 'fdroidcl' ? { optional: true } : {}),
         available: false,
         compatible: false,
         reason: 'Executable was not found in the configured SDK, managed tools or PATH',
@@ -90,7 +93,14 @@ export class HostTools {
       const result = await this.runner.run([path, ...DEFINITIONS[tool]], { timeoutMs: 5000, check: false });
       return inspectedStatus(tool, path, result);
     } catch {
-      return { tool, path, available: false, compatible: false, reason: 'Executable inspection failed' };
+      return {
+        tool,
+        ...(tool === 'fdroidcl' ? { optional: true } : {}),
+        path,
+        available: false,
+        compatible: false,
+        reason: 'Executable inspection failed',
+      };
     }
   }
   async doctor(): Promise<HostToolStatus[]> {
@@ -121,7 +131,10 @@ export class HostTools {
   }
 }
 
-const VERSION_PATTERNS: Record<Exclude<HostTool, 'ssh-keygen'>, { pattern: RegExp; minimum?: number[] }> = {
+const VERSION_PATTERNS: Record<
+  Exclude<HostTool, 'ssh-keygen' | 'fdroidcl'>,
+  { pattern: RegExp; minimum?: number[] }
+> = {
   adb: { pattern: /(?:^|\n)Version (\d+\.\d+\.\d+)/, minimum: [35, 0, 2] },
   fastboot: { pattern: /(?:fastboot version|Version) (\d+\.\d+\.\d+)/, minimum: [35, 0, 2] },
   java: { pattern: /(?:openjdk|java) version "(\d+(?:\.\d+)*)/, minimum: [17] },
@@ -135,16 +148,25 @@ function toolVersion(tool: HostTool, result: CommandResult): { version?: string;
       version: 'OpenSSH signature tool',
       compatible: output.includes('ssh-keygen') && output.includes('-Y') && output.includes('verify'),
     };
+  if (tool === 'fdroidcl') return fdroidclVersion(result);
   const spec = VERSION_PATTERNS[tool];
   const version = spec.pattern.exec(output)?.[1];
   const compatible =
     result.code === 0 && !!version && (!spec.minimum || versionAtLeast(version, spec.minimum));
   return { ...(version ? { version } : {}), compatible };
 }
+function fdroidclVersion(result: CommandResult): { version?: string; compatible: boolean } {
+  const version = (result.stdout + '\n' + result.stderr).trim();
+  return {
+    ...(version ? { version: version.slice(0, 100) } : {}),
+    compatible: result.code === 0 && !!version,
+  };
+}
 function inspectedStatus(tool: HostTool, path: string, result: CommandResult): HostToolStatus {
   const version = toolVersion(tool, result);
   return {
     tool,
+    ...(tool === 'fdroidcl' ? { optional: true } : {}),
     path,
     available: true,
     ...version,

@@ -9,6 +9,7 @@ import { buildDocumentation } from '../../../packages/release/dist/docs.js';
 import { parseDocument, validatePolicyDocument } from '../../../packages/contracts/dist/index.js';
 import { verifyGuideLinks } from './links.mjs';
 import { assertFoldPanelBounds } from './fold-qa.mjs';
+import { foldLayout, validateFoldLayoutMetadata } from '../../../packages/guides/dist/index.js';
 
 /** @typedef {{destination:string,htmlOnly:boolean,render:boolean,chrome?:string,policyFile?:string}} BuildOptions */
 /** @typedef {{x0:number,y0:number,x1:number,y1:number}} PageBox */
@@ -24,7 +25,7 @@ const mmToPoints = (millimeters) => (millimeters * 72) / 25.4;
 /** @param {string} name @returns {GuideFormat} */
 function guideFormat(name) {
   return /^(?:quickstart|credentials)-/u.test(name)
-    ? { size: 'fold', width: 297, height: 210 }
+    ? { size: 'fold', width: foldLayout.sheetMm[0], height: foldLayout.sheetMm[1] }
     : { size: 'A4', width: 210, height: 297 };
 }
 
@@ -92,18 +93,13 @@ function expectedSections(html, format) {
     .filter((heading) => /^\d+[.)]?\s/u.test(heading));
 }
 
-/** @param {string} name @param {string} pdf @param {number} pages @param {string[]} sections */
-function assertPageText(name, pdf, pages, sections) {
-  if (sections.length && pages !== sections.length)
-    throw Error(`Expected ${sections.length} logical section pages; received ${pages}: ${name}`);
+/** @param {string} name @param {string} pdf @param {number} pages */
+function assertPageText(name, pdf, pages) {
   for (let page = 1; page <= pages; page++) {
     const text = execFileSync('pdftotext', ['-f', String(page), '-l', String(page), pdf, '-'], {
       encoding: 'utf8',
     });
     if (text.trim().length < 12) throw Error(`Expected readable text on page ${page} of ${name}`);
-    const heading = sections[page - 1];
-    if (heading && !normalizedText(text).includes(heading))
-      throw Error(`Expected logical section "${heading}" on page ${page}: ${name}`);
   }
 }
 
@@ -181,11 +177,11 @@ function embeddedFontNames(name, pdf, family) {
   ].join(', ');
 }
 
-/** @param {string} name @param {string} pdf @param {'office'|'print'|'a4-fold'} mode @param {string} locale @param {string} family @param {GuideFormat} format @param {string[]} sections */
-function inspectPdf(name, pdf, mode, locale, family, format, sections) {
+/** @param {string} name @param {string} pdf @param {'office'|'print'|'a4-fold'} mode @param {string} locale @param {string} family @param {GuideFormat} format */
+function inspectPdf(name, pdf, mode, locale, family, format) {
   const info = execFileSync('pdfinfo', ['-box', pdf], { encoding: 'utf8' });
   const pages = pageCount(name, info);
-  assertPageText(name, pdf, pages, sections);
+  assertPageText(name, pdf, pages);
   const { width, height } = pageDimensions(name, info);
   let boxes;
   if (mode !== 'print') {
@@ -254,7 +250,7 @@ async function verifyEdition(root, html, qa, options) {
 
   for (const mode of modes) {
     const pdf = html.slice(0, -5) + `-${mode}.pdf`;
-    const inspection = inspectPdf(`${name}-${mode}`, pdf, mode, locale, family, format, sections);
+    const inspection = inspectPdf(`${name}-${mode}`, pdf, mode, locale, family, format);
     await writeFile(join(qa, `${name}-${mode}.txt`), inspection.text);
     const rasters = await pageRasters(qa, name, mode, pdf, options.render);
     assertRasterCount(options.render, rasters, inspection.pages, `${name}-${mode}`);
@@ -278,7 +274,7 @@ async function verifyFoldEdition(record, html, qa, options, family, sections) {
   const { name, locale } = record;
   const format = guideFormat(name);
   const pdf = html.slice(0, -5) + '-a4-fold.pdf';
-  const inspection = inspectPdf(`${name}-a4-fold`, pdf, 'a4-fold', locale, family, format, []);
+  const inspection = inspectPdf(`${name}-a4-fold`, pdf, 'a4-fold', locale, family, format);
   assertFoldPanelBounds(pdf);
   const layout = /** @type {import('../../../packages/guides/src/fold-packet.js').FoldManifest} */ (
     JSON.parse(await readFile(join(qa, `${name}-fold.json`), 'utf8'))
@@ -317,9 +313,10 @@ const options = buildOptions(root);
 const policy = options.policyFile
   ? validatePolicyDocument(parseDocument(await readFile(options.policyFile, 'utf8')))
   : undefined;
-const configuration = /** @type {{editions:string[]}} */ (
+const configuration = /** @type {{editions:string[],foldLayout:unknown}} */ (
   JSON.parse(await readFile(join(root, 'guides/source/build-manifest.json'), 'utf8'))
 );
+validateFoldLayoutMetadata(configuration.foldLayout);
 const editionNames = configuration.editions;
 if (
   !Array.isArray(editionNames) ||

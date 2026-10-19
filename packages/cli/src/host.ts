@@ -4,6 +4,7 @@ import { CommandRunner, readBounded, supervisorPath } from '@pxv/runtime';
 
 export interface ToolStatus {
   tool: string;
+  optional?: boolean;
   available: boolean;
   compatible: boolean;
   version?: string;
@@ -17,7 +18,10 @@ export async function inspectHost(runner = new CommandRunner()): Promise<{
   adbServer: boolean;
   supervisor: boolean;
 }> {
-  const tools = await new HostTools({ runner }).doctor();
+  const tools = (await new HostTools({ runner }).doctor()).map((tool) => ({
+    ...tool,
+    ...(tool.optional ? { optional: true } : {}),
+  }));
   return {
     platform: process.platform,
     architecture: process.arch,

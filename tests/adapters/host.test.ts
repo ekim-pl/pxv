@@ -47,7 +47,13 @@ describe('read-only host discovery and explicit verified bootstrap', () => {
     for (const name of ['java', 'ssh-keygen']) await executable(join(bin, name));
     const host = new HostTools({ runner, env: { ANDROID_HOME: sdk, PATH: bin } });
     const statuses = await host.doctor();
-    expect(statuses.every((status) => status.compatible)).toBe(true);
+    expect(statuses.every((status) => status.optional || status.compatible)).toBe(true);
+    expect(statuses.find((status) => status.tool === 'fdroidcl')).toMatchObject({
+      optional: true,
+      available: false,
+      compatible: false,
+    });
+    await expect(host.require('fdroidcl')).rejects.toThrow();
     expect(await host.require('aapt')).toBe(join(build, 'aapt'));
     const obsolete = new HostTools({
       runner: { run: () => Promise.resolve({ code: 0, stdout: 'fastboot version 34.0.0', stderr: '' }) },
@@ -56,6 +62,22 @@ describe('read-only host discovery and explicit verified bootstrap', () => {
     expect((await obsolete.inspect('fastboot')).compatible).toBe(false);
     await expect(obsolete.require('fastboot')).rejects.toThrow(/incompatible/);
   });
+  it('requires a working fdroidcl when explicitly selected', async () => {
+    const path = join(directory, 'fdroidcl');
+    await executable(path);
+    const host = new HostTools({
+      runner: { run: () => Promise.resolve({ code: 0, stdout: 'fdroidcl 0.7.0', stderr: '' }) },
+      env: { PXV_TOOL_FDROIDCL: path },
+    });
+    expect(await host.inspect('fdroidcl')).toMatchObject({ optional: true, compatible: true });
+    expect(await host.require('fdroidcl')).toBe(path);
+    const broken = new HostTools({
+      runner: { run: () => Promise.resolve({ code: 1, stdout: '', stderr: 'failed' }) },
+      env: { PXV_TOOL_FDROIDCL: path },
+    });
+    await expect(broken.require('fdroidcl')).rejects.toThrow('incompatible');
+  });
+
   it('treats explicit overrides as authoritative and never fetches during doctor', async () => {
     const fetcher = vi.fn();
     vi.stubGlobal('fetch', fetcher);

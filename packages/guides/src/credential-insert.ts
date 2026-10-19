@@ -8,7 +8,9 @@ import {
   type PhoneRegistryValue,
 } from '@pxv/contracts';
 import { CommandRunner, readBounded, writeRegistryPrivateFile, type Runtime } from '@pxv/runtime';
-import { foldPanelStyles, foldPrintingInstructions, imposeFoldPacket } from './fold-packet.js';
+import { foldPrintingInstructions, imposeFoldPacket } from './fold-packet.js';
+import { foldHeaderStyle } from './fold-layout.js';
+import { credentialInsertStyles } from './credential-insert-styles.js';
 import { insertLabels } from './credential-insert-labels.js';
 
 interface CredentialInsertOptions {
@@ -110,13 +112,20 @@ export function renderCredentialInsert(
       [[t.oblivionNotificationWipeKey, profile.fields.oblivionNotificationWipeKey]],
       true,
     );
+  return privateHtml(pages, record.assetId, locale);
+}
+
+interface InsertPage {
+  title: string;
+  body: string;
+  destructive: boolean;
+}
+function privateHtml(pages: InsertPage[], assetId: string, locale: 'en' | 'pl'): string {
+  const t = insertLabels[locale];
   return `<!doctype html><html lang="${locale}"><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'"><title>${t.title}</title><style>
-    ${foldPanelStyles}
-    article{break-inside:avoid}section{break-before:page}section:first-child{break-before:auto}
-    header{font-size:8pt;border-bottom:1px solid #555;padding-bottom:1mm;margin-bottom:1mm;overflow-wrap:anywhere}
-    @media print{section>header,section>h1{display:none}}
-    ${pages.map((page, i) => privatePageStyle(i, `${t.asset}: ${record.assetId}`, `${t.page} ${i + 1}/${pages.length} / ${t.continued}`, page.title)).join('')}
-    </style></head><body>${pages.map((page, i) => `<section style="page:private${i}" data-fold-group="${page.destructive ? 'erasure' : 'ordinary'}"><header>${t.asset}: ${escape(record.assetId)} | ${t.page} ${i + 1}/${pages.length}</header><h1>${escape(page.title)}</h1>${page.destructive ? `<aside>${locale === 'pl' ? 'Odłącz i zapieczętuj oddzielnie. Nigdy nie testuj tych wartości.' : 'Detach and seal separately. Never test these values.'}</aside>` : ''}${page.body}</section>`).join('')}</body></html>`;
+    ${credentialInsertStyles}
+    ${pages.map((page, i) => foldHeaderStyle(`private${i}`, { lines: [`${t.asset}: ${assetId}`, `${t.page} ${i + 1}/${pages.length} / ${t.continued}`, page.title] })).join('')}
+    </style></head><body>${pages.map((page, i) => `<section style="page:private${i}" data-fold-group="${page.destructive ? 'erasure' : 'ordinary'}"><header><span class="asset-label">${t.asset}: ${escape(assetId)}</span><span class="page-number">${t.page} ${i + 1}/${pages.length}</span></header><h1>${escape(page.title)}</h1>${page.destructive ? `<aside>${locale === 'pl' ? 'Odłącz i zapieczętuj oddzielnie. Nigdy nie testuj tych wartości.' : 'Detach and seal separately. Never test these values.'}</aside>` : ''}${page.body}</section>`).join('')}</body></html>`;
 }
 
 /** Only the PDF survives. Browser errors are deliberately replaced to avoid secret diagnostics. */
@@ -189,16 +198,4 @@ async function renderPrivatePanels(
   const bytes = await readBounded(output, 32 * 1024 * 1024);
   if (bytes.subarray(0, 5).toString() !== '%PDF-') throw new Error();
   return bytes;
-}
-
-/** Margin boxes repeat even when a long table header would exceed Chromium's repeat limit. */
-function privatePageStyle(index: number, asset: string, section: string, title: string): string {
-  const headerLines = [asset, section, title].flatMap((value) => lines(value, 32));
-  const top = headerLines.length * 3.3 + 8;
-  if (top > 75) throw new Error('Private credential insert header exceeds panel capacity');
-  // Hex escapes keep untrusted labels out of CSS/HTML syntax and preserve literal characters.
-  const content = headerLines
-    .map((line) => Array.from(line, (char) => `\\${char.codePointAt(0)!.toString(16)} `).join(''))
-    .join('\\A ');
-  return `@page private${index}{size:68mm 100mm;margin:${top}mm 4mm 10mm;@top-left{content:"${content}";font:8pt/3.3mm 'DejaVu Sans Mono',monospace;white-space:pre;vertical-align:middle}}`;
 }

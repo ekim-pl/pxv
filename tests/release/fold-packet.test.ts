@@ -1,5 +1,10 @@
 import { PDFDocument } from 'pdf-lib';
 import { describe, expect, it } from '../test-api.js';
+import {
+  foldLayout,
+  validateFoldLayoutMetadata,
+  foldHeaderStyle,
+} from '../../packages/guides/src/fold-layout.js';
 import { imposeFoldPacket } from '../../packages/guides/src/fold-packet.js';
 
 const pt = (mm: number) => (mm * 72) / 25.4;
@@ -52,4 +57,23 @@ describe('A4 cut-and-fold imposition', () => {
       '68 x 100 mm',
     );
   });
+});
+
+it('validates build metadata against the immutable layout contract', () => {
+  expect(Object.isFrozen(foldLayout)).toBe(true);
+  expect(Object.isFrozen(foldLayout.panelMm)).toBe(true);
+  expect(() => validateFoldLayoutMetadata(foldLayout)).not.toThrow();
+  expect(() => validateFoldLayoutMetadata({ ...foldLayout, panelMm: [69, 100] })).toThrow('panelMm');
+  expect(() => validateFoldLayoutMetadata(undefined)).toThrow('Missing fold layout');
+});
+
+it('escapes full untrusted identity text and rejects invalid page names', () => {
+  const css = foldHeaderStyle('testpage', {
+    lines: ['</style><script>literal</script>', 'Zażółć gęślą jaźń'],
+    assetField: 'Device asset label',
+  });
+  expect(css).not.toContain('</style>');
+  expect(css).toContain('@top-left{content:');
+  expect(css).toContain('@bottom-left{content:');
+  expect(() => foldHeaderStyle('bad;page', { lines: [] })).toThrow('Invalid fold page name');
 });

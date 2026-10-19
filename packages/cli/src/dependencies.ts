@@ -39,6 +39,7 @@ export async function createDependencies(
     runner,
     java: await pathFor('java'),
     verifierPath: join(resources, 'resources/VerifyRepositoryIndex.java'),
+    cacheRoot,
     freshness: {
       read: (key) => store.get('repository-freshness', key),
       async advance(key, previous, next) {

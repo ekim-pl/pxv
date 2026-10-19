@@ -15,7 +15,7 @@
   "policyBuild": {
     "input": "validated authoring policy via --policy",
     "destination": "separate --output-dir; authoritative sources remain unchanged",
-    "quickstart": "variable profile instructions and one appendix page per configured GrapheneOS user profile",
+    "quickstart": "variable profile instructions and one appendix section per configured GrapheneOS user profile",
     "credentials": "paired blank ordinary credential and account/recovery sheets per configured profile; secrets are completed privately",
     "pageCounts": "N configured profiles: 8 + N quickstart sections and 2N + 2 credential sections; generic builds retain 8 and 4 sections. Sections span panels; physical A4 sheet counts are recorded in QA.",
     "status": "intended configuration, not device verification"
@@ -49,6 +49,7 @@
       5
     ],
     "printing": "single-sided, actual size / 100%; cut solid lines, fold dashed lines with printing inside",
-    "groups": "quickstart, ordinary credentials and erasure records use separate sheets"
+    "groups": "quickstart, ordinary credentials and erasure records use separate sheets",
+    "description": "Validated layout metadata derived from @pxv/guides foldLayout; not editable print configuration"
   }
 }

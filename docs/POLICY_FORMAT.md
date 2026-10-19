@@ -32,9 +32,39 @@ their existing meaning. Permissions and VPN fields still use Android package IDs
 }
 ```
 
-Catalog values are the existing pinned artifact objects: `packageId`, `versionCode`,
-`sha256`, `signerSha256`, and an approved path, URL or repository source. App versions
-remain shared between Android users; conflicting catalog versions are rejected.
+Catalog values pin `packageId`, `versionCode`, the APK `sha256`, and the APK signing
+certificate `signerSha256`. A new `source` object supports three acquisition methods:
+
+```json
+[
+  { "source": { "kind": "direct", "url": "https://publisher.example/app.apk", "redirectHosts": ["cdn.publisher.example"] } },
+  { "source": { "kind": "fdroidcl" } },
+  { "source": { "kind": "fdroid-repository", "url": "https://apps.example/fdroid/repo", "fingerprint": "<verified repository signer SHA-256>" } }
+]
+```
+
+These examples show the `source` member shape; package identity and APK pins are
+omitted. `direct` downloads that URL and checks both APK pins. `fdroidcl` uses the
+host `fdroidcl` command with an isolated
+configuration to select the exact package and version from its default official
+F-Droid repository; PXV authenticates that repository's signed index and checks the
+APK pins independently because [`fdroidcl` relies on HTTPS for its own index
+verification](https://github.com/Hoverth/fdroidcl#caveats). PXV then installs the
+cached, reviewed APK through its normal plan. The official source mode uses PXV's
+pinned F-Droid repository signing certificate. `fdroid-repository` authenticates an
+app-specific F-Droid repository using its URL and repository signer fingerprint,
+then checks the APK pins. Its `maxAgeDays` defaults to 30 and may be set from 1 to
+365. Optional `redirectHosts` can allow named download hosts for direct and
+app-specific repository sources.
+
+The APK's Android signature is embedded in the APK bytes. PXV caches the APK with a
+`signature.json` record of its verified package, version, content hash, signer and
+`apksigner` result. F-Droid sources also cache the signed `entry.jar` and the index
+it authenticates (or the signed `index-v1.jar`) under
+`state/artifacts/repository-signatures/`; cached repository signatures are checked
+again before execution. Existing `path`, top-level `url`, and `repositoryId` entries
+remain accepted for policies that already use them. App versions remain shared
+between Android users; conflicting catalog versions are rejected.
 
 For mixed Pixel models, `os` is a map keyed by codename. Each value is a complete
 existing OS pin (`codename`, `release`, official `url` and `signatureUrl`,

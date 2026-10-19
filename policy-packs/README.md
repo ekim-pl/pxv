@@ -5,7 +5,7 @@ These packs demonstrate one, three, five and arbitrary profile layouts. They are
 Use each pack's `policy.json` for Community projects. Its shared app catalog,
 profile app references and per-codename OS pins follow the [policy format](../docs/POLICY_FORMAT.md).
 
-Before using a pack on a phone, a product maintainer must add reviewed OS provenance, required settings, permission grants and VPN configuration. The nerd and privacy packs include pinned apps listed below; review their versions, sources and signer pins for the deployment. The `single-simple` and `fleet-custom` app catalogs remain empty. Add repository trust anchors if using repository-backed artifacts. Changes to the normalized execution policy change its resolved digest and invalidate the previous reviewed plan. Authoring-only changes, such as adding an unused app catalog entry, do not change that digest. Validate and lock the edited policy before reviewing a new plan.
+Before using a pack on a phone, a product maintainer must add reviewed OS provenance, required settings, permission grants and service-specific network configuration. The nerd and privacy packs include pinned apps listed below; review their versions, sources and signer pins for the deployment. The `single-simple` and `fleet-custom` app catalogs remain empty. Add repository trust anchors if using repository-backed artifacts. Changes to the normalized execution policy change its resolved digest and invalidate the previous reviewed plan. Authoring-only changes, such as adding an unused app catalog entry, do not change that digest. Validate and lock the edited policy before reviewing a new plan.
 
 `fleet-nerd` retains owner, contacts, google, testing and onion roles. `single-simple` uses only the owner. `fleet-custom` demonstrates arbitrary role names and Polish recipient language. Exactly one owner is required; five profiles and the literal name owner are not engine requirements.
 
@@ -29,14 +29,19 @@ and onion profiles removed. Both privacy packs retain owner, contacts and google
 with the same app assignments above; the unused Orbot catalog entry is removed.
 `fleet-privacy` retains the fleet credential defaults and owner duress configuration
 for those three profiles. `single-privacy` retains private on-device credential
-entry with no initial credential references or duress configuration. Their
-capabilities, required attestations, locales, settings and VPN fields follow their
-respective nerd packs.
+entry with no initial credential references or duress configuration. It selects
+Rethink DNS + Firewall (`com.celzero.bravedns`) as an always-on VPN with lockdown
+for Owner, contacts and google, and disables Android's global Private DNS setting.
+Configure and test Rethink separately in each profile before lockdown; the policy
+does not configure an upstream VPN tunnel or proxy. The capabilities, required
+attestations, locales, app assignments and other settings follow the corresponding
+nerd pack.
 
-F-Droid is not installed in any profile. PXV downloads the APKs directly from the
-pinned sources; using an F-Droid repository as a download source does not require
-the F-Droid app. Aurora Store is installed only in google. App accounts, permissions
-and network configuration still need deployment review and acceptance.
+F-Droid is not installed in any profile. This catalog currently uses pinned direct
+APK URLs. PXV also supports `fdroidcl` from the official repository and app-specific
+authenticated F-Droid repositories; the reviewed plan installs PXV's verified
+cached APK. Aurora Store is installed only in google. App accounts, permissions and
+network configuration still need deployment review and acceptance.
 
 The catalogs were pinned on 2026-10-19:
 
@@ -56,7 +61,9 @@ review a fresh policy lock. Telegram's website APK has package ID
 `org.telegram.messenger.web`. Orbot's published version is a release candidate.
 Telegram's download endpoint and Guardian's `orbot-latest.apk` are mutable;
 new upstream bytes will fail the pinned digest check until the catalog is reviewed
-and updated. Preserve reviewed APKs in the private artifact cache for repeat runs.
+and updated. PXV retains APK bytes and signer evidence in the private artifact cache
+for repeat runs. F-Droid sources also retain the signed repository entry and index
+used to authenticate those APKs.
 
 ### App pin provenance
 
@@ -82,8 +89,9 @@ checked against its [published certificate](https://signal.org/android/apk/).
 Oblivion's APK hash matched the publisher's
 [v8 release asset digest](https://api.github.com/repos/bepass-org/oblivion/releases/tags/v8);
 its signature, package ID and version code were inspected with Android Build Tools.
-The catalogs retain all APK content and signer pins. This artifact review does not
-claim live phone or routing acceptance.
+The catalog pins each APK content hash and signer. PXV's private artifact cache
+retains the APK bytes and signing evidence. This artifact review does not claim live
+phone or routing acceptance.
 
 ## Fleet Nerd defaults
 

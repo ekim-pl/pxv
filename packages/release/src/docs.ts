@@ -1,7 +1,7 @@
 import { marked } from 'marked';
 import { chromium, type Page } from 'playwright';
 import { PDFDocument } from 'pdf-lib';
-import { foldPanelStyles, foldPrintingInstructions, imposeFoldPacket } from '@pxv/guides';
+import { foldPanelStyles, foldPrintingInstructions, imposeFoldPacket, foldLayout } from '@pxv/guides';
 import {
   access,
   copyFile,
@@ -19,6 +19,7 @@ import { parseDocument, validatePolicy, validateProduct } from '@pxv/contracts';
 import type { ExecutionPolicy } from '@pxv/contracts';
 import { walkPublic } from './candidate.js';
 import { renderPolicyBooklet } from './booklet.js';
+import { renderFoldSections } from './fold-sections.js';
 import { guideNavigation, type GuideEdition } from './guide-navigation.js';
 
 interface DocumentationOptions {
@@ -137,7 +138,7 @@ function editionKind(output: string): GuideKind {
 function guideFormat(output: string): GuideFormat {
   const kind = editionKind(output);
   return kind === 'quickstart' || kind === 'credentials'
-    ? { size: 'fold', width: 68, height: 100 }
+    ? { size: 'fold', width: foldLayout.panelMm[0], height: foldLayout.panelMm[1] }
     : { size: 'A4', width: 210, height: 297 };
 }
 
@@ -173,7 +174,7 @@ function guideCover(
 ): string {
   const kind = editionKind(output);
   if (guideFormat(output).size === 'fold')
-    return `<section class="guide-cover compact-cover"><div class="cover-copy"><p class="cover-brand">${escapeHtml(productName)}</p><p class="cover-label">${coverLabel(kind, locale)}</p><h1>${title}</h1><p class="cover-meta">${version} · ${locale.toUpperCase()} · 68 × 100 mm</p></div></section>`;
+    return `<section class="guide-cover compact-cover"><div class="cover-copy"><p class="cover-brand">${escapeHtml(productName)}</p><p class="cover-label">${coverLabel(kind, locale)}</p><h1>${title}</h1><p class="cover-meta">${version} · ${locale.toUpperCase()} · ${foldLayout.panelMm[0]} × ${foldLayout.panelMm[1]} mm</p></div></section>`;
   const image =
     kind === 'generic' ? '' : `<img class="cover-photo" src="assets/photos/cover-${kind}.png" alt="">`;
   const logo = brand.logo ? `<img class="cover-logo" src="${escapeHtml(brand.logo)}" alt="">` : '';
@@ -245,28 +246,15 @@ ${compact ? foldStyles() : ''}`;
 
 function foldStyles(): string {
   return `${foldPanelStyles}
-@page pxvfold{size:68mm 100mm;margin:4mm 4mm 10mm}
-html[data-print-mode] body.guide-fold{page:pxvfold;font-family:inherit;font-size:10pt;line-height:1.3;color:#111}
+@page pxvfold{size:${foldLayout.panelMm[0]}mm ${foldLayout.panelMm[1]}mm;margin:${foldLayout.content.topMm}mm ${foldLayout.content.sideMm}mm ${foldLayout.content.bottomMm}mm}
+html[data-print-mode] body.guide-fold{page:pxvfold;font-family:inherit;font-size:${foldLayout.typography.bodyPt}pt;line-height:1.3;color:#111}
 .guide-fold .guide-cover,html[data-print-mode] .guide-fold .guide-cover{min-height:0;background:white;color:#111;border:0;margin:0 0 3mm}
 .guide-fold .cover-copy,html[data-print-mode] .guide-fold .cover-copy{padding:0}
 .guide-fold .cover-copy h1,html[data-print-mode] .guide-fold .cover-copy h1{font-size:12pt;color:#111;margin:0 0 2mm}
-html[data-print-mode] .guide-fold .cover-brand,html[data-print-mode] .guide-fold .cover-label,html[data-print-mode] .guide-fold .cover-meta{font-size:8pt;letter-spacing:0;margin:0 0 1mm}
+html[data-print-mode] .guide-fold .cover-brand,html[data-print-mode] .guide-fold .cover-label,html[data-print-mode] .guide-fold .cover-meta{font-size:${foldLayout.typography.metadataPt}pt;letter-spacing:0;margin:0 0 1mm}
 html[data-fold-group="ordinary"] [data-fold-group="erasure"],html[data-fold-group="erasure"] [data-fold-group="ordinary"]{display:none}
 @media screen{body.guide-fold{max-width:90mm}.guide-fold .fold-section{margin-top:8mm}}
 `;
-}
-
-function foldSections(rendered: string, credentials: boolean, locale: string): string {
-  const continued = locale === 'pl' ? 'Sekcja / ciąg dalszy' : 'Section / continued';
-  return rendered
-    .split(/<div class="page-break"><\/div>/u)
-    .map((section) => {
-      const heading = /<h2(?:\s[^>]*)?>(.*?)<\/h2>/isu.exec(section);
-      const group = credentials && section.includes('class="credential-warning"') ? 'erasure' : 'ordinary';
-      const body = heading ? section.replace(heading[0], '') : section;
-      return `<table class="fold-section" data-fold-group="${group}"><thead><tr><th>${heading?.[0] ?? ''}<div class="continuation">${continued}</div></th></tr></thead><tbody><tr><td>${body}</td></tr></tbody></table>`;
-    })
-    .join('');
 }
 
 function guideHtml(
@@ -276,12 +264,16 @@ function guideHtml(
   rendered: string,
   brand: GuideBrand,
   output: string,
+  policy?: ExecutionPolicy,
 ): string {
   const heading = /<h1(?:\s[^>]*)?>(.*?)<\/h1>/isu.exec(rendered);
   const title = heading?.[1] ?? escapeHtml(productName);
   let body = heading ? rendered.replace(heading[0], '') : rendered;
   const compact = guideFormat(output).size === 'fold';
-  if (compact) body = foldSections(body, editionKind(output) === 'credentials', locale);
+  const folded = compact
+    ? renderFoldSections(body, editionKind(output) === 'credentials', locale === 'pl' ? 'pl' : 'en', policy)
+    : { html: body, styles: '' };
+  body = folded.html;
   const cover = guideCover(output, locale, title, productName, version, brand);
   const language = locale === 'pl' ? 'pl' : 'en';
   const context =
@@ -289,7 +281,7 @@ function guideHtml(
       ? 'Instrukcja ogólna. Stan konkretnego telefonu potwierdza jego raport przekazania.'
       : 'General instructions. Use the handoff report for the status of a specific phone.';
   const sizeClass = guideFormat(output).size === 'fold' ? ' class="guide-fold"' : '';
-  return `<!doctype html><html lang="${language}"><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src file: data:; font-src file: data:"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(productName)} - ${escapeHtml(title.replace(/<[^>]*>/gu, ''))}</title><style>${guideStyles(brand, compact)}</style></head><body data-guide-kind="${editionKind(output)}"${sizeClass}>${compact ? `<div data-fold-group="ordinary">${cover}<p>${foldPrintingInstructions(language)}</p></div>` : cover}<main class="guide-content"><p class="html-edition">${escapeHtml(productName)} | ${version} | ${locale.toUpperCase()} | ${context}</p>${body}</main></body></html>`;
+  return `<!doctype html><html lang="${language}"><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src file: data:; font-src file: data:"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(productName)} - ${escapeHtml(title.replace(/<[^>]*>/gu, ''))}</title><style>${guideStyles(brand, compact)}${folded.styles}</style></head><body data-guide-kind="${editionKind(output)}"${sizeClass}>${compact ? `<div data-fold-group="ordinary">${cover}<p>${foldPrintingInstructions(language)}</p></div>` : cover}<main class="guide-content"><p class="html-edition">${escapeHtml(productName)} | ${version} | ${locale.toUpperCase()} | ${context}</p>${body}</main></body></html>`;
 }
 
 function indexLabel(name: string): string {
@@ -394,7 +386,7 @@ async function renderGuidePdfs(
           document.documentElement.dataset['printMode'] = selected;
         }, mode);
         const pdf = output.slice(0, -extname(output).length) + `-${mode}.pdf`;
-        if (mode === 'office') await renderOfficePdf(page, pdf, productName, brand, format);
+        if (mode === 'office') await renderOfficePdf(page, pdf, productName, brand);
         else await renderPrintPdf(page, pdf, productName, brand, format);
       }
     }
@@ -436,9 +428,9 @@ async function renderFoldPdf(page: Page, output: string, destination: string): P
     });
 }
 
-function footerOptions(productName: string, brand: GuideBrand, format: GuideFormat) {
-  const color = format.size === 'fold' ? '#333333' : brand.secondary;
-  const padding = format.size === 'fold' ? 10 : 18;
+function footerOptions(productName: string, brand: GuideBrand) {
+  const color = brand.secondary;
+  const padding = 18;
   return {
     displayHeaderFooter: true,
     headerTemplate: '<span></span>',
@@ -451,13 +443,12 @@ async function renderOfficePdf(
   path: string,
   productName: string,
   brand: GuideBrand,
-  format: GuideFormat,
 ): Promise<void> {
   await page.pdf({
     path,
     printBackground: true,
     preferCSSPageSize: true,
-    ...footerOptions(productName, brand, format),
+    ...footerOptions(productName, brand),
   });
 }
 
@@ -475,7 +466,7 @@ async function renderPrintPdf(
     margin: { top: '0', right: '0', bottom: '0', left: '0' },
     printBackground: true,
     preferCSSPageSize: false,
-    ...footerOptions(productName, brand, format),
+    ...footerOptions(productName, brand),
   });
   try {
     await setPrintPageBoxes(path, format);
@@ -591,7 +582,7 @@ async function renderGuideHtmlSources(
       'src="../../assets/',
       'src="assets/',
     );
-    const html = guideHtml(productName, version, locale, rendered, brand, path);
+    const html = guideHtml(productName, version, locale, rendered, brand, path, policy);
     const outputPath = path.slice('guides/source/markdown/'.length).replace(/\.md$/u, '.html');
     editions.push({ sourcePath: path, outputPath, html });
   }

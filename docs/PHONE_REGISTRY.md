@@ -148,8 +148,7 @@ browser profile are removed after success or failure. Console output contains on
 export metadata. The plaintext PDF remains sensitive: protect it and remove it when
 finished, accounting for backups and printer queues.
 
-Print landscape A4 at **100% / actual size, single-sided**. Check the 50 mm scale, cut solid lines and fold dashed lines with printing inside to 68 × 100 mm. Stack slips by number. Every continuation page identifies the
-asset and profile. Keep destructive credential sheets detached and sealed separately
+Print landscape A4 at **100% / actual size, single-sided**. Check the 50 mm scale, cut solid lines and fold dashed lines with printing inside to 68 × 100 mm. Stack slips by number. Every continuation panel repeats the exact asset identifier and full profile identity in its reserved header. Body/values use 10 pt type; state/date metadata uses at least 8 pt. Keep destructive credential sheets detached and sealed separately
 from ordinary credentials. Never test duress or send an Oblivion key as a test. Match
 the asset to the phone and report, privately verify ordinary unlocks, and seal for
 the recipient. Store the completed insert securely apart from the phone. The insert

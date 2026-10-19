@@ -1,5 +1,6 @@
 import { PDFDocument, StandardFonts, degrees, rgb } from 'pdf-lib';
 import type { PDFFont, PDFPage } from 'pdf-lib';
+import { foldLayout } from './fold-layout.js';
 
 const pt = (mm: number): number => (mm * 72) / 25.4;
 export interface FoldPlacement {
@@ -28,9 +29,9 @@ export async function imposeFoldPacket(
   const output = await PDFDocument.create();
   const font = await output.embedFont(StandardFonts.Helvetica);
   const manifest: FoldManifest = {
-    sheetSizeMm: [297, 210],
-    panelSizeMm: [68, 100],
-    slipSizeMm: [136, 100],
+    sheetSizeMm: [...foldLayout.sheetMm],
+    panelSizeMm: [...foldLayout.panelMm],
+    slipSizeMm: [...foldLayout.slipMm],
     sheets: 0,
     panels: 0,
     placements: [],
@@ -56,25 +57,34 @@ async function imposeGroup(
     source,
     pages.map((_, index) => index),
   );
-  for (let start = 0; start < copied.length; start += 8) {
-    const sheet = output.addPage([pt(297), pt(210)]);
+  const perSheet = foldLayout.grid.columns * foldLayout.grid.rows;
+  for (let start = 0; start < copied.length; start += perSheet) {
+    const sheet = output.addPage([pt(foldLayout.sheetMm[0]), pt(foldLayout.sheetMm[1])]);
     manifest.sheets++;
-    for (let slot = 0; slot < 8; slot++) {
-      const x = 12.5 + (slot % 4) * 68;
-      const y = slot < 4 ? 105 : 5;
+    for (let slot = 0; slot < perSheet; slot++) {
+      const x = foldLayout.marginsMm[0] + (slot % foldLayout.grid.columns) * foldLayout.panelMm[0];
+      const y =
+        foldLayout.sheetMm[1] -
+        foldLayout.marginsMm[1] -
+        (Math.floor(slot / foldLayout.grid.columns) + 1) * foldLayout.panelMm[1];
       const panel = copied[start + slot];
       if (!panel) continue;
       // Embed a copied page without changing its physical scale.
       if (panel.node.Contents()) {
         const embedded = await output.embedPage(panel);
-        sheet.drawPage(embedded, { x: pt(x), y: pt(y), width: pt(68), height: pt(100) });
+        sheet.drawPage(embedded, {
+          x: pt(x),
+          y: pt(y),
+          width: pt(foldLayout.panelMm[0]),
+          height: pt(foldLayout.panelMm[1]),
+        });
       }
-      const slip = slipOffset + Math.floor((start + slot) / 2) + 1;
+      const slip = slipOffset + Math.floor((start + slot) / foldLayout.grid.panelsPerSlip) + 1;
       const number = manifest.panels + 1;
       sheet.drawText(`${group.name} | Slip ${slip} | Panel ${number}`, {
-        x: pt(x + 4),
+        x: pt(x + foldLayout.content.sideMm),
         y: pt(y + 3),
-        size: 8,
+        size: foldLayout.typography.metadataPt,
         font,
       });
       manifest.placements.push({
@@ -90,12 +100,15 @@ async function imposeGroup(
     }
     drawMarks(sheet, font);
   }
-  return Math.ceil(pages.length / 2);
+  return Math.ceil(pages.length / foldLayout.grid.panelsPerSlip);
 }
 
 function validatePanels(pages: PDFPage[]): void {
   for (const page of pages) {
-    if (Math.abs(page.getWidth() - pt(68)) > 1 || Math.abs(page.getHeight() - pt(100)) > 1)
+    if (
+      Math.abs(page.getWidth() - pt(foldLayout.panelMm[0])) > 1 ||
+      Math.abs(page.getHeight() - pt(foldLayout.panelMm[1])) > 1
+    )
       throw new Error('Fold packet source panels must be 68 x 100 mm');
   }
 }
@@ -109,41 +122,49 @@ function drawMarks(sheet: PDFPage, font: PDFFont): void {
       color: rgb(0.35, 0.35, 0.35),
       ...(fold ? { dashArray: [2, 2] } : {}),
     });
-  for (const x of [12.5, 148.5, 284.5]) line(x, 5, x, 205);
-  for (const y of [5, 105, 205]) line(12.5, y, 284.5, y);
-  for (const x of [80.5, 216.5]) line(x, 5, x, 205, true);
-  // Side margin keeps the scale check clear of every cut slip.
-  line(6, 20, 6, 70);
-  line(5, 20, 7, 20);
-  line(5, 70, 7, 70);
-  sheet.drawText('50 mm', { x: pt(10), y: pt(38), size: 8, font, rotate: degrees(90) });
+  const [mx, my] = foldLayout.marginsMm;
+  const [sw, sh] = foldLayout.sheetMm;
+  const [pw, ph] = foldLayout.panelMm;
+  const slipsAcross = foldLayout.grid.columns / foldLayout.grid.panelsPerSlip;
+  for (let i = 0; i <= slipsAcross; i++)
+    line(mx + i * foldLayout.slipMm[0], my, mx + i * foldLayout.slipMm[0], sh - my);
+  for (let i = 0; i <= foldLayout.grid.rows; i++) line(mx, my + i * ph, sw - mx, my + i * ph);
+  for (let i = 0; i < slipsAcross; i++)
+    line(mx + pw + i * foldLayout.slipMm[0], my, mx + pw + i * foldLayout.slipMm[0], sh - my, true);
+  const scale = foldLayout.scale;
+  line(scale.xMm, scale.yMm, scale.xMm, scale.yMm + scale.lengthMm);
+  line(scale.xMm - 1, scale.yMm, scale.xMm + 1, scale.yMm);
+  line(scale.xMm - 1, scale.yMm + scale.lengthMm, scale.xMm + 1, scale.yMm + scale.lengthMm);
+  sheet.drawText(`${scale.lengthMm} mm`, {
+    x: pt(scale.labelXMm),
+    y: pt(scale.labelYMm),
+    size: foldLayout.typography.metadataPt,
+    font,
+    rotate: degrees(90),
+  });
 }
 
 /** Shared compact print geometry. Panel footer space is reserved for imposition labels. */
 export const foldPanelStyles = `
-@page{size:68mm 100mm;margin:4mm 4mm 10mm}
+@page{size:${foldLayout.panelMm[0]}mm ${foldLayout.panelMm[1]}mm;margin:${foldLayout.content.topMm}mm ${foldLayout.content.sideMm}mm ${foldLayout.content.bottomMm}mm}
 *{box-sizing:border-box}
-body{font:10pt/1.3 'DejaVu Sans',sans-serif;color:#111;margin:0;overflow-wrap:anywhere}
+body{font:${foldLayout.typography.bodyPt}pt/1.3 'DejaVu Sans',sans-serif;color:#111;margin:0;overflow-wrap:anywhere}
 h1,h2{font-size:11pt;line-height:1.2;margin:0 0 2mm;color:#111}
-h3{font-size:10pt;line-height:1.2;margin:2mm 0 1mm;color:#111}
+h3{font-size:${foldLayout.typography.bodyPt}pt;line-height:1.2;margin:2mm 0 1mm;color:#111}
 p,ul,ol{margin:0 0 2mm}ul,ol{padding-left:5mm}li{margin:0 0 1mm}
-p{orphans:2;widows:2}a{color:#111}pre{font:10pt/1.3 monospace;white-space:pre-wrap;margin:1mm 0;overflow-wrap:anywhere}
-.fold-section{width:100%;border-collapse:collapse;table-layout:fixed;break-before:page;margin:0;font:inherit}
-.fold-section:first-child{break-before:auto}
-.fold-section thead{display:table-header-group}
-.fold-section th,.fold-section td{border:0;background:white;color:#111;padding:0;text-align:left;font:inherit;overflow-wrap:anywhere}
-.fold-section th{padding-bottom:2mm}
-.fold-section .continuation{font-size:8pt;font-weight:normal}
-.fold-section tr{break-inside:auto}
-.write-line{min-height:8mm;padding-bottom:8mm;border-bottom:.2mm dotted #555;margin:0 0 2mm;break-inside:avoid;font-size:10pt;line-height:1.2}
-.profile-identity{font-size:10pt}
+p{orphans:2;widows:2}a{color:#111}pre{font:${foldLayout.typography.bodyPt}pt/1.3 monospace;white-space:pre-wrap;margin:1mm 0;overflow-wrap:anywhere}
+.fold-section{break-before:page;margin:0;font:inherit}
+.fold-section .continuation{font-size:${foldLayout.typography.metadataPt}pt;font-weight:normal}
+@media print{.fold-section>h2,.fold-section>.continuation{display:none}}
+.write-line{min-height:${foldLayout.content.writingMm}mm;padding-bottom:${foldLayout.content.writingMm}mm;border-bottom:.2mm dotted #555;margin:0 0 2mm;break-inside:avoid;font-size:${foldLayout.typography.bodyPt}pt;line-height:1.2}
+.profile-identity{font-size:${foldLayout.typography.bodyPt}pt}
 .credential-warning,aside{border:.3mm solid #111;padding:2mm;margin:0 0 2mm}
-.state{font-size:8pt;font-weight:bold}
+.state{font-size:${foldLayout.typography.metadataPt}pt;font-weight:bold}
 @media print{.html-edition{display:none}}
 `;
 
 export function foldPrintingInstructions(locale: 'en' | 'pl'): string {
   return locale === 'pl'
-    ? 'Drukuj A4 poziomo, jednostronnie, w skali 100% (rozmiar rzeczywisty). Sprawdź odcinek 50 mm. Tnij linie ciągłe; złóż linie przerywane, drukiem do środka. Ułóż według numerów kart i paneli. Rozmiar po złożeniu: 68 × 100 mm. Karty wymazania zapieczętuj oddzielnie.'
-    : 'Print A4 landscape, single-sided, at actual size / 100%. Check the 50 mm scale. Cut solid lines; fold dashed lines with printing inside. Stack by slip and panel number. Folded size: 68 × 100 mm. Seal erasure slips separately.';
+    ? `Drukuj A4 poziomo, jednostronnie, w skali 100% (rozmiar rzeczywisty). Sprawdź odcinek ${foldLayout.scale.lengthMm} mm. Tnij linie ciągłe; złóż linie przerywane, drukiem do środka. Ułóż według numerów kart i paneli. Rozmiar po złożeniu: ${foldLayout.panelMm[0]} × ${foldLayout.panelMm[1]} mm. Karty wymazania zapieczętuj oddzielnie.`
+    : `Print A4 landscape, single-sided, at actual size / 100%. Check the ${foldLayout.scale.lengthMm} mm scale. Cut solid lines; fold dashed lines with printing inside. Stack by slip and panel number. Folded size: ${foldLayout.panelMm[0]} × ${foldLayout.panelMm[1]} mm. Seal erasure slips separately.`;
 }

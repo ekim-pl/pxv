@@ -147,25 +147,39 @@ export const sharedApkEffectSchema = z
       distinct(value.users, (item) => String(item.user.serialNo)),
     'Duplicate shared APK user identity',
   );
+const redirectHostsSchema = z
+  .array(z.string().regex(/^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$/u))
+  .refine(uniqueStrings, 'Duplicate redirect host');
+export const artifactSourceSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('direct'), url: https, redirectHosts: redirectHostsSchema.optional() }).strict(),
+  z.object({ kind: z.literal('fdroidcl') }).strict(),
+  z
+    .object({
+      kind: z.literal('fdroid-repository'),
+      url: https,
+      fingerprint: sha256,
+      maxAgeDays: integer.positive().max(365).default(30),
+      redirectHosts: redirectHostsSchema.optional(),
+    })
+    .strict(),
+]);
 export const artifactPolicySchema = z
   .object({
     packageId,
     versionCode: integer.positive(),
     sha256,
     signerSha256: sha256,
+    source: artifactSourceSchema.optional(),
     path: nonempty.optional(),
     url: https.optional(),
     repositoryId: id.optional(),
-    redirectHosts: z
-      .array(z.string().regex(/^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$/u))
-      .refine(uniqueStrings, 'Duplicate redirect host')
-      .optional(),
+    redirectHosts: redirectHostsSchema.optional(),
   })
   .strict()
-  .refine(
-    (value) => Boolean(value.path ?? value.url ?? value.repositoryId),
-    'An artifact requires a path, URL, or repository',
-  );
+  .refine((value) => {
+    if (value.source) return !value.path && !value.url && !value.repositoryId && !value.redirectHosts;
+    return Boolean(value.path ?? value.url ?? value.repositoryId);
+  }, 'An artifact requires a source; source objects cannot be combined with legacy source fields');
 export const settingPolicySchema = z
   .object({
     namespace: z.enum(['system', 'secure', 'global']),

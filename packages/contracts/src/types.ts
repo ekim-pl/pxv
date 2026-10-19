@@ -32,13 +32,28 @@ export interface AndroidUserIdentity {
   name: string;
 }
 
+export type ArtifactSource =
+  | { kind: 'direct'; url: string; redirectHosts?: string[] }
+  | { kind: 'fdroidcl' }
+  | {
+      kind: 'fdroid-repository';
+      url: string;
+      fingerprint: string;
+      maxAgeDays?: number;
+      redirectHosts?: string[];
+    };
+
 export interface ArtifactPolicy {
   packageId: string;
   versionCode: number;
   sha256: string;
   signerSha256: string;
+  source?: ArtifactSource;
+  /** Local APK input or the sealed snapshot path in a reviewed plan. */
   path?: string;
+  /** Legacy direct URL source, retained for existing policies. */
   url?: string;
+  /** Legacy reference to a shared authenticated repository. */
   repositoryId?: string;
   redirectHosts?: string[];
 }

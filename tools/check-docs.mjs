@@ -67,7 +67,7 @@ function documentLinks(text) {
 for (const file of files) {
   const text = await readFile(join(root, file), 'utf8');
   if (
-    /(?<!\w)(?:python3?\s+-m|pip3?\s+install|pxv_app|fdroidcl|PXV_PYTHON|--coverage\.(?:reportsDirectory|reporter)|rustfmt|[Cc]lippy)\b/u.test(
+    /(?<!\w)(?:python3?\s+-m|pip3?\s+install|pxv_app|PXV_PYTHON|--coverage\.(?:reportsDirectory|reporter)|rustfmt|[Cc]lippy)\b/u.test(
       text,
     )
   )

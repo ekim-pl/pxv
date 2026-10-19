@@ -184,3 +184,5 @@ export async function writeHandoff(
 
 export { writeCredentialInsert } from './credential-insert.js';
 export { imposeFoldPacket, foldPanelStyles, foldPrintingInstructions } from './fold-packet.js';
+
+export { foldLayout, validateFoldLayoutMetadata, foldHeaderStyle } from './fold-layout.js';

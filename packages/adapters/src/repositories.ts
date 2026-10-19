@@ -1,11 +1,12 @@
 import { object, positiveInteger, text, repositoryFilename } from './repository-values.js';
 import { parseDocument, type ArtifactPolicy, type RepositoryPolicy } from '@pxv/contracts';
 import { createHash } from 'node:crypto';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { lstat, mkdtemp, readFile, realpath, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { AdapterError, checked, packageId, sha256Pin, type CommandRunner } from './command.js';
 import { download, fileDigest } from './files.js';
+import { cacheSignedFiles } from './artifact-cache.js';
 
 const MAX_INDEX_BYTES = 128 * 1024 * 1024;
 type Row = Record<string, unknown>;
@@ -26,6 +27,7 @@ export interface RepositoryEvidence {
   indexSha256: string;
   format: 'v1' | 'v2';
   maxAgeDays: number;
+  signatureMaterialId?: string;
 }
 export interface RepositoryApk extends ArtifactPolicy {
   compatibility: { minSdk: number; maxSdk?: number; abis: string[] };
@@ -43,6 +45,7 @@ export interface RepositoryOptions {
   runner: CommandRunner;
   verifierPath: string;
   freshness: RepositoryFreshness;
+  cacheRoot?: string;
   java?: string;
   now?: () => number;
 }
@@ -60,12 +63,14 @@ export class RepositoryService {
   readonly runner: CommandRunner;
   readonly verifierPath: string;
   readonly freshness: RepositoryFreshness;
+  readonly cacheRoot?: string;
   readonly java: string;
   readonly now: () => number;
   constructor(options: RepositoryOptions) {
     this.runner = options.runner;
     this.verifierPath = options.verifierPath;
     this.freshness = options.freshness;
+    if (options.cacheRoot) this.cacheRoot = options.cacheRoot;
     this.java = options.java ?? 'java';
     this.now = options.now ?? Date.now;
   }
@@ -138,14 +143,31 @@ export class RepositoryService {
       }
       this.assertFresh(repository, timestamp, floor);
       const packages = this.normalize(repository, object(index['packages'], 'package set'), isV2);
+      const entrySha256 = await fileDigest(jar, 32 * 1024 * 1024, options.signal);
+      const materialFiles = isV2
+        ? [
+            { name: 'entry.jar', source: jar, sha256: entrySha256, limit: 4 * 1024 * 1024 },
+            {
+              name: 'index.json',
+              source: join(directory, 'index.json'),
+              sha256: indexSha256,
+              limit: MAX_INDEX_BYTES,
+            },
+          ]
+        : [{ name: 'index-v1.jar', source: jar, sha256: entrySha256, limit: 32 * 1024 * 1024 }];
+      const format = isV2 ? 'v2' : 'v1';
+      const signatureMaterialId = repositoryMaterialId(format, entrySha256, indexSha256);
+      const cacheRoot = options.readOnly ? undefined : this.cacheRoot;
+      if (cacheRoot) await cacheSignedFiles(cacheRoot, signatureMaterialId, materialFiles);
       const evidence: RepositoryEvidence = {
         url,
         signerSha256: signer,
         timestamp,
-        entrySha256: await fileDigest(jar, 32 * 1024 * 1024, options.signal),
+        entrySha256,
         indexSha256,
-        format: isV2 ? 'v2' : 'v1',
+        format,
         maxAgeDays: repository.maxAgeDays,
+        ...(cacheRoot ? { signatureMaterialId } : {}),
       };
       if (!options.readOnly)
         await this.freshness.advance(this.key(repository), floor, { signerSha256: signer, timestamp });
@@ -247,12 +269,72 @@ export class RepositoryService {
     const key = this.key(repository);
     const floor = await this.freshness.read(key);
     this.assertFresh(repository, evidence.timestamp, floor);
+    if (this.cacheRoot) await this.validateCachedSignatures(repository, evidence);
     if (advance)
       await this.freshness.advance(key, floor, {
         signerSha256: evidence.signerSha256,
         timestamp: evidence.timestamp,
       });
   }
+  private async validateCachedSignatures(
+    repository: RepositoryPolicy,
+    evidence: RepositoryEvidence,
+  ): Promise<void> {
+    const expectedId = repositoryMaterialId(evidence.format, evidence.entrySha256, evidence.indexSha256);
+    if (evidence.signatureMaterialId !== expectedId)
+      throw new AdapterError('Authenticated repository signature material is not retained');
+    const directory = join(this.cacheRoot!, 'repository-signatures', expectedId);
+    if ((await realpath(directory)) !== resolve(directory) || !(await lstat(directory)).isDirectory())
+      throw new AdapterError('Cached repository signature directory is invalid');
+    const signer = sha256Pin(repository.signerSha256);
+    if (evidence.format === 'v2') return this.validateV2Signature(directory, signer, evidence);
+    const jar = join(directory, 'index-v1.jar');
+    const actual = await fileDigest(jar, 32 * 1024 * 1024);
+    if (actual !== evidence.entrySha256 || actual !== evidence.indexSha256)
+      throw new AdapterError('Cached authenticated v1 index has changed');
+    const index = await this.verifyJar(jar, signer, 'index-v1.json');
+    const timestamp = positiveInteger(
+      object(index['repo'], 'repository')['timestamp'],
+      'repository timestamp',
+    );
+    if (timestamp !== evidence.timestamp)
+      throw new AdapterError('Cached authenticated v1 index timestamp differs from the reviewed evidence');
+  }
+  private async validateV2Signature(
+    directory: string,
+    signer: string,
+    evidence: RepositoryEvidence,
+  ): Promise<void> {
+    const jar = join(directory, 'entry.jar');
+    if ((await fileDigest(jar, 4 * 1024 * 1024)) !== evidence.entrySha256)
+      throw new AdapterError('Cached authenticated repository entry has changed');
+    const entry = await this.verifyJar(jar, signer, 'entry.json');
+    const descriptor = object(entry['index'], 'v2 index descriptor');
+    const size = positiveInteger(descriptor['size'], 'v2 index size');
+    if (size > MAX_INDEX_BYTES) throw new AdapterError('Authenticated repository index exceeds size limit');
+    const checksum = sha256Pin(text(descriptor['sha256'], 'v2 index hash'));
+    repositoryFilename(descriptor['name'], '.json');
+    const indexPath = join(directory, 'index.json');
+    const indexSha256 = await fileDigest(indexPath, size);
+    const bytes = await readFile(indexPath);
+    if (bytes.length !== size || indexSha256 !== checksum || indexSha256 !== evidence.indexSha256)
+      throw new AdapterError('Cached repository index differs from its signed entry');
+    const index = object(strictJson(bytes.toString('utf8')), 'v2 repository index');
+    const timestamp = positiveInteger(
+      object(index['repo'], 'repository')['timestamp'],
+      'repository timestamp',
+    );
+    if (entry['timestamp'] !== timestamp || timestamp !== evidence.timestamp)
+      throw new AdapterError('Cached repository entry and index timestamps disagree');
+  }
+}
+
+function repositoryMaterialId(format: 'v1' | 'v2', entrySha256: string, indexSha256: string): string {
+  const material =
+    format === 'v2'
+      ? `entry.jar\0${entrySha256}\0index.json\0${indexSha256}`
+      : `index-v1.jar\0${entrySha256}`;
+  return createHash('sha256').update(material).digest('hex');
 }
 
 function packageVersions(raw: unknown, v2: boolean): unknown[] {

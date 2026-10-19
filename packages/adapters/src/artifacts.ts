@@ -1,6 +1,7 @@
 import { parseApkCompatibility } from './apk-compatibility.js';
 import type { ArtifactPolicy } from '@pxv/contracts';
-import { mkdtemp, rm, unlink } from 'node:fs/promises';
+import { constants } from 'node:fs';
+import { mkdtemp, open, rm, unlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { AdapterError, checked, packageId, sha256Pin, type CommandRunner } from './command.js';
@@ -23,6 +24,30 @@ export interface ArtifactOptions {
   aapt?: string;
   apksigner?: string;
   cacheRoot?: string;
+}
+
+interface CachedSignatureEvidence {
+  schemaVersion: 1;
+  packageId: string;
+  versionCode: number;
+  sha256: string;
+  signerSha256: string;
+  signatureBytes: 'embedded-in-artifact.apk';
+  verifier: 'apksigner';
+  verification: 'passed';
+}
+
+function cachedSignatureEvidence(artifact: VerifiedArtifact): CachedSignatureEvidence {
+  return {
+    schemaVersion: 1,
+    packageId: artifact.packageId,
+    versionCode: artifact.versionCode,
+    sha256: artifact.sha256,
+    signerSha256: artifact.signerSha256,
+    signatureBytes: 'embedded-in-artifact.apk',
+    verifier: 'apksigner',
+    verification: 'passed',
+  };
 }
 
 function currentApkSigner(verification: string): string {
@@ -141,8 +166,43 @@ export class ArtifactService {
       {
         root: join(this.cacheRoot, 'apk'),
         key: sha256Pin(policy.sha256),
-        build: (directory) => this.privateSnapshot(policy, join(directory, 'artifact.apk'), signal),
-        verify: (directory) => this.inspect(join(directory, 'artifact.apk'), policy, signal),
+        build: async (directory) => {
+          const value = await this.privateSnapshot(policy, join(directory, 'artifact.apk'), signal);
+          await cachePlanReference(join(directory, 'signature.json'), cachedSignatureEvidence(value));
+          return value;
+        },
+        verify: async (directory) => {
+          const value = await this.inspect(join(directory, 'artifact.apk'), policy, signal);
+          const evidencePath = join(directory, 'signature.json');
+          const expected = cachedSignatureEvidence(value);
+          let retained: unknown;
+          let evidenceFile: Awaited<ReturnType<typeof open>>;
+          try {
+            evidenceFile = await open(
+              evidencePath,
+              constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
+            );
+          } catch (error) {
+            if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+              // Upgrade older content-addressed APK entries after re-verifying the APK bytes.
+              await cachePlanReference(evidencePath, expected);
+              return value;
+            }
+            throw new AdapterError('Cached APK signature evidence is malformed');
+          }
+          try {
+            const info = await evidenceFile.stat();
+            if (!info.isFile() || info.size < 1 || info.size > 4096)
+              throw new AdapterError('Cached APK signature evidence is malformed');
+            retained = JSON.parse((await evidenceFile.readFile('utf8')).trim()) as unknown;
+          } catch {
+            throw new AdapterError('Cached APK signature evidence is malformed');
+          } finally {
+            await evidenceFile.close();
+          }
+          assertCachedSignatureEvidence(retained, expected);
+          return value;
+        },
         contentId: (value) => value.sha256,
         relocate: (value, directory) => ({ ...value, path: join(directory, 'artifact.apk') }),
       },
@@ -205,4 +265,16 @@ export class ArtifactService {
       await rm(directory, { recursive: true, force: true });
     }
   }
+}
+
+function assertCachedSignatureEvidence(retained: unknown, expected: CachedSignatureEvidence): void {
+  if (
+    !retained ||
+    typeof retained !== 'object' ||
+    Array.isArray(retained) ||
+    JSON.stringify(Object.keys(retained).sort()) !== JSON.stringify(Object.keys(expected).sort()) ||
+    JSON.stringify(retained, Object.keys(retained).sort()) !==
+      JSON.stringify(expected, Object.keys(expected).sort())
+  )
+    throw new AdapterError('Cached APK signature evidence does not match the verified APK');
 }

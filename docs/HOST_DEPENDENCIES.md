@@ -8,7 +8,7 @@ The supervisor is a separate TypeScript process compiled by `pnpm build` in `@px
 
 ## Operator tools
 
-Host diagnosis validates executable paths and reported versions/capabilities for ADB, fastboot, aapt, apksigner, Java and OpenSSH signing tools. Install current reviewed official Android tools rather than assuming a distribution package is sufficient. USB device permissions must permit the caller; avoid running provisioning as root.
+Host diagnosis validates executable paths and reported versions/capabilities for ADB, fastboot, aapt, apksigner, Java and OpenSSH signing tools. `fdroidcl` is an optional host tool and is required only for apps whose policy selects that source mode. Follow the [`fdroidcl` installation instructions](https://github.com/Hoverth/fdroidcl#quickstart) when needed. Install current reviewed official Android tools rather than assuming a distribution package is sufficient. USB device permissions must permit the caller; avoid running provisioning as root.
 
 The reviewed container toolchain includes Platform Tools 37.0.1, Android platform 35 and Build Tools 35.0.0. The repository records exact archive SHA-256 values. Containers use a digest-pinned Debian base and immutable signed Debian snapshot packages for Java/OpenSSH and support libraries. Public archive notices remain with the tools.
 

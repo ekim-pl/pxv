@@ -13,7 +13,11 @@ async function dockerHost(context: CliContext): Promise<number | undefined> {
   if (command === 'doctor') {
     const report = await inspectHost();
     output(report);
-    return report.supported && report.supervisor && report.tools.every((tool) => tool.compatible) ? 0 : 4;
+    return report.supported &&
+      report.supervisor &&
+      report.tools.every((tool) => tool.optional || tool.compatible)
+      ? 0
+      : 4;
   }
   if (command === 'docker-prepare') {
     await confirmation(io, 'Prepare private Docker control, key and extension directories?', flag('yes'));

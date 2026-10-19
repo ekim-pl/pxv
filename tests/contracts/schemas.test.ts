@@ -62,6 +62,20 @@ describe('policy validation', () => {
     expect(() => validateObservation({ ...observation, proof: true })).toThrow();
   });
 
+  it('accepts explicit artifact sources and rejects mixed legacy sources', () => {
+    const pins = { packageId: 'org.example.app', versionCode: 1, sha256: hashA, signerSha256: hashB };
+    const source = { kind: 'direct', url: 'https://example.org/app.apk' };
+    expect(validateArtifact({ ...pins, source }).source).toEqual(source);
+    expect(validateArtifact({ ...pins, source: { kind: 'fdroidcl' } }).source).toEqual({ kind: 'fdroidcl' });
+    for (const legacy of [
+      { path: '/tmp/app.apk' },
+      { url: source.url },
+      { repositoryId: 'official' },
+      { redirectHosts: [] },
+    ])
+      expect(() => validateArtifact({ ...pins, source, ...legacy })).toThrow('cannot be combined');
+  });
+
   it('normalizes SHA-256 text and requires actual artifact source/trust pins', () => {
     expect(
       validateArtifact({
@@ -74,7 +88,7 @@ describe('policy validation', () => {
     ).toBe(hashA);
     expect(() =>
       validateArtifact({ packageId: 'org.example.app', versionCode: 1, sha256: hashA, signerSha256: hashB }),
-    ).toThrow('requires a path');
+    ).toThrow('requires a source');
     expect(() =>
       validateArtifact({
         packageId: 'app',

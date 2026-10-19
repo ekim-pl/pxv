@@ -72,9 +72,9 @@
       "settings": [],
       "permissions": [],
       "vpn": {
-        "packageId": null,
-        "alwaysOn": false,
-        "lockdown": false
+        "packageId": "com.celzero.bravedns",
+        "alwaysOn": true,
+        "lockdown": true
       },
       "defaultLocale": "en-US",
       "apps": [
@@ -89,9 +89,9 @@
       "settings": [],
       "permissions": [],
       "vpn": {
-        "packageId": null,
-        "alwaysOn": false,
-        "lockdown": false
+        "packageId": "com.celzero.bravedns",
+        "alwaysOn": true,
+        "lockdown": true
       },
       "defaultLocale": "pl-PL",
       "apps": [
@@ -108,9 +108,9 @@
       "settings": [],
       "permissions": [],
       "vpn": {
-        "packageId": null,
-        "alwaysOn": false,
-        "lockdown": false
+        "packageId": "com.celzero.bravedns",
+        "alwaysOn": true,
+        "lockdown": true
       },
       "defaultLocale": "pl-PL",
       "apps": [
@@ -119,5 +119,11 @@
       ]
     }
   ],
-  "deviceSettings": []
+  "deviceSettings": [
+    {
+      "namespace": "global",
+      "key": "private_dns_mode",
+      "value": "off"
+    }
+  ]
 }

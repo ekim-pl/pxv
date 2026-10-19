@@ -41,6 +41,10 @@ PDF with A4 trim and 3 mm bleed. Quickstart/credentials create HTML and one
 136 x 100 mm slips, each folding to 68 x 100 mm. Panels are rendered at actual
 size before imposition; content reflows without reducing the 10 pt body font.
 Metadata is at least 8 pt; writing fields reserve 8 mm below each label.
+Credential panels repeat full profile identity and an asset-label writing area.
+Generic sections also repeat a blank profile/scope field. Complete these on every
+credential panel before cutting. Native CSS page-margin boxes reserve that space;
+use a Chromium version supporting them.
 Sections may span several panels. The QA manifest records physical sheets,
 logical panels, group separation and placement coordinates. Stale A5 office/
 print PDFs are removed by PDF rebuilds. Operator/user bleed PDFs are not PDF/X.
@@ -66,3 +70,8 @@ actual document build. Device status belongs to the project handoff report.
 Keep policy-build source provenance with the reviewed output and accepted report.
 Generated guide files and qa/ are local build outputs; keep reviewed copies with
 the matching release. Never put credentials or device-specific records in guides.
+
+The immutable @pxv/guides foldLayout supplies renderer and QA geometry.
+The manifest foldLayout is descriptive metadata validated against that definition,
+not editable print configuration. Real-PDF regression checks also require Poppler
+pdftohtml for typography checks.
