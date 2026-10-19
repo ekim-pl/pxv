@@ -325,7 +325,7 @@ function seedvaultCommand(name: string): CommandDefinition {
 function findCommand(positionals: string[]): CommandDefinition | undefined {
   return commands.find((item) => item.name === positionals.join(' '));
 }
-export function validateCommand(
+function validateCommand(
   positionals: string[],
   values: Record<string, unknown>,
 ): CommandDefinition | undefined {
