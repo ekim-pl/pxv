@@ -1,63 +1,7 @@
 import { afterEach, describe, expect, it, vi } from './../test-api.js';
 import { createHash } from 'node:crypto';
-import { readFile } from 'node:fs/promises';
-import type { RepositoryPolicy } from '@pxv/contracts';
-import {
-  RepositoryService,
-  repositoryFilename,
-  type CommandRunner,
-  type RepositoryEvidence,
-  type RepositoryFloor,
-} from '../../packages/adapters/src/index.js';
-const now = 1_800_000_000_000;
-const repository: RepositoryPolicy = {
-  id: 'test',
-  url: 'https://repo.example/repo',
-  signerSha256: 'a'.repeat(64),
-  redirectHosts: ['cdn.example'],
-  maxAgeDays: 30,
-};
-const row = {
-  versionCode: 7,
-  apkName: 'org.example.app_7.apk',
-  hash: 'b'.repeat(64),
-  signer: 'c'.repeat(64),
-  minSdkVersion: 28,
-  nativecode: ['arm64-v8a'],
-};
-function service() {
-  let floor: RepositoryFloor | undefined;
-  const advance = vi.fn((_key: string, old: RepositoryFloor | undefined, next: RepositoryFloor) => {
-    if (floor !== old) throw new Error('floor changed');
-    floor = next;
-    return Promise.resolve();
-  });
-  const runner: CommandRunner = {
-    run: (args) => {
-      const entry = args.at(-1);
-      const file = args.at(-3);
-      if (!file) throw new Error('Missing JAR fixture');
-      return readFile(file, 'utf8').then((stdout) => ({
-        code: 0,
-        stdout: entry === 'entry.json' || entry === 'index-v1.json' ? stdout : '',
-        stderr: '',
-      }));
-    },
-  };
-  const repo = new RepositoryService({
-    runner,
-    verifierPath: '/retained-verifier.java',
-    freshness: { read: () => Promise.resolve(floor), advance },
-    now: () => now,
-  });
-  return {
-    repo,
-    advance,
-    setFloor: (value: RepositoryFloor) => {
-      floor = value;
-    },
-  };
-}
+import { repositoryFilename, type RepositoryEvidence } from '../../packages/adapters/src/index.js';
+import { now, repository, row, repositoryFixture as service } from './repository-fixture.js';
 function stubV1(data: unknown) {
   return vi
     .fn()
@@ -264,4 +208,66 @@ it('rejects malformed authenticated SDK ranges and ABI lists rather than selecti
   const app = normalized['org.example.app']?.[0];
   expect(app?.compatibility.maxSdk).toBe(35);
   expect(app).not.toHaveProperty('redirectHosts');
+});
+
+it('selects exact versions, enforces maximum SDK, and permits ABI-independent packages', () => {
+  const { repo } = service();
+  const packages = repo.normalize(
+    repository,
+    {
+      'org.example.app': [
+        row,
+        { ...row, versionCode: 8, maxSdkVersion: 34 },
+        { ...row, versionCode: 9, nativecode: [] },
+      ],
+    },
+    false,
+  );
+  const evidence: RepositoryEvidence = {
+    url: repository.url,
+    signerSha256: repository.signerSha256,
+    timestamp: now,
+    entrySha256: 'd'.repeat(64),
+    indexSha256: 'e'.repeat(64),
+    format: 'v1',
+    maxAgeDays: 30,
+  };
+  const index = { packages, evidence };
+  const device = { sdk: 35, abis: ['arm64-v8a'] };
+  expect(repo.candidate(index, 'org.example.app', device).versionCode).toBe(9);
+  expect(repo.candidate(index, 'org.example.app', { ...device, versionCode: 7 }).versionCode).toBe(7);
+  expect(
+    repo.candidate(index, 'org.example.app', { sdk: 34, abis: ['arm64-v8a'], versionCode: 8 }).versionCode,
+  ).toBe(8);
+  for (const versionCode of [8, 10])
+    expect(() => repo.candidate(index, 'org.example.app', { ...device, versionCode })).toThrow(/no matching/);
+  expect(() => repo.candidate(index, 'org.example.absent', device)).toThrow(/no matching/);
+  expect(() => repo.candidate(index, 'org.example.app', { ...device, sdk: 0 })).toThrow(/SDK/);
+  expect(repo.candidate(index, 'org.example.app', { sdk: 35, abis: ['x86_64'] }).versionCode).toBe(9);
+});
+
+it('rejects malformed and ambiguous authenticated v2 signers and malformed SDK/ABI metadata', () => {
+  const { repo } = service();
+  const manifest = { versionCode: 7, signer: { sha256: [row.signer] } };
+  const version = { file: { name: '/app.apk', sha256: row.hash, size: 500 }, manifest };
+  const normalize = (value: unknown) =>
+    repo.normalize(
+      repository,
+      {
+        'org.example.app': { versions: { v7: value } },
+      },
+      true,
+    );
+  for (const signers of [undefined, [], [row.signer, 'd'.repeat(64)], [42], ['bad pin']])
+    expect(() => normalize({ ...version, manifest: { ...manifest, signer: { sha256: signers } } })).toThrow(
+      /signer|SHA-256/,
+    );
+  for (const change of [
+    { usesSdk: { minSdkVersion: 0 } },
+    { usesSdk: { minSdkVersion: 30, maxSdkVersion: 29 } },
+    { nativecode: 'arm64-v8a' },
+    { nativecode: ['bad ABI'] },
+  ])
+    expect(() => normalize({ ...version, manifest: { ...manifest, ...change } })).toThrow();
+  expect(normalize(version)['org.example.app']?.[0]?.compatibility).toEqual({ minSdk: 1, abis: [] });
 });
