@@ -580,6 +580,21 @@ describe('operator controller dispatch without device access', () => {
     );
     await expect(runCli(args(['host', 'unknown']), io)).rejects.toThrow(/Unknown host/);
   });
+  it('launches helper builds with approved fallback homes and a default PATH without ambient secrets', async () => {
+    for (const name of ['HOME', 'PATH', 'PXV_ANDROID_HOME', 'PXV_JAVA_HOME']) delete process.env[name];
+    process.env['ANDROID_HOME'] = '/fallback sdk';
+    process.env['JAVA_HOME'] = '/fallback jdk';
+    process.env['NPM_TOKEN'] = 'helper-secret-sentinel';
+    mocks.runCommand.mockResolvedValue({ code: 0, stdout: '', stderr: 'helper diagnostic' });
+
+    expect(await runCli(args(['host', 'build-helper', '--type', 'setup', '--yes']), io)).toBe(0);
+    expect(mocks.runCommand.mock.calls[0]?.[1]).toEqual({
+      env: { PATH: '/usr/bin:/bin', ANDROID_HOME: '/fallback sdk', JAVA_HOME: '/fallback jdk' },
+      timeoutMs: 120_000,
+    });
+    expect(output).toContain('helper diagnostic');
+  });
+
   it('pins local and registry extension installation, replacement and removal into the project', async () => {
     expect(await runCli(args(['extension', 'list']), io)).toBe(0);
     const archive = join(root, 'extension.tgz');
