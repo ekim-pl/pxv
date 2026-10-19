@@ -119,7 +119,7 @@ the encrypted database and its entire project state are rolled back together, th
 offline system cannot detect that rollback; compare with separately retained backup
 revision records and reconcile the restored copy before using it.
 
-## Prefilled private A5 insert
+## Prefilled private phone-sized insert
 
 Export the latest saved record for one enrolled phone as a recipient PDF:
 
@@ -129,8 +129,8 @@ pxv registry print-insert --project-root DIRECTORY --asset PHONE \
 ```
 
 Use `--locale pl` for Polish; English is the default. Unlock uses the same hidden
-prompt or `--passphrase-file` as other registry commands. A local Chromium executable
-is required; nothing is downloaded. The command works offline during preparation
+prompt or `--passphrase-file` as other registry commands. A local Chromium executable with CSS page-margin-box support
+is required (for repeating asset/profile headers); nothing is downloaded. The command works offline during preparation
 and does not require an accepted handoff report or connect to a phone.
 
 The PDF includes **all saved values in the latest record**, including ordinary
@@ -148,7 +148,7 @@ browser profile are removed after success or failure. Console output contains on
 export metadata. The plaintext PDF remains sensitive: protect it and remove it when
 finished, accounting for backups and printer queues.
 
-Print at actual size on A5, **single-sided**. Every continuation page identifies the
+Print landscape A4 at **100% / actual size, single-sided**. Check the 50 mm scale, cut solid lines and fold dashed lines with printing inside to 68 × 100 mm. Stack slips by number. Every continuation page identifies the
 asset and profile. Keep destructive credential sheets detached and sealed separately
 from ordinary credentials. Never test duress or send an Oblivion key as a test. Match
 the asset to the phone and report, privately verify ordinary unlocks, and seal for

@@ -11,8 +11,6 @@ const pageBreak = '<div class="page-break"></div>';
 
 const copy = {
   en: {
-    shortened: ' [shortened; use profile ID to match]',
-    policyShortened: ' [name shortened]',
     installation: 'Intended installation',
     profileCount: 'GrapheneOS profiles',
     planned: 'Planned requirements only; verify actual setup in the handoff packet.',
@@ -75,8 +73,6 @@ const copy = {
       "After restart, unlock Owner before starting secondary profiles. Know Owner's ordinary credential even if you usually use another profile.",
   },
   pl: {
-    shortened: ' [skrócono; dopasuj według ID profilu]',
-    policyShortened: ' [skrócona nazwa]',
     installation: 'Planowana instalacja',
     profileCount: 'Liczba profili GrapheneOS',
     planned: 'To plan wymagań; faktyczny stan potwierdza pakiet przekazania.',
@@ -154,14 +150,8 @@ function literal(value: string): string {
   });
 }
 
-function label(value: string, maximum: number, note: string): string {
-  const characters = [...value.replace(/\s+/gu, ' ').trim()];
-  const shortened = characters.length > maximum;
-  return literal(characters.slice(0, maximum).join('') + (shortened ? `…${note}` : ''));
-}
-
-function profileName(profile: ProfilePolicy, locale: Locale): string {
-  return label(profile.name, 80, copy[locale].shortened);
+function profileName(profile: ProfilePolicy): string {
+  return literal(profile.name);
 }
 
 function lockType(profile: ProfilePolicy, locale: Locale): string {
@@ -172,11 +162,11 @@ function lockType(profile: ProfilePolicy, locale: Locale): string {
 function identity(profile: ProfilePolicy, locale: Locale): string {
   const text = copy[locale];
   const role = profile.kind === 'owner' ? text.owner : text.secondary;
-  return `<div class="profile-identity"><strong>${text.profile}: ${profileName(profile, locale)}</strong><br>ID: ${literal(profile.id)}<br>${text.role}: ${role} · ${text.language}: ${literal(profileLocale(profile) ?? text.unspecified)}<br>${text.lock}: ${lockType(profile, locale)}</div>`;
+  return `<div class="profile-identity"><strong>${text.profile}: ${profileName(profile)}</strong><br>ID: ${literal(profile.id)}<br>${text.role}: ${role} · ${text.language}: ${literal(profileLocale(profile) ?? text.unspecified)}<br>${text.lock}: ${lockType(profile, locale)}</div>`;
 }
 
 function accountIdentity(profile: ProfilePolicy, locale: Locale): string {
-  return `<div class="profile-identity"><strong>${copy[locale].profile}: ${profileName(profile, locale)}</strong><br>ID: ${literal(profile.id)}</div>`;
+  return `<div class="profile-identity"><strong>${copy[locale].profile}: ${profileName(profile)}</strong><br>ID: ${literal(profile.id)}</div>`;
 }
 
 function canonicalPages(source: string, kind: Kind): string[] {
@@ -215,11 +205,11 @@ function replaceIntroduction(source: string, introduction: string): string {
 
 function installation(policy: ExecutionPolicy, locale: Locale): string {
   const text = copy[locale];
-  return `**${text.installation}:** ${label(policy.name, 100, text.policyShortened)}. ${text.profileCount}: **${policy.profiles.length}**. ${text.planned}`;
+  return `**${text.installation}:** ${literal(policy.name)}. ${text.profileCount}: **${policy.profiles.length}**. ${text.planned}`;
 }
 
 function restart(owner: ProfilePolicy, locale: Locale): string {
-  const name = profileName(owner, locale);
+  const name = profileName(owner);
   return locale === 'en'
     ? `After restart, unlock Owner (${name}) first with its ordinary PIN or password.`
     : `Po restarcie najpierw odblokuj Owner (${name}) zwykłym PIN-em lub hasłem.`;
@@ -238,7 +228,7 @@ function configurationPage(profile: ProfilePolicy, locale: Locale): string {
   const boolean = (value: boolean): string => (value ? text.yes : text.no);
   const fields: [string, string][] = [
     [text.apps, String(profile.packages.length)],
-    [text.vpn, profile.vpn.packageId ? label(profile.vpn.packageId, 100, text.policyShortened) : text.noVpn],
+    [text.vpn, profile.vpn.packageId ? literal(profile.vpn.packageId) : text.noVpn],
     [text.alwaysOn, boolean(profile.vpn.alwaysOn)],
     [text.lockdown, boolean(profile.vpn.lockdown)],
   ];
@@ -307,7 +297,7 @@ function credentials(pages: string[], policy: ExecutionPolicy, locale: Locale): 
   return [intro, ...sheets, pages[3]!];
 }
 
-/** Derive public A5 content from policy requirements, never from private device inputs. */
+/** Derive public packet content from policy requirements, never from private device inputs. */
 export function renderPolicyBooklet(
   source: string,
   kind: Kind,

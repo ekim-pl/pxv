@@ -2,7 +2,7 @@ pxv guide build
 
 Authoritative sources: operator-en/pl.md, user-en/pl.md, quickstart-en/pl.md and
 credentials-en/pl.md under source/markdown. The edition list is configured once
-in build-manifest.json. Quickstart is the A5 guide supplied with every device;
+in build-manifest.json. Quickstart is the phone-sized guide supplied with every device;
 credentials is a blank private insert template, never a populated public export.
 Theme: assets/brand.json with the same brandName as product.json.
 
@@ -12,7 +12,7 @@ For HTML only:
   pxv guides rebuild --html-only
 For another destination:
   pxv guides rebuild --output-dir output/pdf --chromium /usr/bin/google-chrome
-For an installation-specific A5 booklet and blank credential insert:
+For an installation-specific phone-sized booklet and blank credential insert:
   pxv guides rebuild --policy policy-packs/fleet-nerd/policy.json --output-dir output/pdf/fleet-nerd --chromium /usr/bin/google-chrome
 
 --policy validates a authoring policy. Choose
@@ -20,34 +20,39 @@ a separate --output-dir; policy builds cannot overwrite authoritative sources.
 Relative paths resolve from the caller's directory. No project is required.
 Use the real installation policy in place of the fleet-nerd starter example.
 
-Policy builds adapt single-Owner instructions, add one quickstart appendix page
+Policy builds adapt single-Owner instructions, add one quickstart appendix section
 per configured GrapheneOS profile and include paired ordinary credential and
-account/recovery sheets per profile. For N profiles, quickstart has 8 + N pages
-and the insert has 2N + 2 pages. A single Owner produces 9/4 pages; five profiles
-produce 13/12 pages. Names, roles, language and declared configuration are
+account/recovery sheets per profile. For N profiles, quickstart has 8 + N sections
+and the insert has 2N + 2 sections. A single Owner produces 9/4 sections; five profiles
+produce 13/12 sections. Names, roles, language and declared configuration are
 intended settings, not device verification. Secrets remain blank; the input
 policy and private registry are not copied into public guide outputs. Generated
 Markdown in the destination records the rendered source without personalizing
-the shared source files. Without --policy, the generic quickstart has eight pages
-and the credential insert has four pages.
+the shared source files. Without --policy, the generic quickstart has eight sections
+and the credential insert has four sections.
 
 The command builds the workspace, then calls tools/optional/publishing/rebuild.mjs.
 Installed packages contain guide sources and build configuration, not the renderer.
 No browser download, dependency installation, device access or publication occurs.
 
-Each edition creates HTML, an office PDF and a print PDF. Operator/user editions
-use A4 office pages and 216 x 303 mm print media with A4 trim and 3 mm bleed.
-Quickstart/credentials editions use 148 x 210 mm A5 office pages and 154 x 216 mm
-print media with A5 trim and 3 mm bleed. Print output is not PDF/X and has no
-commercial printer profile. Office PDFs use less ink and include page numbers.
+Operator/user editions create HTML, an A4 office PDF and a 216 x 303 mm print
+PDF with A4 trim and 3 mm bleed. Quickstart/credentials create HTML and one
+-a4-fold.pdf with landscape A4 sheets (297 x 210 mm). Each sheet contains four
+136 x 100 mm slips, each folding to 68 x 100 mm. Panels are rendered at actual
+size before imposition; content reflows without reducing the 10 pt body font.
+Metadata is at least 8 pt; writing fields reserve 8 mm below each label.
+Sections may span several panels. The QA manifest records physical sheets,
+logical panels, group separation and placement coordinates. Stale A5 office/
+print PDFs are removed by PDF rebuilds. Operator/user bleed PDFs are not PDF/X.
 
-Print A5 office files at actual size on A5 paper. Use a PDF reader's booklet mode
-for folded A4 sheets; files are reading order, not imposed spreads. Keep credential
-pages single-sided; repeat account sheets as needed and seal the erasure sheet apart.
-Generic inserts need an ordinary profile sheet copied for each actual profile;
-policy builds generate those sheets automatically. Check the generated page count.
-Mark the optional erasure sheet not configured unless the feature was actually
-configured and agreed; keep any destructive values separately sealed.
+Print folded packets single-sided, landscape A4, actual size / 100%. Disable
+fit-to-page and booklet mode. Measure the 50 mm scale. Cut solid lines and fold
+dashed lines with printing inside. Stack by slip and panel number. Blank panel
+positions remain empty. Keep quickstart, ordinary credentials and erasure records
+on separate sheets; detach and seal destructive slips separately. Generic inserts
+need ordinary profile sections copied for each actual profile; policy builds
+create those sections automatically. Check actual sheet counts in qa/manifest.json.
+Mark optional erasure not configured unless actually configured and agreed.
 Complete inserts privately by hand, seal for the recipient and match asset labels.
 See guides/README.md for the full pack-every-device procedure.
 

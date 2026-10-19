@@ -1,3 +1,5 @@
+import { execFileSync } from 'node:child_process';
+import { PDFDocument } from 'pdf-lib';
 import { chmod, mkdtemp, readFile, readdir, rm, stat, symlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -109,10 +111,7 @@ describe('private credential insert', () => {
         expect(await readFile(source, 'utf8')).toContain('VPN-PASSWORD');
         expect(args).toContain('--disable-javascript');
         expect(args).toContain('--disable-background-networking');
-        await writeFile(
-          args.find((arg) => arg.startsWith('--print-to-pdf='))!.slice(15),
-          '%PDF-1.4\nsynthetic',
-        );
+        await writeFile(args.find((arg) => arg.startsWith('--print-to-pdf='))!.slice(15), await panelPdf());
         return { code: 0, stdout: '', stderr: '' };
       },
     };
@@ -181,9 +180,10 @@ it('renders blank secret lines and the codename fallback while rejecting an unsu
 it('uses the default local command runner and rejects missing browser, failed exit and invalid PDF bytes', async () => {
   const directory = await root(),
     browser = join(directory, 'renderer.sh');
+  await writeFile(join(directory, 'panel.pdf'), await panelPdf());
   await writeFile(
     browser,
-    '#!/bin/sh\nfor arg do case "$arg" in --print-to-pdf=*) printf "%s\\n" "%PDF-1.4 synthetic" > "${arg#*=}";; esac; done\n',
+    `#!/bin/sh\nfor arg do case "$arg" in --print-to-pdf=*) cp '${directory}/panel.pdf' "\${arg#*=}";; esac; done\n`,
     { mode: 0o700 },
   );
   await writeCredentialInsert(record(), join(directory, 'default.pdf'), {
@@ -210,4 +210,50 @@ it('uses the default local command runner and rejects missing browser, failed ex
       }),
     ).rejects.toThrow('Private credential insert');
   }
+});
+
+async function panelPdf(): Promise<Uint8Array> {
+  const pdf = await PDFDocument.create();
+  pdf.addPage([(68 * 72) / 25.4, (100 * 72) / 25.4]);
+  return pdf.save();
+}
+
+it('repeats private asset/profile headers on every real continuation panel (PXV_CHROMIUM)', async (context) => {
+  const chromium = process.env['PXV_CHROMIUM'];
+  if (!chromium) {
+    context.skip('Set PXV_CHROMIUM to run the real PDF/Poppler integration check');
+    return;
+  }
+  const data = record();
+  data.profiles[0]!.fields.password = value('x'.repeat(1600) + 'TAIL');
+  data.profiles[0]!.user.name = 'Właściciel bardzo długiego profilu '.repeat(4).trim();
+  const destination = join(await root(), 'integration.pdf');
+  await writeCredentialInsert(data, destination, { ...options, chromiumExecutable: chromium });
+  const pdf = await PDFDocument.load(await readFile(destination));
+  expect(pdf.getPage(0).getWidth()).toBeCloseTo((297 * 72) / 25.4, 4);
+  const text = execFileSync('pdftotext', ['-raw', destination, '-'], { encoding: 'utf8' });
+  const panelCount = (text.match(/(?:ordinary|erasure) \| Slip/gu) ?? []).length;
+  expect(panelCount).toBeGreaterThan(16);
+  expect(text.match(/Asset: phone-01/gu)).toHaveLength(panelCount);
+  expect((text.match(/x{3,}/gu) ?? []).join('')).toHaveLength(1600);
+  expect(text).toContain('TAIL');
+  for (const sheet of text.split('\f').filter((value) => value.trim())) {
+    if (sheet.includes('ordinary |')) {
+      expect(sheet).not.toContain('DURESS-PIN');
+      expect(sheet).not.toContain('OBLIVION-KEY');
+    } else {
+      expect(sheet).toContain('erasure |');
+      expect(sheet).not.toContain('VPN-PASSWORD');
+    }
+  }
+});
+
+it('keeps profile names out of page-header CSS syntax', () => {
+  const data = record();
+  data.profiles[0]!.user.name = '</style><script>sentinel</script>';
+  const html = renderCredentialInsert(data, options);
+  const css = html.slice(html.indexOf('<style>'), html.indexOf('</style>'));
+  expect(css).toContain('@top-left{content:');
+  expect(css).not.toContain('<script>');
+  expect(html).toContain('&lt;/style&gt;&lt;script&gt;sentinel&lt;/script&gt;');
 });

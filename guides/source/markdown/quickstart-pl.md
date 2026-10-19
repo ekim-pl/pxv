@@ -2,7 +2,7 @@
 
 ## 1 Zacznij tutaj
 
-Ten przewodnik A5 opisuje pierwsze kroki, konfigurację, prywatność i odzyskiwanie telefonu z GrapheneOS. Faktyczne profile, aplikacje, kontrole i ograniczenia opisuje **pakiet przekazania**.
+Ten kieszonkowy przewodnik opisuje pierwsze kroki, konfigurację, prywatność i odzyskiwanie telefonu z GrapheneOS. Faktyczne profile, aplikacje, kontrole i ograniczenia opisuje **pakiet przekazania**.
 
 **Pakiet zawiera:** przewodnik, przyjęty raport przekazania, pisemne notatki operatora o konfiguracji i kontrolach oraz zapieczętowaną prywatną wkładkę z danymi dostępu. Porównaj etykiety zasobu na raporcie, notatkach i wkładce z telefonem. Jeśli czegoś brakuje lub etykiety się różnią, przerwij i skontaktuj się z operatorem.
 
@@ -14,7 +14,7 @@ Ten przewodnik A5 opisuje pierwsze kroki, konfigurację, prywatność i odzyskiw
 
 **Przed przyjęciem telefonu** poproś o pokazanie przełączania profili i kończenia dodatkowej sesji. Sprawdź wyłączenie debugowania USB i bezprzewodowego. Odbierz rzeczywisty kontakt do wsparcia i sposób odzyskiwania dostępny bez telefonu.
 
-**Nigdy nie testuj kodu przymusu ani klucza wymazania przez powiadomienie.** To inne dane niż zwykła blokada; mogą zniszczyć dane. Zobacz stronę 7.
+**Nigdy nie testuj kodu przymusu ani klucza wymazania przez powiadomienie.** To inne dane niż zwykła blokada; mogą zniszczyć dane. Zobacz sekcję 7.
 
 <div class="page-break"></div>
 
@@ -49,7 +49,7 @@ Wykonaj te kroki w profilach z pakietu przekazania. Ekrany zależą od wersji ap
 
 Jeśli dostarczono **Session**, ma on własne ID konta komunikatora. To nie numer profilu Androida ani telefonu. Przed udostępnieniem ID sprawdź konto. Sekret odzyskiwania jest prywatny i różni się od ID, które można udostępniać.
 
-Jeśli dostarczono **Proton VPN**, wymaga on konta i zgody Androida na VPN w każdym wymaganym profilu. Skonfiguruj go przed końcowymi ograniczeniami VPN - strona 5.
+Jeśli dostarczono **Proton VPN**, wymaga on konta i zgody Androida na VPN w każdym wymaganym profilu. Skonfiguruj go przed końcowymi ograniczeniami VPN - sekcja 5.
 
 Wrażliwy import może wymagać pełnego ręcznego wpisania. W razie potrzeby poproś o ponowne prywatne przekazanie; pliki tymczasowe mogły zostać usunięte. Potwierdź operatorowi wykonanie kroku bez ujawniania sekretów.
 

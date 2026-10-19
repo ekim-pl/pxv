@@ -308,6 +308,9 @@ importers:
       '@pxv/runtime':
         specifier: workspace:*
         version: link:../runtime
+      pdf-lib:
+        specifier: 1.17.1
+        version: 1.17.1
 
   packages/mcp:
     dependencies:
@@ -326,6 +329,9 @@ importers:
       '@pxv/contracts':
         specifier: workspace:*
         version: link:../contracts
+      '@pxv/guides':
+        specifier: workspace:*
+        version: link:../guides
       '@pxv/runtime':
         specifier: workspace:*
         version: link:../runtime

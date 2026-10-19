@@ -147,7 +147,7 @@ describe('policy-specific recipient booklets', () => {
     }
   });
 
-  test('bounds Unicode names and unconstrained VPN packages while retaining stable profile IDs', () => {
+  test('preserves complete Unicode names and VPN packages across flowing panels', () => {
     const policy = installation(1);
     policy.name = '🏠'.repeat(120);
     const profile = policy.profiles[0]!;
@@ -159,13 +159,10 @@ describe('policy-specific recipient booklets', () => {
     profile.vpn.packageId = vpn;
     for (const locale of locales) {
       const result = renderPolicyBooklet(sources[locale].quickstart, 'quickstart', policy, locale);
-      expect(result).toContain('🏠'.repeat(100));
-      expect(result).not.toContain('🏠'.repeat(101));
-      expect(result).toContain('🦊'.repeat(80));
-      expect(result).not.toContain('🦊'.repeat(81));
+      expect(result).toContain(policy.name);
+      expect(result).toContain(profile.name);
       expect(result).toContain(profile.id);
-      expect(result).not.toContain('v'.repeat(101));
-      expect(result).toContain(locale === 'en' ? 'shortened' : 'skrócon');
+      expect(result).toContain('v'.repeat(150));
     }
   });
 

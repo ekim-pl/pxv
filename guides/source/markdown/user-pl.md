@@ -4,7 +4,7 @@ Ten przewodnik pomaga odebrać i używać Pixela z GrapheneOS oraz jednym lub wi
 
 **Przed codziennym użyciem:** sprawdź etykietę telefonu, poznaj przeznaczenie profili, zweryfikuj zwykłe blokady, dokończ prywatną konfigurację aplikacji i odbierz instrukcje wsparcia oraz odzyskiwania. Nigdy nie sprawdzaj działania przez użycie kodu lub klucza wymazującego dane.
 
-Osobna [instrukcja A5](quickstart-pl.md) jest przeznaczona do dołączenia do każdego telefonu. Osoba przygotowująca urządzenie przekazuje zamkniętą, prywatnie wypełnioną [wkładkę z danymi dostępu](credentials-pl.md) z pasującym identyfikatorem telefonu. Po odbiorze przechowuj ją bezpiecznie, oddzielnie od telefonu; opcjonalna strona z kodami wymazującymi dane jest oddzielona od zwykłych danych odblokowania.
+Osobna [kieszonkowa instrukcja](quickstart-pl.md) jest przeznaczona do dołączenia do każdego telefonu. Osoba przygotowująca urządzenie przekazuje zamkniętą, prywatnie wypełnioną [wkładkę z danymi dostępu](credentials-pl.md) z pasującym identyfikatorem telefonu. Po odbiorze przechowuj ją bezpiecznie, oddzielnie od telefonu; opcjonalna strona z kodami wymazującymi dane jest oddzielona od zwykłych danych odblokowania.
 
 ## 1. Sprawdź odbierany telefon
 

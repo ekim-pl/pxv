@@ -297,7 +297,7 @@ and history is retained. `current` means last operator-confirmed, not live proof
 An explicit private `registry reveal` must create a new protected output file;
 compare privately and handle the plaintext under your retention policy. If testing
 printed retention, `registry print-insert` exports saved secret values to a private
-A5 PDF. Follow [the private insert procedure](PHONE_REGISTRY.md#prefilled-private-a5-insert),
+phone-sized PDF. Follow [the private insert procedure](PHONE_REGISTRY.md#prefilled-private-phone-sized-insert),
 check both languages privately, and never upload that PDF or its page images.
 Blank policy-generated inserts can instead be completed privately by hand.
 
@@ -381,8 +381,8 @@ pxv guides rebuild --policy "$P/policy.yaml" \
 
 Choose an actually installed Chromium path. This compiles source before rendering;
 finish device work first, and use a new review if executable bytes change before a
-later mutation. The five-profile build should produce **13 quickstart pages** and
-**12 blank credential-insert pages** per language/mode. Inspect the generated QA,
+later mutation. The five-profile build should produce **13 quickstart sections** and
+**12 blank credential-insert sections** per language. Sections span panels; use QA for the physical A4 sheet counts. Inspect the generated QA,
 font/glyph checks, every page and profile names/order. These are intended settings,
 not device acceptance; populated registry inserts are separate private exports.
 

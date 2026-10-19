@@ -161,13 +161,13 @@ describe('guides rebuild command', () => {
       };
       expect(manifest.outputCount).toBe(configuration.editions.length);
       for (const edition of manifest.editions)
-        expect(edition.paperSize).toBe(/^(?:quickstart|credentials)-/u.test(edition.name) ? 'A5' : 'A4');
+        expect(edition.paperSize).toBe(/^(?:quickstart|credentials)-/u.test(edition.name) ? 'fold' : 'A4');
     } finally {
       await rm(outputRoot, { recursive: true, force: true });
     }
   });
 
-  it('builds policy-specific A5 Markdown and records generated source provenance without publishing the policy', async () => {
+  it('builds policy-specific packet Markdown and records generated source provenance without publishing the policy', async () => {
     const outputRoot = await mkdtemp(join(tmpdir(), 'pxv-guide-policy-'));
     const templateFile = 'guides/source/markdown/quickstart-en.md';
     const template = await readFile(templateFile);

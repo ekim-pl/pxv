@@ -7,6 +7,7 @@
   "exports": "./dist/index.js",
   "dependencies": {
     "@pxv/contracts": "workspace:*",
-    "@pxv/runtime": "workspace:*"
+    "@pxv/runtime": "workspace:*",
+    "pdf-lib": "1.17.1"
   }
 }

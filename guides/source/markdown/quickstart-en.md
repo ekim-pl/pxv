@@ -14,7 +14,7 @@ This guide covers first use, configuration, privacy and recovery for your prepar
 
 **Before acceptance** ask for a demonstration of switching profiles and ending a secondary session. Check that USB debugging and Wireless debugging are off. Receive support details and a recovery route that works without this phone.
 
-**Never test a duress code or notification-wipe key.** They are separate from ordinary unlock credentials and can destroy data. Optional erasure features are described on page 7.
+**Never test a duress code or notification-wipe key.** They are separate from ordinary unlock credentials and can destroy data. Optional erasure features are described in section 7.
 
 <div class="page-break"></div>
 
@@ -49,7 +49,7 @@ Complete these steps in each intended profile. Screens depend on the installed a
 
 **If Session was supplied**, confirm its messenger account ID before sharing it. It differs from your Android profile number, telephone number and private recovery secret.
 
-**If Proton VPN was supplied**, configure its account and Android VPN consent in every required profile before final VPN restrictions. Follow page 5.
+**If Proton VPN was supplied**, configure its account and Android VPN consent in every required profile before final VPN restrictions. Follow section 5.
 
 Imports may require complete manual entry. Request a fresh private transfer if needed; temporary files may already be removed. Confirm completion without disclosing secrets.
 

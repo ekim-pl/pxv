@@ -8,12 +8,13 @@ import { parseArgs } from 'node:util';
 import { buildDocumentation } from '../../../packages/release/dist/docs.js';
 import { parseDocument, validatePolicyDocument } from '../../../packages/contracts/dist/index.js';
 import { verifyGuideLinks } from './links.mjs';
+import { assertFoldPanelBounds } from './fold-qa.mjs';
 
 /** @typedef {{destination:string,htmlOnly:boolean,render:boolean,chrome?:string,policyFile?:string}} BuildOptions */
 /** @typedef {{x0:number,y0:number,x1:number,y1:number}} PageBox */
-/** @typedef {{size:'A4'|'A5',width:number,height:number}} GuideFormat */
+/** @typedef {{size:'A4'|'fold',width:number,height:number}} GuideFormat */
 /** @typedef {{pdfSha256:string,pages:number,pageSize:string,trimBox?:PageBox,bleedBox?:PageBox,embeddedFonts:string,polishGlyphs:string,pageRasters:string[]}} PdfRecord */
-/** @typedef {{name:string,sourceSha256:string,templateSha256:string,htmlSha256:string,locale:string,paperSize:'A4'|'A5',office?:PdfRecord,print?:PdfRecord}} Edition */
+/** @typedef {{name:string,sourceSha256:string,templateSha256:string,htmlSha256:string,locale:string,paperSize:'A4'|'fold',office?:PdfRecord,print?:PdfRecord,fold?:PdfRecord,layout?:import('../../../packages/guides/src/fold-packet.js').FoldManifest}} Edition */
 
 /** @type {('office'|'print')[]} */
 const modes = ['office', 'print'];
@@ -23,7 +24,7 @@ const mmToPoints = (millimeters) => (millimeters * 72) / 25.4;
 /** @param {string} name @returns {GuideFormat} */
 function guideFormat(name) {
   return /^(?:quickstart|credentials)-/u.test(name)
-    ? { size: 'A5', width: 148, height: 210 }
+    ? { size: 'fold', width: 297, height: 210 }
     : { size: 'A4', width: 210, height: 297 };
 }
 
@@ -72,7 +73,7 @@ function normalizedText(text) {
 
 /** @param {string} html @param {GuideFormat} format */
 function expectedSections(html, format) {
-  if (format.size !== 'A5') return [];
+  if (format.size !== 'fold') return [];
   const entities = /** @type {Record<string,string>} */ ({
     '&amp;': '&',
     '&lt;': '<',
@@ -94,7 +95,7 @@ function expectedSections(html, format) {
 /** @param {string} name @param {string} pdf @param {number} pages @param {string[]} sections */
 function assertPageText(name, pdf, pages, sections) {
   if (sections.length && pages !== sections.length)
-    throw Error(`Expected ${sections.length} A5 section pages; received ${pages}: ${name}`);
+    throw Error(`Expected ${sections.length} logical section pages; received ${pages}: ${name}`);
   for (let page = 1; page <= pages; page++) {
     const text = execFileSync('pdftotext', ['-f', String(page), '-l', String(page), pdf, '-'], {
       encoding: 'utf8',
@@ -102,7 +103,7 @@ function assertPageText(name, pdf, pages, sections) {
     if (text.trim().length < 12) throw Error(`Expected readable text on page ${page} of ${name}`);
     const heading = sections[page - 1];
     if (heading && !normalizedText(text).includes(heading))
-      throw Error(`Expected A5 section "${heading}" on page ${page}: ${name}`);
+      throw Error(`Expected logical section "${heading}" on page ${page}: ${name}`);
   }
 }
 
@@ -161,7 +162,7 @@ function printBoxes(name, pdfInfo, width, height, format) {
 
 /** @param {string} name @param {string} pdf @param {string} locale */
 function extractedText(name, pdf, locale) {
-  const text = execFileSync('pdftotext', ['-layout', pdf, '-'], { encoding: 'utf8' });
+  const text = execFileSync('pdftotext', ['-raw', pdf, '-'], { encoding: 'utf8' });
   if (text.length < 500 || text.includes('\uFFFD') || /file:\/\/|\/home\/|\/tmp\/pxv-/u.test(text))
     throw Error(`Text integrity or private-path failure: ${name}`);
   if (locale === 'pl' && !/[ąćęłńóśźż]/iu.test(text)) throw Error(`Missing Polish glyphs: ${name}`);
@@ -180,14 +181,14 @@ function embeddedFontNames(name, pdf, family) {
   ].join(', ');
 }
 
-/** @param {string} name @param {string} pdf @param {'office'|'print'} mode @param {string} locale @param {string} family @param {GuideFormat} format @param {string[]} sections */
+/** @param {string} name @param {string} pdf @param {'office'|'print'|'a4-fold'} mode @param {string} locale @param {string} family @param {GuideFormat} format @param {string[]} sections */
 function inspectPdf(name, pdf, mode, locale, family, format, sections) {
   const info = execFileSync('pdfinfo', ['-box', pdf], { encoding: 'utf8' });
   const pages = pageCount(name, info);
   assertPageText(name, pdf, pages, sections);
   const { width, height } = pageDimensions(name, info);
   let boxes;
-  if (mode === 'office') {
+  if (mode !== 'print') {
     if (Math.abs(width - mmToPoints(format.width)) > 2 || Math.abs(height - mmToPoints(format.height)) > 2)
       throw Error(`Office PDF is not ${format.size}: ${name}`);
   } else boxes = printBoxes(name, info, width, height, format);
@@ -202,7 +203,7 @@ function inspectPdf(name, pdf, mode, locale, family, format, sections) {
   };
 }
 
-/** @param {string} qa @param {string} edition @param {'office'|'print'} mode @param {string} pdf @param {boolean} render */
+/** @param {string} qa @param {string} edition @param {'office'|'print'|'a4-fold'} mode @param {string} pdf @param {boolean} render */
 async function pageRasters(qa, edition, mode, pdf, render) {
   const prefix = `${edition}-${mode}-page-`;
   const matches = (/** @type {string} */ file) => file.startsWith(prefix) && file.endsWith('.png');
@@ -220,11 +221,11 @@ function assertRasterCount(render, rasters, pages, name) {
 /** @param {string} name @param {string} locale @param {GuideFormat} format @param {string} html */
 function assertEditionHtml(name, locale, format, html) {
   const cover =
-    format.size === 'A5' ? '<section class="guide-cover compact-cover">' : '<section class="guide-cover">';
+    format.size === 'fold' ? '<section class="guide-cover compact-cover">' : '<section class="guide-cover">';
   if (!html.includes(`<html lang="${locale}">`) || !html.includes(cover))
     throw Error(`HTML locale or cover missing: ${name}`);
-  if (format.size === 'A5' && html.includes('<img class="cover-photo"'))
-    throw Error(`A5 insert must use a compact cover: ${name}`);
+  if (format.size === 'fold' && html.includes('<img class="cover-photo"'))
+    throw Error(`Folded insert must use a compact cover: ${name}`);
 }
 
 /** @param {string} root @param {string} html @param {string} qa @param {BuildOptions} options @returns {Promise<Edition>} */
@@ -249,6 +250,8 @@ async function verifyEdition(root, html, qa, options) {
     JSON.parse(await readFile(join(root, 'guides/assets/brand.json'), 'utf8'))
   );
   const family = theme.fontFamily;
+  if (format.size === 'fold') return verifyFoldEdition(record, html, qa, options, family, sections);
+
   for (const mode of modes) {
     const pdf = html.slice(0, -5) + `-${mode}.pdf`;
     const inspection = inspectPdf(`${name}-${mode}`, pdf, mode, locale, family, format, sections);
@@ -267,6 +270,38 @@ async function verifyEdition(root, html, qa, options) {
       pageRasters: rasters,
     };
   }
+  return record;
+}
+
+/** @param {Edition} record @param {string} html @param {string} qa @param {BuildOptions} options @param {string} family @param {string[]} sections */
+async function verifyFoldEdition(record, html, qa, options, family, sections) {
+  const { name, locale } = record;
+  const format = guideFormat(name);
+  const pdf = html.slice(0, -5) + '-a4-fold.pdf';
+  const inspection = inspectPdf(`${name}-a4-fold`, pdf, 'a4-fold', locale, family, format, []);
+  assertFoldPanelBounds(pdf);
+  const layout = /** @type {import('../../../packages/guides/src/fold-packet.js').FoldManifest} */ (
+    JSON.parse(await readFile(join(qa, `${name}-fold.json`), 'utf8'))
+  );
+  if (inspection.pages !== layout.sheets || layout.panels !== layout.placements.length)
+    throw Error(`Fold layout count mismatch: ${name}`);
+  const text = normalizedText(inspection.text);
+  for (const heading of sections)
+    if (!text.includes(heading)) throw Error(`Missing folded section: ${heading}`);
+  await writeFile(join(qa, `${name}-a4-fold.txt`), inspection.text);
+  const rasters = await pageRasters(qa, name, 'a4-fold', pdf, options.render);
+  assertRasterCount(options.render, rasters, inspection.pages, `${name}-a4-fold`);
+  record.fold = {
+    pdfSha256: await hash(pdf),
+    pages: inspection.pages,
+    pageSize: inspection.pageSize,
+    embeddedFonts: inspection.embeddedFonts,
+    polishGlyphs: locale === 'pl' ? 'present' : 'not applicable',
+    pageRasters: rasters,
+  };
+  record.layout = layout;
+  for (const file of await readdir(qa))
+    if (file.startsWith(`${name}-office`) || file.startsWith(`${name}-print`)) await rm(join(qa, file));
   return record;
 }
 
@@ -315,10 +350,10 @@ await mkdir(qa, { recursive: true });
 const editions = [];
 for (const html of outputs) editions.push(await verifyEdition(root, html, qa, options));
 const manifest = {
-  schemaVersion: 2,
+  schemaVersion: 3,
   engineVersion: product.upstreamVersion,
   kind: 'document QA; not device acceptance',
-  renderer: 'Node Markdown/HTML + explicit Chromium + pdf-lib page boxes + Poppler',
+  renderer: 'Node Markdown/HTML + explicit Chromium + pdf-lib imposition/page boxes + Poppler',
   ...(policy
     ? {
         installation: {
@@ -328,16 +363,20 @@ const manifest = {
         },
       }
     : {}),
-  outputCount: outputs.length * (options.htmlOnly ? 1 : 3),
+  outputCount: editions.reduce((total, edition) => total + (options.htmlOnly ? 1 : edition.fold ? 2 : 3), 0),
   formats: options.htmlOnly
     ? ['HTML']
     : [
         'HTML',
         ...new Set(
-          editions.flatMap(({ paperSize }) => [
-            `${paperSize} office PDF`,
-            `${paperSize} print PDF with ${paperSize} TrimBox and 3 mm bleed`,
-          ]),
+          editions.flatMap(({ paperSize }) =>
+            paperSize === 'fold'
+              ? ['A4 landscape cut-and-fold PDF; 68 x 100 mm panels']
+              : [
+                  `${paperSize} office PDF`,
+                  `${paperSize} print PDF with ${paperSize} TrimBox and 3 mm bleed`,
+                ],
+          ),
         ),
       ],
   editions,
@@ -346,5 +385,7 @@ await writeFile(join(qa, 'manifest.json'), JSON.stringify(manifest, null, 2) + '
 process.stdout.write(`${outputs.length} guide editions built in ${options.destination}\n`);
 for (const edition of editions)
   process.stdout.write(
-    `${edition.name}: ${edition.office?.pages ?? 'HTML only'} office pages, ${edition.print?.pages ?? 'HTML only'} print pages\n`,
+    edition.fold
+      ? `${edition.name}: ${edition.fold.pages} A4 sheets, ${edition.layout?.panels} folded panels\n`
+      : `${edition.name}: ${edition.office?.pages ?? 'HTML only'} office pages, ${edition.print?.pages ?? 'HTML only'} print pages\n`,
   );

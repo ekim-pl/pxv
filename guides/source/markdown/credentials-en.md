@@ -12,7 +12,7 @@
 <div class="write-line">Support route if this phone is unavailable</div>
 <div class="write-line">Agreed private method for credential updates</div>
 
-**Enclose** page 2 for each profile and page 3 for each account/recovery plan. Mark unused fields “not configured”. Attach written configuration, checks and limitations alongside the report.
+**Enclose** section 2 for each profile and section 3 for each account/recovery plan. Mark unused fields “not configured”. Attach written configuration, checks and limitations alongside the report.
 
 <div class="write-line">Profile sheets and account sheets enclosed</div>
 <div class="write-line">Support retention agreement and review date</div>
@@ -40,7 +40,7 @@ The completed insert is device-specific. Agree support retention, including encr
 
 Unlock Owner first after restart. Profile locks can differ. A Session ID identifies an account, not an Android user or recovery secret. Store recovery material separately.
 
-**No destructive credentials here.** Keep the optional erasure sheet on page 4 apart from daily unlock instructions.
+**No destructive credentials here.** Keep the optional erasure sheet on section 4 apart from daily unlock instructions.
 
 <div class="page-break"></div>
 

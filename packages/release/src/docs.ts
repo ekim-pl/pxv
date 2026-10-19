@@ -1,6 +1,7 @@
 import { marked } from 'marked';
 import { chromium, type Page } from 'playwright';
 import { PDFDocument } from 'pdf-lib';
+import { foldPanelStyles, foldPrintingInstructions, imposeFoldPacket } from '@pxv/guides';
 import {
   access,
   copyFile,
@@ -42,7 +43,7 @@ const defaultBrand = {
 };
 type GuideKind = 'operator' | 'user' | 'quickstart' | 'credentials' | 'generic';
 interface GuideFormat {
-  size: 'A4' | 'A5';
+  size: 'A4' | 'fold';
   width: number;
   height: number;
 }
@@ -136,7 +137,7 @@ function editionKind(output: string): GuideKind {
 function guideFormat(output: string): GuideFormat {
   const kind = editionKind(output);
   return kind === 'quickstart' || kind === 'credentials'
-    ? { size: 'A5', width: 148, height: 210 }
+    ? { size: 'fold', width: 68, height: 100 }
     : { size: 'A4', width: 210, height: 297 };
 }
 
@@ -171,15 +172,15 @@ function guideCover(
   brand: GuideBrand,
 ): string {
   const kind = editionKind(output);
-  if (guideFormat(output).size === 'A5')
-    return `<section class="guide-cover compact-cover"><div class="cover-copy"><p class="cover-brand">${escapeHtml(productName)}</p><p class="cover-label">${coverLabel(kind, locale)}</p><h1>${title}</h1><p class="cover-meta">${version} · ${locale.toUpperCase()} · A5</p></div></section>`;
+  if (guideFormat(output).size === 'fold')
+    return `<section class="guide-cover compact-cover"><div class="cover-copy"><p class="cover-brand">${escapeHtml(productName)}</p><p class="cover-label">${coverLabel(kind, locale)}</p><h1>${title}</h1><p class="cover-meta">${version} · ${locale.toUpperCase()} · 68 × 100 mm</p></div></section>`;
   const image =
     kind === 'generic' ? '' : `<img class="cover-photo" src="assets/photos/cover-${kind}.png" alt="">`;
   const logo = brand.logo ? `<img class="cover-logo" src="${escapeHtml(brand.logo)}" alt="">` : '';
   return `<section class="guide-cover">${image}<div class="cover-shade"></div><div class="cover-copy">${logo}<p class="cover-brand">${escapeHtml(productName)}</p><p class="cover-label">${coverLabel(kind, locale)}</p><h1>${title}</h1><p class="cover-subtitle">${coverSubtitle(kind, locale)}</p><p class="cover-meta">${version} · ${locale.toUpperCase()}</p></div></section>`;
 }
 
-function guideStyles(brand: GuideBrand): string {
+function guideStyles(brand: GuideBrand, compact: boolean): string {
   const family = `'${escapeHtml(brand.fontFamily)}',sans-serif`;
   const fontFace = brand.fontAsset
     ? `@font-face{font-family:'${escapeHtml(brand.fontFamily)}';src:url('${escapeHtml(brand.fontAsset)}');font-style:normal;font-weight:400}`
@@ -239,41 +240,33 @@ html[data-print-mode="print"] body[data-guide-kind="user"] .cover-copy h1{margin
 html[data-print-mode="print"] body[data-guide-kind="user"] .cover-subtitle{margin-bottom:2mm}
 html[data-print-mode="print"] th{background:var(--brand-primary);color:white}
 @media print{.html-edition{display:none}}
-${a5Styles()}`;
+${compact ? foldStyles() : ''}`;
 }
 
-function a5Styles(): string {
-  return `@page pxva5office{size:148mm 210mm;margin:10mm 10mm 14mm}
-@page pxva5print{size:154mm 216mm;margin:13mm 13mm 17mm}
-html[data-print-mode="office"] body.guide-a5{page:pxva5office}
-html[data-print-mode="print"] body.guide-a5{page:pxva5print}
-body.guide-a5,html[data-print-mode] body.guide-a5{font-size:10pt;line-height:1.34;color:#111}
-.guide-a5 h1,.guide-a5 h2,.guide-a5 h3,.guide-a5 a{color:#111}
-.guide-a5 h2{font-size:14pt;line-height:1.2;margin:0 0 3.5mm}
-.guide-a5 h3{font-size:10.5pt;line-height:1.3;margin:4mm 0 2mm}
-.guide-a5 p,.guide-a5 ul,.guide-a5 ol{margin:0 0 2.5mm}
-.guide-a5 ul,.guide-a5 ol{padding-left:5mm}
-.guide-a5 li{margin-bottom:1mm}
-.guide-a5 ol{list-style:none;counter-reset:a5-step}
-.guide-a5 ol>li{position:relative;counter-increment:a5-step}
-.guide-a5 ol>li::before{content:counter(a5-step) ".";position:absolute;left:-5mm;width:3.5mm;text-align:right}
-.guide-a5 table{font-size:8.5pt;margin:2mm 0 4mm}
-.guide-a5 td,.guide-a5 th,html[data-print-mode] .guide-a5 th{padding:2mm;background:white;color:#111}
-.guide-a5 code{font-size:8.8pt}
-.guide-a5 pre{font-size:8pt;background:#f1f1f1}
-.guide-a5 .guide-cover,html[data-print-mode] .guide-a5 .guide-cover{min-height:0;background:white;color:#111;border:0;margin:0 0 3mm;break-inside:avoid}
-.guide-a5 .cover-copy,html[data-print-mode] .guide-a5 .cover-copy{padding:0 0 2mm}
-.guide-a5 .cover-brand,html[data-print-mode] .guide-a5 .cover-brand{font-size:8.5pt;line-height:1.15;margin:0 0 1mm}
-.guide-a5 .cover-label,html[data-print-mode] .guide-a5 .cover-label{font-size:7pt;line-height:1.2;letter-spacing:.04em;margin:0 0 1mm}
-.guide-a5 .cover-copy h1,html[data-print-mode] .guide-a5 .cover-copy h1{font-size:16pt;line-height:1.1;color:#111;margin:0 0 1mm}
-.guide-a5 .cover-meta{font-size:7pt;line-height:1.15;margin:0}
-.guide-a5 .page-break{break-before:page}
-.guide-a5 .a5-page{break-after:page}
-.guide-a5 .a5-page:last-child{break-after:auto}
-.guide-a5 .write-line{min-height:8mm;margin:0 0 2mm;padding:0 0 4mm;border-bottom:0.3mm dotted #555;break-inside:avoid;font-size:9pt;line-height:1.15}
-.guide-a5 .profile-identity{font-size:9pt;line-height:1.25;margin:0 0 2.5mm;break-inside:avoid}
-.guide-a5 .credential-warning{border:0.3mm solid #111;padding:2.5mm;margin:0 0 3mm;font-weight:400;break-inside:avoid}
-@media screen{body.guide-a5{max-width:148mm}.guide-a5 .page-break{border-top:1px solid #bbb;margin:10mm 0;padding:5mm 0 0}}`;
+function foldStyles(): string {
+  return `${foldPanelStyles}
+@page pxvfold{size:68mm 100mm;margin:4mm 4mm 10mm}
+html[data-print-mode] body.guide-fold{page:pxvfold;font-family:inherit;font-size:10pt;line-height:1.3;color:#111}
+.guide-fold .guide-cover,html[data-print-mode] .guide-fold .guide-cover{min-height:0;background:white;color:#111;border:0;margin:0 0 3mm}
+.guide-fold .cover-copy,html[data-print-mode] .guide-fold .cover-copy{padding:0}
+.guide-fold .cover-copy h1,html[data-print-mode] .guide-fold .cover-copy h1{font-size:12pt;color:#111;margin:0 0 2mm}
+html[data-print-mode] .guide-fold .cover-brand,html[data-print-mode] .guide-fold .cover-label,html[data-print-mode] .guide-fold .cover-meta{font-size:8pt;letter-spacing:0;margin:0 0 1mm}
+html[data-fold-group="ordinary"] [data-fold-group="erasure"],html[data-fold-group="erasure"] [data-fold-group="ordinary"]{display:none}
+@media screen{body.guide-fold{max-width:90mm}.guide-fold .fold-section{margin-top:8mm}}
+`;
+}
+
+function foldSections(rendered: string, credentials: boolean, locale: string): string {
+  const continued = locale === 'pl' ? 'Sekcja / ciąg dalszy' : 'Section / continued';
+  return rendered
+    .split(/<div class="page-break"><\/div>/u)
+    .map((section) => {
+      const heading = /<h2(?:\s[^>]*)?>(.*?)<\/h2>/isu.exec(section);
+      const group = credentials && section.includes('class="credential-warning"') ? 'erasure' : 'ordinary';
+      const body = heading ? section.replace(heading[0], '') : section;
+      return `<table class="fold-section" data-fold-group="${group}"><thead><tr><th>${heading?.[0] ?? ''}<div class="continuation">${continued}</div></th></tr></thead><tbody><tr><td>${body}</td></tr></tbody></table>`;
+    })
+    .join('');
 }
 
 function guideHtml(
@@ -286,15 +279,17 @@ function guideHtml(
 ): string {
   const heading = /<h1(?:\s[^>]*)?>(.*?)<\/h1>/isu.exec(rendered);
   const title = heading?.[1] ?? escapeHtml(productName);
-  const body = heading ? rendered.replace(heading[0], '') : rendered;
+  let body = heading ? rendered.replace(heading[0], '') : rendered;
+  const compact = guideFormat(output).size === 'fold';
+  if (compact) body = foldSections(body, editionKind(output) === 'credentials', locale);
   const cover = guideCover(output, locale, title, productName, version, brand);
   const language = locale === 'pl' ? 'pl' : 'en';
   const context =
     locale === 'pl'
       ? 'Instrukcja ogólna. Stan konkretnego telefonu potwierdza jego raport przekazania.'
       : 'General instructions. Use the handoff report for the status of a specific phone.';
-  const sizeClass = guideFormat(output).size === 'A5' ? ' class="guide-a5"' : '';
-  return `<!doctype html><html lang="${language}"><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src file: data:; font-src file: data:"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(productName)} - ${escapeHtml(title.replace(/<[^>]*>/gu, ''))}</title><style>${guideStyles(brand)}</style></head><body data-guide-kind="${editionKind(output)}"${sizeClass}>${cover}<main class="guide-content"><p class="html-edition">${escapeHtml(productName)} | ${version} | ${locale.toUpperCase()} | ${context}</p>${body}</main></body></html>`;
+  const sizeClass = guideFormat(output).size === 'fold' ? ' class="guide-fold"' : '';
+  return `<!doctype html><html lang="${language}"><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src file: data:; font-src file: data:"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(productName)} - ${escapeHtml(title.replace(/<[^>]*>/gu, ''))}</title><style>${guideStyles(brand, compact)}</style></head><body data-guide-kind="${editionKind(output)}"${sizeClass}>${compact ? `<div data-fold-group="ordinary">${cover}<p>${foldPrintingInstructions(language)}</p></div>` : cover}<main class="guide-content"><p class="html-edition">${escapeHtml(productName)} | ${version} | ${locale.toUpperCase()} | ${context}</p>${body}</main></body></html>`;
 }
 
 function indexLabel(name: string): string {
@@ -302,8 +297,8 @@ function indexLabel(name: string): string {
   const labels: Record<GuideKind, string> = {
     operator: 'Operator',
     user: 'User',
-    quickstart: 'A5 recipient quick start',
-    credentials: 'A5 private credential insert',
+    quickstart: 'Phone-sized recipient quick start',
+    credentials: 'Phone-sized private credential insert',
     generic: 'Guide',
   };
   const label = labels[editionKind(name)];
@@ -322,15 +317,17 @@ function guideIndex(
     .map((name) => {
       const size = guideFormat(name).size;
       const pdfs = pdfOutput
-        ? ` · <a href="${name}-office.pdf">${size} office PDF</a> · <a href="${name}-print.pdf">${size} print PDF + 3 mm bleed</a>`
+        ? size === 'fold'
+          ? ` · <a href="${name}-a4-fold.pdf">A4 cut-and-fold PDF (68 × 100 mm folded)</a>`
+          : ` · <a href="${name}-office.pdf">${size} office PDF</a> · <a href="${name}-print.pdf">${size} print PDF + 3 mm bleed</a>`
         : '';
       return `<li>${indexLabel(name)}: <a href="${name}.html">HTML</a>${pdfs} · <a href="source/markdown/${name}.md">Markdown</a></li>`;
     })
     .join('');
   const installation = policy
-    ? `<p>A5 booklets describe the intended configuration for policy ${escapeHtml(policy.id)} (${policy.profiles.length} user accounts). This is document configuration, not device acceptance.</p>`
+    ? `<p>Folded packets describe the intended configuration for policy ${escapeHtml(policy.id)} (${policy.profiles.length} user accounts). This is document configuration, not device acceptance.</p>`
     : '';
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(productName)} ${version} guides</title><style>body{font:16px/1.6 system-ui,sans-serif;max-width:900px;margin:3rem auto;padding:0 1rem;color:#17222d}h1{color:${brand.primary}}a{color:${brand.secondary}}li{margin:.8rem 0}small{color:#526374}</style></head><body><h1>${escapeHtml(productName)} ${version} guides</h1><p>Operator and device user guides, A5 recipient quick starts and blank private credential inserts in English and Polish. Use the accepted handoff report for the status of a specific phone.</p><p>PDFs and HTML are generated from the source checkout with <code>pxv guides rebuild</code>. Credential inserts are blank templates; completed copies contain private device information.</p>${installation}<ul>${rows}</ul></body></html>`;
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(productName)} ${version} guides</title><style>body{font:16px/1.6 system-ui,sans-serif;max-width:900px;margin:3rem auto;padding:0 1rem;color:#17222d}h1{color:${brand.primary}}a{color:${brand.secondary}}li{margin:.8rem 0}small{color:#526374}</style></head><body><h1>${escapeHtml(productName)} ${version} guides</h1><p>Operator and device user guides, phone-sized recipient quick starts and blank private credential inserts in English and Polish. Use the accepted handoff report for the status of a specific phone.</p><p>PDFs and HTML are generated from the source checkout with <code>pxv guides rebuild</code>. Credential inserts are blank templates; completed copies contain private device information.</p>${installation}<ul>${rows}</ul></body></html>`;
 }
 
 async function setPrintPageBoxes(path: string, format: GuideFormat): Promise<void> {
@@ -388,6 +385,10 @@ async function renderGuidePdfs(
         }
         await document.fonts.ready;
       });
+      if (format.size === 'fold') {
+        await renderFoldPdf(page, output, destination);
+        continue;
+      }
       for (const mode of printModes) {
         await page.evaluate((selected) => {
           document.documentElement.dataset['printMode'] = selected;
@@ -403,9 +404,41 @@ async function renderGuidePdfs(
   }
 }
 
+async function renderFoldPdf(page: Page, output: string, destination: string): Promise<void> {
+  const base = output.slice(0, -extname(output).length);
+  await unlink(`${base}-a4-fold.pdf`).catch((error: unknown) => {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+  });
+  const groups: { name: string; pdf: Uint8Array }[] = [];
+  const names = editionKind(output) === 'credentials' ? ['ordinary', 'erasure'] : ['ordinary'];
+  for (const name of names) {
+    await page.evaluate((group) => {
+      document.documentElement.dataset['printMode'] = 'office';
+      document.documentElement.dataset['foldGroup'] = group;
+    }, name);
+    const pdf = await page.pdf({
+      preferCSSPageSize: true,
+      printBackground: true,
+      displayHeaderFooter: false,
+    });
+    groups.push({ name: editionKind(output) === 'quickstart' ? 'quickstart' : name, pdf });
+  }
+  const result = await imposeFoldPacket(groups);
+  await writeFile(`${base}-a4-fold.pdf`, result.pdf);
+  await mkdir(join(destination, 'qa'), { recursive: true });
+  await writeFile(
+    join(destination, 'qa', `${basename(base)}-fold.json`),
+    JSON.stringify(result.manifest, null, 2) + '\n',
+  );
+  for (const mode of printModes)
+    await unlink(`${base}-${mode}.pdf`).catch((error: unknown) => {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+    });
+}
+
 function footerOptions(productName: string, brand: GuideBrand, format: GuideFormat) {
-  const color = format.size === 'A5' ? '#333333' : brand.secondary;
-  const padding = format.size === 'A5' ? 10 : 18;
+  const color = format.size === 'fold' ? '#333333' : brand.secondary;
+  const padding = format.size === 'fold' ? 10 : 18;
   return {
     displayHeaderFooter: true,
     headerTemplate: '<span></span>',
@@ -566,7 +599,8 @@ async function renderGuideHtmlSources(
   publicFiles.push('index.html');
   if (pdfOutput)
     for (const edition of editions)
-      for (const mode of printModes) publicFiles.push(edition.outputPath.replace(/\.html$/u, `-${mode}.pdf`));
+      for (const mode of editionPdfModes(edition.outputPath))
+        publicFiles.push(edition.outputPath.replace(/\.html$/u, `-${mode}.pdf`));
   const outputs: string[] = [];
   for (const edition of guideNavigation(editions, publicFiles)) {
     const output = join(destination, edition.outputPath);
@@ -575,4 +609,8 @@ async function renderGuideHtmlSources(
     outputs.push(output);
   }
   return outputs;
+}
+
+function editionPdfModes(output: string): readonly string[] {
+  return guideFormat(output).size === 'fold' ? ['a4-fold'] : printModes;
 }

@@ -20,14 +20,14 @@ one-person test with five profiles, use the [five-profile acceptance procedure](
 | --- | --- | --- |
 | Operator: single phone and fleet | [Operator guide](guides/source/markdown/operator-en.md) | [Instrukcja operatora](guides/source/markdown/operator-pl.md) |
 | Recipient | [User guide](guides/source/markdown/user-en.md) | [Instrukcja użytkownika](guides/source/markdown/user-pl.md) |
-| A5 guide supplied with each device | [Quick start](guides/source/markdown/quickstart-en.md) | [Szybki start](guides/source/markdown/quickstart-pl.md) |
-| Private A5 insert template | [Credential insert](guides/source/markdown/credentials-en.md) | [Wkładka z danymi dostępu](guides/source/markdown/credentials-pl.md) |
+| Phone-sized guide supplied with each device | [Quick start](guides/source/markdown/quickstart-en.md) | [Szybki start](guides/source/markdown/quickstart-pl.md) |
+| Private phone-sized insert template | [Credential insert](guides/source/markdown/credentials-en.md) | [Wkładka z danymi dostępu](guides/source/markdown/credentials-pl.md) |
 
-Attach the A5 quick start and accepted handoff report to every device. Complete the
+Attach the phone-sized quick start and accepted handoff report to every device. Complete the
 credential insert privately, or use `pxv registry print-insert` for a prefilled private
-A5 PDF from the encrypted registry. Match the asset label and seal it for the recipient.
+A4 cut-and-fold PDF from the encrypted registry. Match the asset label and seal it for the recipient.
 Build with `pxv guides rebuild --policy FILE --output-dir DIRECTORY --chromium PATH`
-to adapt the A5 booklet and blank credential/recovery sheets to the installation's
+to adapt the phone-sized booklet and blank credential/recovery sheets to the installation's
 GrapheneOS user profiles. Profile details describe the intended policy; compare
 them with the actual phone and accepted report before packing.
 See [packing and printing](guides/README.md#pack-every-device) for the handoff process.

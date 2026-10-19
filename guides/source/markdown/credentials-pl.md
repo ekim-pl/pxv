@@ -12,7 +12,7 @@
 <div class="write-line">Kontakt do wsparcia bez tego telefonu</div>
 <div class="write-line">Prywatna metoda aktualizacji danych dostępu</div>
 
-**Dołącz:** stronę 2 dla każdego profilu; stronę 3 dla każdego konta lub planu odzyskiwania. Wpisz liczbę kart; nieużywane pola oznacz „nie skonfigurowano”. Stary rejestr nie zastępuje sprawdzenia zwykłego odblokowania.
+**Dołącz:** sekcję 2 dla każdego profilu; sekcję 3 dla każdego konta lub planu odzyskiwania. Wpisz liczbę kart; nieużywane pola oznacz „nie skonfigurowano”. Stary rejestr nie zastępuje sprawdzenia zwykłego odblokowania.
 
 <div class="write-line">Liczba kart profili i kont</div>
 <div class="write-line">Zasady przechowywania przez wsparcie i data przeglądu</div>
@@ -40,7 +40,7 @@ Wypełniona wkładka dotyczy jednego urządzenia. Zwykłe raporty pomijają te w
 
 Po restarcie najpierw odblokuj Owner. Profile mogą mieć różne blokady. ID Session oznacza konto komunikatora, nie użytkownika Androida ani sekret odzyskiwania. Dane odzyskiwania trzymaj w osobnym bezpiecznym magazynie.
 
-**Bez wartości przymusu i kluczy wymazania przez powiadomienie.** Ich zapis jest na stronie 4; oddziel ją od codziennych danych odblokowania.
+**Bez wartości przymusu i kluczy wymazania przez powiadomienie.** Ich zapis jest w sekcji 4; oddziel ją od codziennych danych odblokowania.
 
 <div class="page-break"></div>
 

@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 4,
+  "schemaVersion": 5,
   "kind": "guide-build-configuration",
   "editions": [
     "operator-en",
@@ -17,7 +17,7 @@
     "destination": "separate --output-dir; authoritative sources remain unchanged",
     "quickstart": "variable profile instructions and one appendix page per configured GrapheneOS user profile",
     "credentials": "paired blank ordinary credential and account/recovery sheets per configured profile; secrets are completed privately",
-    "pageCounts": "N configured profiles: 8 + N quickstart pages and 2N + 2 credential-insert pages; generic builds without policy retain 8 and 4 pages",
+    "pageCounts": "N configured profiles: 8 + N quickstart sections and 2N + 2 credential sections; generic builds retain 8 and 4 sections. Sections span panels; physical A4 sheet counts are recorded in QA.",
     "status": "intended configuration, not device verification"
   },
   "brandTheme": "assets/brand.json",
@@ -25,11 +25,30 @@
     "HTML",
     "A4 office PDF for operator and user editions",
     "216 x 303 mm print PDF with A4 trim and 3 mm bleed",
-    "A5 office PDF for quickstart and credentials editions",
-    "154 x 216 mm print PDF with A5 trim and 3 mm bleed"
+    "Landscape A4 cut-and-fold PDF for quickstart and credentials; 68 x 100 mm folded slips"
   ],
   "renderer": "@pxv/release buildDocumentation",
   "qa": "qa/manifest.json",
   "pdfX": false,
-  "printerProfile": null
+  "printerProfile": null,
+  "foldLayout": {
+    "sheetMm": [
+      297,
+      210
+    ],
+    "panelMm": [
+      68,
+      100
+    ],
+    "slipMm": [
+      136,
+      100
+    ],
+    "marginsMm": [
+      12.5,
+      5
+    ],
+    "printing": "single-sided, actual size / 100%; cut solid lines, fold dashed lines with printing inside",
+    "groups": "quickstart, ordinary credentials and erasure records use separate sheets"
+  }
 }

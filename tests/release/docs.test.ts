@@ -93,13 +93,13 @@ function browserFixture(destination: string, pdfFailure = false, wrongPrintSize 
   const page = {
     goto: vi.fn(() => Promise.resolve()),
     addStyleTag: vi.fn(() => Promise.resolve()),
-    evaluate: vi.fn((callback: () => void) => {
-      callback();
+    evaluate: vi.fn((callback: (argument?: string) => void, argument?: string) => {
+      callback(argument);
       return Promise.resolve();
     }),
     pdf: vi.fn(
       async (options: {
-        path: string;
+        path?: string;
         width?: string;
         height?: string;
         preferCSSPageSize?: boolean;
@@ -111,14 +111,16 @@ function browserFixture(destination: string, pdfFailure = false, wrongPrintSize 
         if (pdfFailure) throw new Error('Browser PDF failure');
         const document = await PDFDocument.create();
         const points = (millimeters: number) => (millimeters * 72) / 25.4;
-        const a5 = /\/(?:quickstart|credentials)-(?:en|pl)-/u.test(options.path);
-        const trim = a5 ? [148, 210] : [210, 297];
+        const folded = options.path === undefined;
+        const trim = folded && !wrongPrintSize ? [68, 100] : [210, 297];
         const media =
           options.width && !wrongPrintSize
             ? [Number.parseFloat(options.width), Number.parseFloat(options.height ?? '')]
             : trim;
         document.addPage([points(media[0] ?? 0), points(media[1] ?? 0)]);
-        await writeFile(options.path, await document.save());
+        const bytes = await document.save();
+        if (options.path) await writeFile(options.path, bytes);
+        return Buffer.from(bytes);
       },
     ),
   };
@@ -418,78 +420,60 @@ describe('public documentation generation', () => {
     await expect(readFile(join(destination, 'guide.en-print.pdf'))).rejects.toThrow();
   });
 
-  it('renders A5 recipient and credential editions with compact covers and real A5 PDF page boxes while retaining A4', async () => {
+  it('renders phone-sized panels on A4 fold sheets while retaining A4 guide formats', async () => {
     await editionSources();
-    const a5Editions = ['quickstart-en', 'quickstart-pl', 'credentials-en', 'credentials-pl'];
-    for (const name of a5Editions)
+    const foldedEditions = ['quickstart-en', 'quickstart-pl', 'credentials-en', 'credentials-pl'];
+    for (const name of foldedEditions)
       await writeFile(
         join(directory, 'guides/source/markdown', `${name}.md`),
-        '# Compact guide\n\n## 1. Begin\n\nReadable first page.\n\n<div class="page-break"></div>\n\n## 2. Keep safe\n\n<div class="write-line">Device identifier</div>\n\n<div class="credential-warning">Keep private</div>',
+        '# Compact guide\n\n## 1 Begin\n\nReadable first section.\n\n<div class="page-break"></div>\n\n## 2 Keep safe\n\n<div class="write-line">Device identifier</div>\n\n<div class="credential-warning">Keep private</div>',
       );
     const destination = join(directory, 'output');
+    await mkdir(destination);
+    await writeFile(join(destination, 'credentials-en-office.pdf'), 'obsolete');
     const fixture = browserFixture(destination);
     await buildDocumentation(directory, destination, { pdf: true, browser: { launch: fixture.launch } });
-    const points = (millimeters: number) => (millimeters * 72) / 25.4;
-    for (const name of [...a5Editions, 'operator-en', 'user-en']) {
-      const a5 = a5Editions.includes(name);
-      const [width, height] = a5 ? [148, 210] : [210, 297];
+    const points = (mm: number) => (mm * 72) / 25.4;
+    for (const name of foldedEditions) {
       const html = await readFile(join(destination, `${name}.html`), 'utf8');
-      if (a5) {
-        expect(html).toContain('class="guide-a5"');
-        expect(html).toContain('<section class="guide-cover compact-cover">');
-        expect(html).not.toContain('<img class="cover-photo"');
-        expect(html).toContain('@page pxva5office{size:148mm 210mm;');
-        expect(html).toContain('@page pxva5print{size:154mm 216mm;');
-        expect(html).toContain('font-size:10pt;line-height:1.34;color:#111');
-        expect(html).toContain('.guide-a5 .page-break{break-before:page}');
-        expect(html).toContain('.guide-a5 ol{list-style:none;counter-reset:a5-step}');
-        expect(html).toContain('.guide-a5 ol>li{position:relative;counter-increment:a5-step}');
-        expect(html).toContain('content:counter(a5-step) ".";position:absolute;left:-5mm;');
-        expect(html).toContain('border-bottom:0.3mm dotted #555');
-        expect(html).toContain('<div class="credential-warning">Keep private</div>');
-      } else
-        expect(html).toContain(
-          `<img class="cover-photo" src="assets/photos/cover-${name.split('-')[0]}.png"`,
-        );
-      const office = await PDFDocument.load(await readFile(join(destination, `${name}-office.pdf`)));
-      expect(office.getPage(0).getSize().width).toBeCloseTo(points(width ?? 0), 4);
-      expect(office.getPage(0).getSize().height).toBeCloseTo(points(height ?? 0), 4);
-      const print = await PDFDocument.load(await readFile(join(destination, `${name}-print.pdf`)));
-      const page = print.getPage(0);
-      expect(page.getMediaBox().width).toBeCloseTo(points((width ?? 0) + 6), 4);
-      expect(page.getMediaBox().height).toBeCloseTo(points((height ?? 0) + 6), 4);
-      for (const box of [page.getTrimBox(), page.getArtBox()]) {
-        expect(box.x).toBeCloseTo(points(3), 4);
-        expect(box.y).toBeCloseTo(points(3), 4);
-        expect(box.width).toBeCloseTo(points(width ?? 0), 4);
-        expect(box.height).toBeCloseTo(points(height ?? 0), 4);
-      }
-      expect(page.getBleedBox()).toEqual(page.getMediaBox());
-      expect(page.getCropBox()).toEqual(page.getMediaBox());
+      expect(html).toContain('class="guide-fold"');
+      expect(html).toContain('class="guide-cover compact-cover"');
+      expect(html).not.toContain('<img class="cover-photo"');
+      expect(html).toContain('@page pxvfold{size:68mm 100mm;');
+      expect(html).toContain('padding-bottom:8mm');
+      if (name.startsWith('credentials')) expect(html).toContain('data-fold-group="erasure"');
+      const pdf = await PDFDocument.load(await readFile(join(destination, `${name}-a4-fold.pdf`)));
+      expect(pdf.getPageCount()).toBe(name.startsWith('credentials') ? 2 : 1);
+      expect(pdf.getPage(0).getWidth()).toBeCloseTo(points(297), 4);
+      expect(pdf.getPage(0).getHeight()).toBeCloseTo(points(210), 4);
+      await expect(access(join(destination, `${name}-office.pdf`))).rejects.toThrow();
+      await expect(access(join(destination, `${name}-print.pdf`))).rejects.toThrow();
     }
+    const office = await PDFDocument.load(await readFile(join(destination, 'operator-en-office.pdf')));
+    const print = await PDFDocument.load(await readFile(join(destination, 'operator-en-print.pdf')));
+    expect(office.getPage(0).getWidth()).toBeCloseTo(points(210), 4);
+    expect(print.getPage(0).getTrimBox().width).toBeCloseTo(points(210), 4);
     const index = await readFile(join(destination, 'index.html'), 'utf8');
-    expect(index).toContain('A5 recipient quick start (EN)');
-    expect(index).toContain('A5 private credential insert (PL)');
-    expect(index).toContain('A5 office PDF');
+    expect(index).toContain('Phone-sized recipient quick start (EN)');
+    expect(index).toContain('Phone-sized private credential insert (PL)');
+    expect(index).toContain('A4 cut-and-fold PDF');
     expect(index).toContain('A4 print PDF + 3 mm bleed');
-    const a5Print = fixture.page.pdf.mock.calls.filter(([options]) => options.width === '154mm');
-    expect(a5Print).toHaveLength(4);
-    expect(a5Print.every(([options]) => options.height === '216mm')).toBe(true);
+    expect(index).not.toContain('credentials-en-office.pdf');
   });
 
-  it('removes an A5 print PDF with the wrong media dimensions', async () => {
+  it('rejects folded panels with the wrong dimensions', async () => {
     await mkdir(join(directory, 'guides/source/markdown'), { recursive: true });
     await writeFile(join(directory, 'guides/source/markdown/quickstart-en.md'), '# Quick start');
     const destination = join(directory, 'output');
     const fixture = browserFixture(destination, false, true);
     await expect(
       buildDocumentation(directory, destination, { pdf: true, browser: { launch: fixture.launch } }),
-    ).rejects.toThrow('Print renderer did not produce a 154 x 216 mm page');
-    await expect(readFile(join(destination, 'quickstart-en-print.pdf'))).rejects.toThrow();
+    ).rejects.toThrow('Fold packet source panels must be 68 x 100 mm');
+    await expect(access(join(destination, 'quickstart-en-a4-fold.pdf'))).rejects.toThrow();
     expect(fixture.browser.close).toHaveBeenCalledOnce();
   });
 
-  it('normalizes authored policy inputs into generated A5 Markdown while preserving A4 and canonical templates', async () => {
+  it('normalizes authored policy inputs into generated packet Markdown while preserving A4 and canonical templates', async () => {
     await editionSources();
     const names = ['quickstart-en', 'quickstart-pl', 'credentials-en', 'credentials-pl'];
     const templates = new Map<string, string>();

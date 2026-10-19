@@ -243,7 +243,7 @@ function registryCommand(name: string): CommandDefinition {
   return command(
     `registry ${name}`,
     name === 'print-insert'
-      ? 'Export all saved credentials to a private A5 PDF (EN/PL).'
+      ? 'Export all saved credentials to a private A4 cut-and-fold PDF (68 x 100 mm panels) (EN/PL).'
       : 'Access the encrypted local phone registry.',
     ['passphrase-file', ...(flags[name] ?? [])],
     required[name],
