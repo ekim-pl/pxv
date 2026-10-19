@@ -118,7 +118,8 @@ function workerEnvironment(): Record<string, string> {
     'PXV_BUILD_TOOLS',
     'PXV_TOOLS_DIR',
   ]) {
-    if (process.env[name]) env[name] = process.env[name];
+    const value = process.env[name];
+    if (value !== undefined) env[name] = value;
   }
 
   return env;

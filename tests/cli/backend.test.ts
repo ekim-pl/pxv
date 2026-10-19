@@ -549,6 +549,7 @@ describe('MCP/CLI backend ports and detached execution', () => {
       PXV_ADB_VENDOR_KEYS: '/adb keys',
       XDG_DATA_HOME: '/data home',
       PXV_TOOL_FDROIDCL: '/fdroidcl',
+      PXV_TOOL_JAVA: '',
     };
     Object.assign(process.env, approved, {
       ANDROID_SDK_ROOT: '/ignored',
