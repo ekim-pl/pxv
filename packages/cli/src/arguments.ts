@@ -22,6 +22,7 @@ export interface CliIo {
   out(this: void, value: string): void;
   error(this: void, value: string): void;
   confirm?(this: void, message: string): Promise<boolean>;
+  privateInput?(this: void, message: string, signal?: AbortSignal): Promise<string | undefined>;
 }
 const defaultIo: CliIo = {
   out: (value) => stdout.write(`${value}\n`),
@@ -31,7 +32,13 @@ const options: Record<string, { type: 'string' | 'boolean' }> = {};
 for (const name of stringFlags) options[name] = { type: 'string' };
 for (const name of booleanFlags) options[name] = { type: 'boolean' };
 
-export async function confirmation(io: CliIo, message: string, approved: boolean): Promise<void> {
+export async function confirmation(
+  io: CliIo,
+  message: string,
+  approved: boolean,
+  signal?: AbortSignal,
+): Promise<void> {
+  signal?.throwIfAborted();
   if (approved) return;
   if (io.confirm) {
     if (await io.confirm(message)) return;
@@ -40,7 +47,7 @@ export async function confirmation(io: CliIo, message: string, approved: boolean
   if (!stdin.isTTY) throw new Error('Review the plan and use --yes in non-interactive execution');
   const prompt = createInterface({ input: stdin, output: stderr });
   try {
-    if ((await prompt.question(`${message} [y/N] `)).trim().toLowerCase() !== 'y')
+    if ((await prompt.question(`${message} [y/N] `, signal ? { signal } : {})).trim().toLowerCase() !== 'y')
       throw new Error('Cancelled');
   } finally {
     prompt.close();

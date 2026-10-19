@@ -294,6 +294,14 @@ five stable profile bindings. Revision zero is only for the first record. Confir
 ordinary output contains metadata without secret values, revisions remain encrypted,
 and history is retained. `current` means last operator-confirmed, not live proof.
 
+Before final signoff/debugging shutdown, optionally run `device collect-oblivion`,
+`device collect-sessionid` and `device collect-simcards` with the same project/asset.
+Follow [the collector procedure](PHONE_REGISTRY.md#opt-in-pre-handoff-collection):
+check mixed app presence, private fallback entry, SIM numbers at device level,
+explicit retention despite `--yes`, and foreground restoration. Absent/skipped
+values retain their previous fields; collection with no values preserves ciphertext.
+Each successful invocation merges captured fields while retaining encrypted history.
+
 An explicit private `registry reveal` must create a new protected output file;
 compare privately and handle the plaintext under your retention policy. If testing
 printed retention, `registry print-insert` exports saved secret values to a private

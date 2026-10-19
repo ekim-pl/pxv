@@ -48,6 +48,7 @@ export const stringFlags = [
   'passphrase-file',
   'new-passphrase-file',
   'record-revision',
+  'private-insert-output',
 ] as const;
 export const booleanFlags = [
   'help',
@@ -140,6 +141,14 @@ const commands: readonly CommandDefinition[] = [
     ),
   ]),
   command('agent runs', 'List run history; follow nextCursor for additional pages.', ['cursor', 'limit']),
+  ...['oblivion', 'sessionid', 'simcards'].map((name) =>
+    command(
+      `device collect-${name}`,
+      'Privately collect device or profile identifiers into the encrypted registry with interactive confirmation.',
+      ['asset', 'transport', 'passphrase-file', 'yes'],
+      ['asset'],
+    ),
+  ),
   command('agent status', 'Read stored run evidence, checkpoints and next steps.', ['run', 'after'], ['run']),
   command('agent cancel', 'Request cancellation of an exact run.', ['run'], ['run']),
   command('agent resume', 'Continue reviewed work after its manual checkpoint.', ['run', 'yes'], ['run']),
@@ -179,6 +188,10 @@ const commands: readonly CommandDefinition[] = [
     'chromium',
     'html-only',
     'no-render',
+    'private-insert-output',
+    'asset',
+    'locale',
+    'passphrase-file',
   ]),
   ...['maintenance', 'policy-change', 'loss', 'retirement'].map((name) =>
     command(
@@ -243,7 +256,7 @@ function registryCommand(name: string): CommandDefinition {
   return command(
     `registry ${name}`,
     name === 'print-insert'
-      ? 'Export all saved credentials to a private A4 cut-and-fold PDF (68 x 100 mm panels) (EN/PL).'
+      ? 'Export compact profile-grouped credentials to a private A4 cut-and-fold PDF; typically two sheets, with overflow as needed (EN/PL).'
       : 'Access the encrypted local phone registry.',
     ['passphrase-file', ...(flags[name] ?? [])],
     required[name],

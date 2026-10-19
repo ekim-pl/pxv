@@ -56,6 +56,14 @@ Successful helper checks cover only their recorded scope. They do not promise th
 
 ## 5. Distinguish Session, Oblivion and duress
 
+An authorized operator can optionally retain your enrolled profiles' Oblivion Wipe
+keys and Session account IDs with `device collect-oblivion` and
+`device collect-sessionid`, and device SIM numbers with `device collect-simcards`.
+Agree retention first, unlock profiles privately, and explicitly confirm saving.
+Unreadable values can be entered privately or skipped. Collection creates no
+screenshots or messages and does not test erasure. Saved values can populate a
+separate private insert; shared guides contain blank templates.
+
 A **Session messenger ID** identifies a messenger account. It is not the Android profile ID, Android user number, phone number or hardware serial. Confirm which Session account belongs to each profile before sharing its ID.
 
 An **Oblivion notification-wipe key** belongs to an app installation in a particular Android profile. The requested behavior is user-described as wiping the **whole phone** when the key is received in a notification. That behavior is not qualified for a reviewed exact app/build by this project.
@@ -80,6 +88,8 @@ The record can contain:
 Flashing, profile creation, certain initial credential writes and maintenance/lifecycle changes can mark affected records stale. Previous revisions remain encrypted history. Do not use an old retrieved value as evidence that it still unlocks the phone.
 
 Ordinary reports and handoff exports omit registry values. A private retrieval deliberately creates a plaintext file that needs protection and cleanup. Registry backups and unlock material need separate protection; the operator can rotate the encryption passphrase. See [registry details](../../../docs/PHONE_REGISTRY.md) and [security boundaries](../../../SECURITY.md).
+
+Your preparer can supply a private registry-backed insert with ordinary credentials grouped by profile and destructive credentials on a separate foldable A4 sheet. It normally uses two sheets, with more for longer records. The asset label appears once per sheet. Omitted fields mean not recorded, not necessarily unconfigured; keep destructive sheets sealed separately.
 
 ## 7. Keep recoverable copies of your data
 

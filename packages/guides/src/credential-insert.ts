@@ -9,7 +9,7 @@ import {
   type PhoneRegistryValue,
 } from '@pxv/contracts';
 import { CommandRunner, readBounded, writeRegistryPrivateFile, type Runtime } from '@pxv/runtime';
-import { foldPrintingInstructions, imposeFoldPacket } from './fold-packet.js';
+import { imposeFoldPacket } from './fold-packet.js';
 import { foldHeaderStyle } from './fold-layout.js';
 import { credentialInsertStyles } from './credential-insert-styles.js';
 import { insertLabels } from './credential-insert-labels.js';
@@ -24,19 +24,10 @@ interface CredentialInsertWriteOptions extends CredentialInsertOptions {
   chromiumExecutable: string;
   runtime?: Runtime;
 }
+type InsertGroup = 'ordinary' | 'erasure';
 interface InsertField {
   label: string;
-  value?: string;
   field?: PhoneRegistryValue | undefined;
-  blank?: boolean;
-}
-interface InsertPage {
-  sectionNumber: number;
-  sectionTitle: string;
-  context: string[];
-  body: string;
-  group: 'ordinary' | 'erasure';
-  cover?: boolean;
 }
 
 function escape(value: string): string {
@@ -48,300 +39,182 @@ function escape(value: string): string {
     .replaceAll("'", '&#39;');
 }
 
-/** Fixed-width visual lines preserve whitespace and bound every page's content. */
-function lines(value: string, width = 26): string[] {
-  return value.split(/\r\n|\r|\n/u).flatMap((line) => {
-    const chars = Array.from(line.replaceAll('\t', '    '));
-    const result: string[] = [];
-    for (let i = 0; i < chars.length; i += width) result.push(chars.slice(i, i + width).join(''));
-    return result.length ? result : [''];
-  });
+type InsertLabels = (typeof insertLabels)[keyof typeof insertLabels];
+const timestamp = (value: string): string => value.replace('T', ' ').replace(/\.000(?=Z|[+-])/u, '');
+
+function metadata(field: PhoneRegistryValue, t: InsertLabels): string {
+  return [
+    t[field.state],
+    t.updated + ': ' + timestamp(field.updatedAt),
+    ...(field.confirmedAt ? [t.confirmed + ': ' + timestamp(field.confirmedAt)] : []),
+  ].join('\n');
+}
+function status(text: string): string {
+  return '<p class="state">' + escape(text).replaceAll('\n', '<br>') + '</p>';
 }
 
-function estimateLines(value: string, width = 32): number {
-  return Math.max(1, Math.ceil(Array.from(value).length / width));
+class InsertRenderer {
+  private readonly t: InsertLabels;
+  private readonly pageStyles: string[] = [];
+  constructor(
+    private readonly record: PhoneRegistryRecord,
+    private readonly options: CredentialInsertOptions,
+    private readonly locale: 'en' | 'pl',
+  ) {
+    this.t = insertLabels[locale];
+  }
+
+  render(group?: InsertGroup): string {
+    const body = (group !== 'erasure' ? this.ordinary() : '') + (group !== 'ordinary' ? this.erasure() : '');
+    return (
+      '<!doctype html><html lang="' +
+      this.locale +
+      '"><head><meta charset="utf-8">' +
+      '<meta http-equiv="Content-Security-Policy" content="default-src \'none\'; style-src \'unsafe-inline\'">' +
+      '<title>' +
+      escape(this.t.title) +
+      '</title><style>' +
+      credentialInsertStyles +
+      this.pageStyles.join('') +
+      '</style></head><body>' +
+      body +
+      '</body></html>'
+    );
+  }
+
+  private heading(title: string, identity: string, common: string | undefined, mixed: boolean): string {
+    return (
+      '<h2 class="section-title">' +
+      escape(title) +
+      '</h2>' +
+      (identity ? '<p class="identity">' + escape(identity) + '</p>' : '') +
+      (common ? status((mixed ? this.t.metadataDefault + '\n' : '') + common) : '')
+    );
+  }
+
+  private section(title: string, identity: string, fields: InsertField[], intro = ''): string {
+    const pageName = 'profile' + this.pageStyles.length;
+    // Margin boxes retain identity even when a single long value crosses many panels.
+    if (identity) this.pageStyles.push(foldHeaderStyle(pageName, { lines: [title, identity] }));
+    const recorded = fields.filter((entry): entry is InsertField & { field: PhoneRegistryValue } =>
+      Boolean(entry.field),
+    );
+    const counts = new Map<string, number>();
+    for (const { field } of recorded) {
+      const key = metadata(field, this.t);
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
+    const common = [...counts].sort((a, b) => b[1] - a[1])[0]?.[0];
+    const rows = recorded
+      .map(({ label, field }) => {
+        const own = metadata(field, this.t);
+        return (
+          '<tr><td><article class="entry"><h3>' +
+          escape(label) +
+          '</h3>' +
+          (own !== common ? status(own) : '') +
+          '<pre class="value">' +
+          escape(field.value) +
+          '</pre></article></td></tr>'
+        );
+      })
+      .join('');
+    const attributes = identity ? ' profile-section" style="page:' + pageName : '';
+    return (
+      '<table class="credential-section' +
+      attributes +
+      '"><thead><tr><th>' +
+      intro +
+      this.heading(title, identity, common, counts.size > 1) +
+      '</th></tr></thead><tbody>' +
+      (rows || '<tr><td><p class="empty">' + escape(this.t.empty) + '</p></td></tr>') +
+      '</tbody></table>'
+    );
+  }
+
+  private profile(profile: PhoneRegistryProfile, destructive: boolean, intro = ''): string {
+    const t = this.t;
+    return this.section(
+      t.profile + ': ' + profile.user.name,
+      profile.profileId + ' · ' + (profile.user.userId === 0 ? t.owner : t.secondary),
+      destructive
+        ? [{ label: t.oblivionNotificationWipeKey, field: profile.fields.oblivionNotificationWipeKey }]
+        : [
+            { label: t.pin, field: profile.fields.pin },
+            { label: t.password, field: profile.fields.password },
+            { label: t.phoneNumber, field: profile.fields.phoneNumber },
+            { label: t.sessionMessengerId, field: profile.fields.sessionMessengerId },
+            { label: t.protonVpnUsername, field: profile.fields.protonVpnUsername },
+            { label: t.protonVpnPassword, field: profile.fields.protonVpnPassword },
+          ],
+      intro,
+    );
+  }
+
+  private ordinary(): string {
+    const { t, record, options } = this;
+    const summary = [
+      [t.model, options.model ? options.model + ' (' + record.codename + ')' : record.codename],
+      [t.revision, String(record.revision)],
+      [t.exported, timestamp(options.exportedAt)],
+      [t.support, options.support],
+    ]
+      .map(([label, value]) => '<div><strong>' + escape(label!) + ':</strong> ' + escape(value!) + '</div>')
+      .join('');
+    return (
+      '<section data-fold-group="ordinary"><h1>' +
+      escape(t.title) +
+      '</h1>' +
+      '<div class="summary">' +
+      summary +
+      '</div><p class="note">' +
+      escape(t.instructions) +
+      '</p>' +
+      (record.fields.phoneNumber
+        ? this.section(t.device, '', [{ label: t.phoneNumber, field: record.fields.phoneNumber }])
+        : '') +
+      (record.profiles.length
+        ? record.profiles.map((profile) => this.profile(profile, false)).join('')
+        : '<p class="empty">' + escape(t.empty) + '</p>') +
+      '</section>'
+    );
+  }
+
+  private erasure(): string {
+    const { t, record } = this;
+    const profiles = record.profiles.filter((profile) => profile.fields.oblivionNotificationWipeKey);
+    const intro =
+      '<h2 class="group-title">Oblivion</h2><p class="note">' + escape(t.oblivionInstructions) + '</p>';
+    return (
+      '<section data-fold-group="erasure"><h1 class="credential-warning">' +
+      escape(t.erasure) +
+      '</h1><p class="note warning">' +
+      escape(t.destructive) +
+      '</p><p class="note">' +
+      escape(t.missingNote) +
+      '</p>' +
+      this.section(t.duress, '', [
+        { label: t.duressPin, field: record.fields.duressPin },
+        { label: t.duressPassword, field: record.fields.duressPassword },
+      ]) +
+      (profiles.length
+        ? profiles.map((profile, index) => this.profile(profile, true, index === 0 ? intro : '')).join('')
+        : intro + '<p class="empty">' + escape(t.empty) + '</p>') +
+      '</section>'
+    );
+  }
 }
 
 /** @internal Pure private rendering contract; callers supply effective binding states. */
 export function renderCredentialInsert(
   record: PhoneRegistryRecord,
   options: CredentialInsertOptions,
+  group?: InsertGroup,
 ): string {
   validatePhoneRegistryRecord(record);
   const locale = options.locale ?? 'en';
   if (locale !== 'en' && locale !== 'pl') throw new Error('Unsupported insert locale');
-  const t = insertLabels[locale];
-  const pages: InsertPage[] = [];
-  const deviceContext = [t.deviceContext];
-
-  const addPage = (
-    sectionNumber: number,
-    sectionTitle: string,
-    context: string[],
-    body: string,
-    group: 'ordinary' | 'erasure',
-    cover = false,
-  ) => {
-    pages.push({ sectionNumber, sectionTitle, context, body, group, ...(cover ? { cover: true } : {}) });
-  };
-
-  const addFieldPages = (
-    sectionNumber: number,
-    sectionTitle: string,
-    context: string[],
-    fields: InsertField[],
-    group: 'ordinary' | 'erasure',
-  ) => {
-    let body = '';
-    let usedMm = 0;
-    const flush = () => {
-      if (body) addPage(sectionNumber, sectionTitle, context, body, group);
-      body = '';
-      usedMm = 0;
-    };
-
-    for (const entry of fields) {
-      if (entry.blank) {
-        const cost = 10 + estimateLines(entry.label) * 4.4;
-        if (body && usedMm + cost > 42) flush();
-        body += '<div class="write-line">' + escape(entry.label) + '</div>';
-        usedMm += cost;
-        continue;
-      }
-
-      const field = entry.field;
-      const valueLines = lines(field?.value ?? entry.value ?? t.missing);
-      for (let start = 0; start < valueLines.length; start += 4) {
-        const chunk = valueLines.slice(start, start + 4);
-        const label = entry.label + (start ? ' (' + t.continued + ')' : '');
-        const status = field
-          ? [
-              t[field.state],
-              t.updated + ': ' + field.updatedAt,
-              ...(field.confirmedAt ? [t.confirmed + ': ' + field.confirmedAt] : []),
-            ]
-          : [];
-        const labelCost = estimateLines(label) * 4.3;
-        const statusCost = status.reduce((total, line) => total + estimateLines(line) * 3.3, 0);
-        const cost = 2 + labelCost + statusCost + chunk.length * 4.5;
-        if (body && usedMm + cost > 42) flush();
-        body +=
-          '<article class="entry"><h3>' +
-          escape(label) +
-          '</h3>' +
-          (status.length ? '<p class="state">' + status.map(escape).join('<br>') + '</p>' : '') +
-          '<pre class="value">' +
-          chunk.map(escape).join('\n') +
-          '</pre></article>';
-        usedMm += cost;
-      }
-    }
-    flush();
-  };
-
-  const addIntro = (
-    sectionNumber: number,
-    sectionTitle: string,
-    context: string[],
-    body: string,
-    group: 'ordinary' | 'erasure',
-  ) => addPage(sectionNumber, sectionTitle, context, body, group);
-
-  addPage(
-    1,
-    t.section1,
-    deviceContext,
-    '<p class="private-stamp">' +
-      escape(t.privateWhenComplete) +
-      '</p><h1>' +
-      escape(t.title) +
-      '</h1><p>' +
-      escape(foldPrintingInstructions(locale)) +
-      '</p>',
-    'ordinary',
-    true,
-  );
-
-  addIntro(
-    1,
-    t.section1,
-    deviceContext,
-    '<p><strong>' + escape(t.privateWhenComplete) + '.</strong> ' + escape(t.instructions) + '</p>',
-    'ordinary',
-  );
-
-  const deviceFields: InsertField[] = [
-    { label: t.asset, value: record.assetId },
-    { label: t.model, value: options.model ? options.model + ' (' + record.codename + ')' : record.codename },
-    { label: t.revision, value: String(record.revision) },
-    { label: t.exported, value: options.exportedAt },
-    { label: t.support, value: options.support },
-    { label: t.recipient, blank: true },
-    { label: t.handoffDate, blank: true },
-    { label: t.recovery, blank: true },
-    { label: t.supportRoute, blank: true },
-    { label: t.updateMethod, blank: true },
-    { label: t.enclosedSheets, blank: true },
-    { label: t.retentionReview, blank: true },
-    { label: t.devicePhone, field: record.fields.phoneNumber },
-  ];
-  addFieldPages(1, t.section1, deviceContext, deviceFields, 'ordinary');
-
-  function profileContext(profile: PhoneRegistryProfile): string[] {
-    return [
-      t.profile + ': ' + profile.user.name,
-      t.id + ': ' + profile.profileId,
-      profile.user.userId === 0 ? t.owner : t.secondary,
-    ];
-  }
-
-  for (const profile of record.profiles) {
-    const context = profileContext(profile);
-    const credentialType = [
-      ...(profile.fields.pin ? [t.pinType] : []),
-      ...(profile.fields.password ? [t.passwordType] : []),
-    ];
-    const normalFields: InsertField[] = [
-      { label: t.lockType, value: credentialType.length ? credentialType.join(t.typeSeparator) : t.missing },
-    ];
-    if (profile.fields.pin && profile.fields.password) {
-      normalFields.push(
-        { label: t.pin, field: profile.fields.pin },
-        { label: t.password, field: profile.fields.password },
-      );
-    } else {
-      normalFields.push({
-        label: t.unlockValue,
-        field: profile.fields.pin ?? profile.fields.password,
-      });
-    }
-    normalFields.push({ label: t.phoneNumber, field: profile.fields.phoneNumber });
-
-    addIntro(
-      2,
-      t.section2,
-      context,
-      '<p>' +
-        escape(t.profileInstructions) +
-        '</p>' +
-        (profile.user.userId === 0 ? '<p>' + escape(t.ownerRestart) + '</p>' : '') +
-        '<p><strong>' +
-        escape(t.noDestructiveTitle) +
-        '</strong> ' +
-        escape(t.noDestructive) +
-        '</p>',
-      'ordinary',
-    );
-    addFieldPages(2, t.section2, context, normalFields, 'ordinary');
-
-    addIntro(3, t.section3, context, '<p>' + escape(t.accountInstructions) + '</p>', 'ordinary');
-    addFieldPages(
-      3,
-      t.section3,
-      context,
-      [
-        { label: t.sessionMessengerId, field: profile.fields.sessionMessengerId },
-        { label: t.protonVpnUsername, field: profile.fields.protonVpnUsername },
-        { label: t.protonVpnPassword, field: profile.fields.protonVpnPassword },
-        { label: t.accountStoreReference, blank: true },
-        { label: t.mfaRecovery, blank: true },
-        { label: t.recoveryStorage, blank: true },
-        { label: t.backupMethod, blank: true },
-        { label: t.backupCoverage, blank: true },
-        { label: t.backupLimitations, blank: true },
-        { label: t.backupFrequency, blank: true },
-        { label: t.restoreTest, blank: true },
-        { label: t.recoveryContact, blank: true },
-      ],
-      'ordinary',
-    );
-  }
-
-  addIntro(
-    4,
-    t.section4,
-    deviceContext,
-    '<div class="credential-warning"><strong>' +
-      escape(t.destructiveTitle) +
-      '</strong><br>' +
-      escape(t.destructive) +
-      '</div>',
-    'erasure',
-  );
-  addIntro(4, t.section4, deviceContext, '<p>' + escape(t.erasureInstructions) + '</p>', 'erasure');
-  addIntro(4, t.section4, deviceContext, '<p>' + escape(t.oblivionInstructions) + '</p>', 'erasure');
-  addFieldPages(
-    4,
-    t.section4,
-    deviceContext,
-    [
-      { label: t.duressPin, field: record.fields.duressPin },
-      { label: t.duressPassword, field: record.fields.duressPassword },
-      { label: t.duressStatus, blank: true },
-      { label: t.configurationDate, blank: true },
-      { label: t.erasureProcedure, blank: true },
-    ],
-    'erasure',
-  );
-  for (const profile of record.profiles)
-    addFieldPages(
-      4,
-      t.section4,
-      profileContext(profile),
-      [
-        { label: t.oblivionStatus, blank: true },
-        { label: t.oblivionVersion, blank: true },
-        { label: t.oblivionNotificationWipeKey, field: profile.fields.oblivionNotificationWipeKey },
-        { label: t.oblivionKeyReference, blank: true },
-        { label: t.erasureProcedure, blank: true },
-      ],
-      'erasure',
-    );
-
-  return privateHtml(pages, record.assetId, locale);
-}
-
-function privateHtml(pages: InsertPage[], assetId: string, locale: 'en' | 'pl'): string {
-  const t = insertLabels[locale];
-  const pageStyles = pages
-    .map((page, i) => {
-      const headerLines = page.cover
-        ? []
-        : [
-            page.sectionNumber + ' ' + page.sectionTitle,
-            t.sectionContinued,
-            ...page.context,
-            t.asset + ': ' + assetId,
-          ];
-      return foldHeaderStyle('private' + i, { lines: headerLines, assetField: t.assetField });
-    })
-    .join('');
-  const sections = pages
-    .map(
-      (page, i) =>
-        '<section class="private-panel' +
-        (page.cover ? ' cover' : '') +
-        '" style="page:private' +
-        i +
-        '" data-fold-group="' +
-        (page.group === 'erasure' ? 'erasure' : 'ordinary') +
-        '">' +
-        page.body +
-        '</section>',
-    )
-    .join('');
-  return (
-    '<!doctype html><html lang="' +
-    locale +
-    '"><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src \'none\'; style-src \'unsafe-inline\'"><title>' +
-    escape(t.title) +
-    '</title><style>' +
-    credentialInsertStyles +
-    pageStyles +
-    '</style></head><body>' +
-    sections +
-    '</body></html>'
-  );
+  return new InsertRenderer(record, options, locale).render(group);
 }
 
 /** Only the PDF survives. Browser errors are deliberately replaced to avoid secret diagnostics. */
@@ -353,14 +226,18 @@ export async function writeCredentialInsert(
   let temporary: string | undefined;
   let bytes: Buffer | undefined;
   let imposedBytes: Uint8Array | undefined;
-  const groups: { name: string; pdf: Uint8Array }[] = [];
+  const groups: { name: string; pdf: Uint8Array; sheetHeader: string }[] = [];
   try {
     if (!options.chromiumExecutable) throw new Error();
-    const html = renderCredentialInsert(record, options);
     temporary = await mkdtemp(join(tmpdir(), 'pxv-private-insert-'));
-    for (const name of ['ordinary', 'erasure']) {
+    for (const name of ['ordinary', 'erasure'] as const) {
+      const html = renderCredentialInsert(record, options, name);
       bytes = await renderPrivatePanels(temporary, name, html, options);
-      groups.push({ name, pdf: bytes });
+      groups.push({
+        name,
+        pdf: bytes,
+        sheetHeader: insertLabels[options.locale ?? 'en'].asset + ': ' + record.assetId,
+      });
     }
     const imposed = await imposeFoldPacket(groups);
     imposedBytes = imposed.pdf;
@@ -386,11 +263,7 @@ async function renderPrivatePanels(
 ): Promise<Buffer> {
   const source = join(temporary, 'insert-' + name + '.html');
   const output = join(temporary, 'insert-' + name + '.pdf');
-  const hidden = name === 'ordinary' ? 'erasure' : 'ordinary';
-  await writeRegistryPrivateFile(
-    source,
-    Buffer.from(html.replace('</style>', '[data-fold-group="' + hidden + '"]{display:none}</style>')),
-  );
+  await writeRegistryPrivateFile(source, Buffer.from(html));
   const result = await (options.runtime ?? new CommandRunner()).run(
     [
       options.chromiumExecutable,

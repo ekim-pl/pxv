@@ -49,7 +49,7 @@ snapshots. Values are read only during execution and can change privately before
 resume. Defaults remain initial-only and require recipient verification/replacement.
 
 Authorized support retention uses the separate [encrypted phone registry](docs/PHONE_REGISTRY.md).
-Its last-confirmed operator claims are not live credential measurements. Values and
+Its current states describe the last operator confirmation. Values and
 history stay encrypted at rest; ordinary outputs project only presence/state
 metadata, and explicit retrieval writes a new private file. Secrets never enter
 normal SQLite records, plans, audit events, MCP outputs or handoff artifacts.
@@ -57,6 +57,19 @@ Provisioning invalidates affected registry bindings before credential-changing
 attempts; private on-phone changes still require an operator update. Retain encrypted
 backups and unlock material separately. The trusted local OS and JavaScript memory
 remain outside guaranteed erasure.
+
+The optional `device collect-oblivion`, `device collect-sessionid` and
+`device collect-simcards` commands share project/device ownership, interactive
+retention confirmation even with `--yes`, and atomic encrypted registry merging.
+App collection checks trusted signing identities and enrolled profile identities;
+SIM collection stores numbers once at device level. Unreadable values permit hidden
+manual entry or skipping. No screenshots, raw UI hierarchies or plaintext collection
+files are retained. Foreground recovery obligations survive interrupted app
+collection, including existing Oblivion obligations. Values remain last-confirmed
+operator claims; collection never sends keys or establishes erasure capability.
+Both private insert entry points use the same protected registry export. Guide
+publishing receives no registry values or passphrase; its shared artifacts remain
+blank and the populated PDF must use a separate private destination.
 
 Private staged configuration is declared and digest-bound to its recipe. Without an
 accepted file-picker capability, the workflow requests complete manual import before

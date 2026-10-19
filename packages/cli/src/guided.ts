@@ -72,6 +72,23 @@ export function guidedNextSteps(
     locale === 'pl'
       ? 'Sprawdź aktualny raport, wykonaj wymagane kontrole i potwierdź je osobnymi poleceniami attest przed finalizacją.'
       : 'Read the current report, perform the required checks and record each with attest before finalization.',
+    ...optionalCollectionSteps(product, locale, scope, assetId),
+  ];
+}
+
+function optionalCollectionSteps(
+  product: ProductDescriptor,
+  locale: 'en' | 'pl',
+  scope: string,
+  assetId: string,
+): string[] {
+  return [
+    locale === 'pl'
+      ? 'Po konfiguracji aplikacji, przed końcowym zatwierdzeniem i wyłączeniem debugowania, opcjonalnie zapisz dane przez collect-oblivion, collect-sessionid i collect-simcards. Najpierw zainicjuj szyfrowany rejestr i uzgodnij przechowywanie.'
+      : 'After private app setup and before final signoff/debugging shutdown, optionally retain values with collect-oblivion, collect-sessionid and collect-simcards. Initialize the encrypted registry and agree retention first.',
+    ...['oblivion', 'sessionid', 'simcards'].map(
+      (name) => `${product.command} device collect-${name} --asset ${quote(assetId)} ${scope}`,
+    ),
   ];
 }
 

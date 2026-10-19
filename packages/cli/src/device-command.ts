@@ -5,6 +5,14 @@ import { hostControlRoot, readBounded, recoveryReservations } from '@pxv/runtime
 import type { ApplicationCliContext } from './arguments.js';
 import { confirmation } from './arguments.js';
 import { guidedNextSteps, renderProjectGuide } from './guided.js';
+import { collectCommand } from './collect-command.js';
+import { collectOblivionCommand } from './collect-oblivion-command.js';
+
+const collectionCommands = new Map([
+  ['collect-oblivion', collectOblivionCommand],
+  ['collect-sessionid', collectCommand],
+  ['collect-simcards', collectCommand],
+]);
 
 function selectedTargets(context: ApplicationCliContext): SelectedTarget[] {
   if (context.section !== 'device' && context.section !== 'fleet')
@@ -184,6 +192,8 @@ export async function deviceCommand(context: ApplicationCliContext): Promise<num
   const observed = await observationCommand(context, selected);
   if (observed !== undefined) return observed;
   const target = selected[0]!;
+  const collector = collectionCommands.get(context.command ?? '');
+  if (collector) return collector(context, target);
   if (['attest', 'finalize', 'recover'].includes(context.command ?? '') && selected.length !== 1)
     throw new Error('Attestation, finalization and recovery require one exact asset');
   if (context.command === 'attest') return attest(context, target);

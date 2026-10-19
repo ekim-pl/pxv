@@ -30,13 +30,13 @@ import {
   writeRegistryPrivateFile,
   type Store,
 } from '@pxv/runtime';
-import { writeCredentialInsert } from '@pxv/guides';
 import { access } from 'node:fs/promises';
 import type { ProjectCliContext } from './arguments.js';
 import { confirmation } from './arguments.js';
 import { registryPassword } from './registry-password.js';
 import { registryCommitHooks } from './registry-commit.js';
 import { registryOutputPath } from './registry-output.js';
+import { exportRegistryInsert } from './registry-insert.js';
 
 function requestedAsset(context: ProjectCliContext): string {
   if (context.flag('all') || context.values['group'] !== undefined)
@@ -165,33 +165,6 @@ async function revealRecord(
   context.output({ exported: true, assetId, recordRevision: record.revision, output });
 }
 
-async function printInsert(
-  context: ProjectCliContext,
-  store: Store,
-  document: PhoneRegistryDocument,
-): Promise<void> {
-  const device = selectedAsset(context);
-  const locale = context.value('locale', 'en');
-  if (locale !== 'en' && locale !== 'pl') throw new Error('Invalid locale');
-  const output = registryOutputPath(context);
-  if (!output.toLowerCase().endsWith('.pdf')) throw new Error('Insert output must be a PDF file');
-  const saved = currentRecord(document, device.assetId);
-  const record = inspectRegistryBinding(
-    saved,
-    await readRegistryGeneration(store, saved),
-    context.project.inventory,
-  );
-  const support = context.project.product.support;
-  await writeCredentialInsert(record, output, {
-    locale,
-    model: device.model,
-    exportedAt: new Date().toISOString(),
-    support: `${support.name}: ${support.email} · ${support.url}`,
-    chromiumExecutable: context.value('chromium'),
-  });
-  context.output({ exported: true, assetId: device.assetId, recordRevision: record.revision, output });
-}
-
 async function readCommand(
   context: ProjectCliContext,
   store: Store,
@@ -287,7 +260,6 @@ async function unlockedCommand(
   }
   if (context.command === 'update')
     await updateRecord(context, store, path, password, document, revision, anchor);
-  else if (context.command === 'print-insert') await printInsert(context, store, document);
   else if (context.command === 'reveal') await revealRecord(context, store, document);
   else await readCommand(context, store, document);
 }
@@ -299,6 +271,10 @@ export async function registryCommand(context: ProjectCliContext): Promise<numbe
     )
   )
     throw new Error('Unknown registry command');
+  if (context.command === 'print-insert') {
+    await exportRegistryInsert(context);
+    return 0;
+  }
   const password = await registryPassword(context, false, context.command === 'init');
   try {
     const path = await containedPath(context.project.root, 'secrets/phone-registry.pxv', false);

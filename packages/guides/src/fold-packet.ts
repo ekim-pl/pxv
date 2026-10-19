@@ -3,6 +3,13 @@ import type { PDFFont, PDFPage } from 'pdf-lib';
 import { foldLayout } from './fold-layout.js';
 
 const pt = (mm: number): number => (mm * 72) / 25.4;
+interface FoldGroup {
+  name: string;
+  pdf: Uint8Array;
+  /** Optional populated identity, drawn once in the top margin of each A4 sheet. */
+  sheetHeader?: string;
+}
+
 export interface FoldPlacement {
   group: string;
   sheet: number;
@@ -23,7 +30,7 @@ export interface FoldManifest {
 
 /** Groups always start on fresh sheets. Coordinates use the PDF bottom-left origin. */
 export async function imposeFoldPacket(
-  groups: { name: string; pdf: Uint8Array }[],
+  groups: FoldGroup[],
 ): Promise<{ pdf: Uint8Array; manifest: FoldManifest }> {
   if (!groups.length) throw new Error('Fold packet requires nonempty groups');
   const output = await PDFDocument.create();
@@ -43,7 +50,7 @@ export async function imposeFoldPacket(
 
 async function imposeGroup(
   output: PDFDocument,
-  group: { name: string; pdf: Uint8Array },
+  group: FoldGroup,
   manifest: FoldManifest,
   font: PDFFont,
   slipOffset: number,
@@ -57,10 +64,20 @@ async function imposeGroup(
     source,
     pages.map((_, index) => index),
   );
+  // Courier keeps even the maximum 128-character asset ID readable within the sheet margin.
+  const headerFont = group.sheetHeader ? await output.embedFont(StandardFonts.Courier) : font;
   const perSheet = foldLayout.grid.columns * foldLayout.grid.rows;
   for (let start = 0; start < copied.length; start += perSheet) {
     const sheet = output.addPage([pt(foldLayout.sheetMm[0]), pt(foldLayout.sheetMm[1])]);
     manifest.sheets++;
+    if (group.sheetHeader) {
+      sheet.drawText(group.sheetHeader, {
+        x: pt(foldLayout.marginsMm[0]),
+        y: pt(foldLayout.sheetMm[1] - 3.5),
+        size: foldLayout.typography.metadataPt,
+        font: headerFont,
+      });
+    }
     for (let slot = 0; slot < perSheet; slot++) {
       const x = foldLayout.marginsMm[0] + (slot % foldLayout.grid.columns) * foldLayout.panelMm[0];
       const y =

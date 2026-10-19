@@ -128,6 +128,8 @@ Po wygaśnięciu przeglądu `agent refresh --run RUN_ID` przygotowuje pozostałe
 
 ## 7. Sprawdź telefon i przekaż go odbiorcy
 
+Przed końcowym zatwierdzeniem możesz zapisać uzgodnione dane trzema opcjonalnymi poleceniami odczytu z rozdziału 9. Zakończ odczyt przed wyłączeniem debugowania.
+
 Odczytaj aktualne wymagania i zapisany stan gotowości, a następnie wykonaj rzeczywiste kontrole:
 
 ```sh
@@ -179,6 +181,21 @@ Drugie polecenie przygotowuje nowe plany i prosi o potwierdzenie. Najpierw przec
 
 ## 9. Zachowuj aktualne dane do uprawnionego wsparcia
 
+Po prywatnej konfiguracji aplikacji, przed końcowym zatwierdzeniem i wyłączeniem
+debugowania, możesz opcjonalnie uruchomić `device collect-oblivion`,
+`device collect-sessionid` i `device collect-simcards`, każde z
+`--project-root "$P" --asset "$ASSET"`. Najpierw zainicjuj rejestr. Odczyt aplikacji
+obejmuje zarejestrowane profile, sprawdza podpisy i wymaga prywatnego odblokowania;
+numery SIM są zapisywane raz dla urządzenia. Klucz Oblivion pochodzi z
+`net.oblivion.wipe`, osobnej aplikacji od `org.bepass.oblivion` w pakietach startowych.
+Otwarcie może włączyć wyzwalacze wymazania; potwierdź je dopiero po konfiguracji.
+Nieczytelne wartości można wpisać w ukrytym monicie lub jawnie pominąć. Przejrzyj
+wyniki i potwierdź zapis; `--yes` nie omija potwierdzeń. Zapis SIM zastępuje całą
+listę numerów urządzenia. Polecenia nie tworzą zrzutów ekranu ani wiadomości.
+Zmiana tożsamości lub błąd przywracania profilu blokuje zapis; zobacz
+[odczyt i odzyskiwanie](../../../docs/PHONE_REGISTRY.md#opt-in-pre-handoff-collection).
+Finalizacja nie wymaga tych opcjonalnych poleceń.
+
 Lokalny szyfrowany rejestr łączy identyfikator zasobu, numer seryjny sprzętu i codename z trwałymi tożsamościami profili Androida. Może przechowywać numer telefonu i parę PIN/hasło przymusu urządzenia oraz PIN/hasło, klucz Oblivion, identyfikator komunikatora Session, login/hasło Proton VPN i opcjonalny numer telefonu każdego profilu. Współdzielone konta zapisuj jawnie; identyfikator Session nie jest identyfikatorem użytkownika Androida.
 
 ```sh
@@ -191,6 +208,10 @@ pxv registry show --project-root "$P" --asset "$ASSET"
 Rewizja zero służy wyłącznie do pierwszego wpisu; przy zmianie podaj rewizję z `show`. Aktualizacja zastępuje cały bieżący rekord telefonu i zachowuje wszystkie wcześniejsze rewizje w szyfrowanej historii. Stany to `initial`, `current`, `unknown` i `stale`; `current` oznacza ostatnie jawne potwierdzenie operatora, a nie automatyczny odczyt z telefonu. Po prywatnej zmianie danych uzgodnij aktualizację rejestru.
 
 Odblokowanie odbywa się w ukrytym lokalnym monicie. Prywatne wejścia i wyniki wymagają własnego pliku `0600` w katalogu `0700`. `list`, `show` i `history` pomijają wartości; `reveal --asset ID --output NOWY_PRYWATNY_PLIK` celowo zapisuje tekst jawny. `rekey` zmienia hasło szyfrowania. `reconcile` jawnie przyjmuje przywróconą kopię lub przerwany zapis, dodając nieaktualne rewizje; następnie ponownie potwierdź aktualne dane. Najpierw przeczytaj [zasady rejestru, historii i odzyskiwania](../../../docs/PHONE_REGISTRY.md).
+
+Prywatną wkładkę z zapisanymi danymi utworzysz poleceniem `pxv registry print-insert`, podając zasób, nowy prywatny plik PDF i lokalny Chromium. Zwarty eksport grupuje zwykłe dane według profilu, a dane destrukcyjne zaczyna na osobnym arkuszu A4 do wycięcia i złożenia. Typowy wpis mieści się na dwóch arkuszach; dłuższy zajmuje więcej bez skracania wartości ani zmniejszania ich pisma. Identyfikator pojawia się raz na arkuszu; puste formularze odzyskiwania są pomijane. Zobacz [instrukcję eksportu rejestru](../../../docs/PHONE_REGISTRY.md#prefilled-private-phone-sized-insert).
+
+Przebudowa poradników może utworzyć ten sam prywatny PDF przez `--private-insert-output PLIK --project-root KATALOG --asset ID --output-dir KATALOG --chromium ŚCIEŻKA`. Używa polityki projektu; prywatny wynik musi być poza wspólnym katalogiem poradników. Wspólne pliki zachowują puste formularze.
 
 Flashowanie, tworzenie profilu, zapisy domyślnych blokad i zdarzenia cyklu życia unieważniają odpowiednie powiązania; stare wartości pozostają w historii. Polecenia rejestru są lokalne i offline; nie konfigurują telefonu ani nie dostarczają sekretów do konfiguracji. Użytkownik opisał klucz powiadomienia Oblivion, przypisany do profilu, jako wymazujący cały telefon; zachowanie nie ma kwalifikacji dla konkretnej aplikacji i kompilacji. Oddzielaj te klucze od przymusu GrapheneOS; nigdy nie umieszczaj prawdziwych kluczy w powiadomieniach, logach, zwykłych eksportach ani testach.
 

@@ -56,6 +56,14 @@ Wynik pomocnika obejmuje wyłącznie zapisany zakres kontroli. Nie gwarantuje te
 
 ## 5. Rozróżniaj Session, Oblivion i przymus
 
+Uprawniony operator może opcjonalnie zapisać klucze Oblivion Wipe i identyfikatory
+Session zarejestrowanych profili poleceniami `device collect-oblivion` i
+`device collect-sessionid`, a numery SIM urządzenia przez `device collect-simcards`.
+Najpierw uzgodnij przechowywanie, prywatnie odblokuj profile i jawnie potwierdź zapis.
+Nieczytelne wartości można wpisać prywatnie lub pominąć. Odczyt nie tworzy zrzutów
+ekranu ani wiadomości i nie testuje wymazania. Zapisane dane mogą wypełnić osobną
+prywatną wkładkę; wspólne poradniki zawierają puste formularze.
+
 **Identyfikator komunikatora Session** wskazuje konto komunikatora. Nie jest identyfikatorem profilu Androida, numerem użytkownika, numerem telefonu ani numerem seryjnym sprzętu. Przed udostępnieniem ID sprawdź, do którego konta i profilu należy.
 
 **Klucz wymazania przez powiadomienie Oblivion** należy do instalacji aplikacji w konkretnym profilu Androida. Użytkownik opisał wymagane zachowanie jako wymazanie **całego telefonu**, gdy klucz znajdzie się w odebranym powiadomieniu. Projekt nie zakwalifikował tego zachowania dla sprawdzonej, konkretnej aplikacji i kompilacji.
@@ -80,6 +88,8 @@ Wpis może zawierać:
 Flashowanie, tworzenie profilu, niektóre początkowe zapisy blokady i zdarzenia serwisowe mogą oznaczyć odpowiednie dane jako nieaktualne. Poprzednie rewizje pozostają zaszyfrowaną historią. Dawna pobrana wartość nie jest dowodem, że nadal odblokowuje telefon.
 
 Zwykłe raporty i pakiety przekazania pomijają wartości rejestru. Prywatne pobranie celowo tworzy plik jawny, który trzeba chronić i usunąć po użyciu. Kopie rejestru i dane do ich odblokowania wymagają osobnej ochrony; operator może zmienić hasło szyfrowania. Przeczytaj [szczegóły rejestru](../../../docs/PHONE_REGISTRY.md) i [zasady bezpieczeństwa](../../../SECURITY.md).
+
+Osoba przygotowująca telefon może dostarczyć prywatną wkładkę z rejestru: zwykłe dane są pogrupowane według profilu, a dane destrukcyjne znajdują się na osobnym arkuszu A4 do złożenia. Zwykle są to dwa arkusze; dłuższy wpis wymaga większej liczby. Identyfikator pojawia się raz na arkuszu. Pominiętych pól nie zapisano; nie oznacza to braku konfiguracji. Arkusze destrukcyjne przechowuj zapieczętowane osobno.
 
 ## 7. Zachowuj dane możliwe do odtworzenia
 

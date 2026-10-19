@@ -231,6 +231,11 @@ unperformed or fails, the phone is not ready for acceptance. Being your own oper
 does not waive policy requirements or let a receipt override contradictory
 measurements.
 
+Before final signoff, optionally use the [three private collectors](PHONE_REGISTRY.md#opt-in-pre-handoff-collection)
+for enrolled-profile Oblivion/Session values and device SIM numbers. Initialize the
+registry first, complete private app setup, and confirm retention before debugging
+is disabled. Both private insert generation paths reuse the saved values.
+
 After completing the other requirements, accept the phone as its user, then sign
 off as its operator and finalize. Use your own name in both roles:
 
@@ -303,7 +308,8 @@ backup/restore remains a separately checked procedure. See
 You can use the [local encrypted registry](PHONE_REGISTRY.md) for your own
 last-confirmed phone/profile credentials and account records. Choose what to retain
 and protect its unlock passphrase separately from its encrypted database. The
-registry works offline; it neither reads live credentials nor configures accounts.
+registry commands work offline and do not configure accounts. The separate optional
+collectors read supported live identifiers.
 
 ```sh
 pxv registry init --project-root "$P"

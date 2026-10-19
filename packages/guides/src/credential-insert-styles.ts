@@ -1,34 +1,30 @@
 import { foldPanelStyles } from './fold-packet.js';
-import { foldLayout } from './fold-layout.js';
 
+/** Compact registry records use flowing tables, without blank worksheet/header space. */
 export const credentialInsertStyles =
   foldPanelStyles +
-  [
-    'body{color:#111}',
-    '.private-panel{break-before:page;margin:0;font:inherit}',
-    '.private-panel:first-child{break-before:auto}',
-    '.private-panel>h1{font-size:16pt;line-height:1.15;margin:0 0 3mm;color:#111}',
-    '.private-panel>p{margin:0 0 2mm;line-height:1.2}',
-    '.private-panel .private-stamp{font-size:' +
-      foldLayout.typography.bodyPt +
-      'pt;font-weight:700;margin:0 0 2mm}',
-    '.entry{break-inside:avoid;margin:0 0 1.4mm}',
-    '.entry h3{font-size:' +
-      foldLayout.typography.bodyPt +
-      'pt;line-height:1.15;font-weight:400;margin:0 0 .5mm}',
-    '.entry .state{font-size:' +
-      foldLayout.typography.metadataPt +
-      'pt;line-height:1.15;font-weight:600;margin:0 0 .5mm;color:#222}',
-    '.entry pre.value{font:' +
-      foldLayout.typography.bodyPt +
-      'pt/1.25 "DejaVu Sans Mono",monospace;white-space:pre-wrap;overflow-wrap:anywhere;margin:0;padding:0 0 .7mm;border:0;border-bottom:.2mm dotted #555;background:transparent;color:#111}',
-    '.credential-warning{border:.3mm solid #111;padding:2mm;margin:0 0 2mm;line-height:1.2}',
-    '.write-line{min-height:' +
-      foldLayout.content.writingMm +
-      'mm;padding-bottom:' +
-      foldLayout.content.writingMm +
-      'mm;border-bottom:.2mm dotted #555;margin:0 0 2mm;break-inside:avoid;font-size:' +
-      foldLayout.typography.bodyPt +
-      'pt;line-height:1.2}',
-    '@media print{.html-edition{display:none}}',
-  ].join('\n');
+  `
+body{color:#111;line-height:1.15}
+[data-fold-group]+[data-fold-group]{break-before:page}
+h1{font-size:12pt;line-height:1.1;margin:0 0 2mm}
+.summary,.note,.identity,.state,.empty{font-size:8pt;line-height:1.2}
+.summary{margin-bottom:2mm}
+.summary div{overflow-wrap:anywhere}
+.note{margin:0 0 2mm}
+.credential-section{width:100%;border-collapse:collapse;table-layout:fixed;margin:0 0 2mm}
+.credential-section thead{display:table-header-group}
+.credential-section th,.credential-section td{text-align:left;vertical-align:top;padding:0;font-weight:normal}
+.credential-section th{padding-top:1.5mm;border-top:.3mm solid #111}
+.credential-section h2,.group-title{font-size:10pt;font-weight:bold;line-height:1.15;margin:0 0 .8mm}
+.identity{margin:0 0 .8mm}
+.state{font-weight:normal;white-space:normal;overflow-wrap:anywhere;margin:0 0 1mm}
+.credential-section tr{break-inside:avoid}
+@media print{.profile-section thead .section-title,.profile-section .identity{display:none}}
+.entry{margin:0 0 1.2mm}
+.entry h3{font-size:8pt;font-weight:bold;line-height:1.15;margin:0 0 .3mm}
+.entry pre.value{font:10pt/1.15 'DejaVu Sans Mono',monospace;white-space:pre-wrap;overflow-wrap:anywhere;tab-size:4;margin:0;padding:0;border:0}
+.empty{margin:0 0 1mm}
+.credential-warning{font-weight:bold;border:.6mm solid #111;padding:2mm;margin-bottom:2mm}
+.warning{font-weight:bold}
+.group-title{break-after:avoid;margin-top:2mm}
+`;

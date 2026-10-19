@@ -72,6 +72,15 @@ private values/history never enter ordinary SQLite rows, reviews, audit events,
 MCP responses or handoff exports. Explicit reveal writes a new private plaintext
 file.
 
+The optional Oblivion, Session and SIM collectors share a host-only CLI contract,
+value-free outcomes and atomic private field merging. App collectors verify enrolled
+profile identities, app signers and foreground recovery; SIM numbers are stored once
+at device level in the existing multiline phone-number field. Missing/unsupported
+values permit hidden private entry or skipping. Both private insert entry points
+share read-only registry loading, effective binding checks and PDF rendering. Guide
+publishing receives public policy options; the separate private export receives
+registry values only within the parent process.
+
 Native project ownership serializes registry writes with provisioning. Ciphertext
 revision checks and a final identity/generation guard reject stale updates. A public
 SQLite anchor transitions to pending before ciphertext publication and ready after

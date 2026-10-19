@@ -6,6 +6,76 @@ operator/workstation. Each project has one encrypted database at
 hardware serial and Pixel codename. It does not replace the ordinary workflow
 SQLite database. Registry commands work offline and do not contact a phone.
 
+<a id="opt-in-oblivion-key-collection"></a>
+
+## Opt-in pre-handoff collection
+
+After provisioning and private app setup, initialize the registry and optionally
+run any of these independent commands before final signoff and debugging shutdown:
+
+```sh
+pxv registry init --project-root DIRECTORY
+pxv device collect-oblivion --project-root DIRECTORY --asset PHONE
+pxv device collect-sessionid --project-root DIRECTORY --asset PHONE
+pxv device collect-simcards --project-root DIRECTORY --asset PHONE
+```
+
+Run `registry init` only when creating a new registry. Each collector requires one
+exact enrolled Pixel, local host execution and interactive confirmations. All three
+accept `--transport usb|wifi`, `--passphrase-file PRIVATE_FILE`, `--yes` and `--json`.
+Start the configured ADB server explicitly first. Fleet selectors and Docker are
+refused. Collection is optional; finalization does not require it.
+
+`collect-oblivion` visits enrolled profiles with `net.oblivion.wipe`, the separate
+emergency-wipe app rather than the starter policies' `org.bepass.oblivion`. It
+verifies the app signer, opens the QR dialog and compares its visible key text with
+the main screen. Opening Oblivion can enable its wipe triggers: complete private
+setup and deliberately confirm opening it. Collection never sends a key or tests
+erasure.
+
+`collect-sessionid` visits enrolled profiles with `network.loki.messenger`, verifies
+the signer pinned for the Session repository build, opens user settings and reads
+the account's own ID. It does not read recovery passwords or contact IDs. Both app
+collectors check the retained stable Android identities against the live phone,
+visit profiles sequentially and ask for private unlocking. They do not install apps,
+create accounts or bypass app locks and Android consent.
+
+`collect-simcards` inspects the current physical SIM/eSIM subscription list once
+for the device and excludes historical subscriptions. Numbers are stored once in
+the device's `phoneNumber` field, one per line. Masked or missing numbers require
+private entry or an explicit skip; unsupported subscription inspection permits a
+privately supplied number list. No country code is inferred. Retention confirmation
+replaces the complete saved device number list with the collected numbers, including
+when some current lines were skipped. Review that choice before confirming.
+
+Unsupported app screens offer hidden manual entry or an explicit skip. Invalid
+input is rejected without echoing it. Empty private input skips a value; interrupting
+collection cancels saving. Unexpected device/profile/app identities, changed app
+versions or failed foreground restoration prevent saving. `--yes` cannot bypass
+unlock or retention confirmations. No screenshot, clipboard transfer, message or
+test notification is used.
+
+All collectors show a value-free review and use the same JSON summary contract:
+`collector` (`oblivion`, `sessionid` or `simcards`), `assetId`, `outcomes`, `saved`,
+`revision` and `recordRevision`. Outcomes identify a profile or device/SIM slot and
+have status `collected`, `not-present`, `unavailable` or `skipped`. JSON goes to
+stdout; progress and review go to stderr. Values never appear in either stream.
+
+Each invocation atomically merges only captured fields, marked `current` after
+explicit confirmation. Missing phone/profile records are created as needed.
+Uncollected fields and their confirmation dates remain intact; invalid bindings
+remain stale. Encrypted history is retained. If nothing is collected, ciphertext
+and revisions are unchanged. Raw UI hierarchies, account IDs and numbers are not stored
+in ordinary SQLite, logs, handoff reports or MCP responses. `--passphrase-file`
+uses the same private-file rules as registry commands.
+
+For app collection, the original foreground profile is restored and verified before
+saving. On failed restoration or process loss, retain the operation ID and use
+`device recover --asset PHONE --run OPERATION_ID --inspected`. Existing Oblivion
+recovery obligations remain supported. Inspect the registry before retrying an
+interrupted commit. A retained current value is the operator's last confirmation,
+not continuous verification of the phone.
+
 ## Operator flow
 
 Use the same `--project-root DIRECTORY` on every command below. First enroll the
@@ -133,13 +203,35 @@ prompt or `--passphrase-file` as other registry commands. A local Chromium execu
 is required (for repeating asset/profile headers); nothing is downloaded. The command works offline during preparation
 and does not require an accepted handoff report or connect to a phone.
 
-The PDF includes **all saved values in the latest record**, including ordinary
-unlocks, phone numbers, Session IDs, Proton VPN accounts, device duress credentials
-and per-profile Oblivion keys. Historical revisions are not supported. Each value
-carries its effective state and update/confirmation dates; stale and unknown values
-are prominently flagged. Current means last operator-confirmed, not measured from
-the phone. Missing fields say “not recorded”, which does not mean unconfigured.
-Recipient and recovery-store details remain blank for private completion.
+Guide rebuilding can also export a separate private insert from the same registry:
+
+```sh
+pxv guides rebuild --project-root DIRECTORY --asset PHONE \
+  --output-dir PUBLIC_GUIDE_DIRECTORY \
+  --private-insert-output PRIVATE_DIRECTORY/insert.pdf \
+  --locale pl --chromium /absolute/path/to/chromium
+```
+
+This source-checkout command uses the selected project's policy. An explicit
+`--project-root`, `--asset`, `--output-dir` and Chromium are required; do not combine
+it with `--policy` or `--html-only`. English is the default private-insert locale;
+`PXV_CHROMIUM` can supply the browser path. Unlock uses the same hidden prompt or
+`--passphrase-file`. The PDF must be outside the shared guide output directory.
+Both export paths use the same registry loading, binding checks and renderer.
+Shared guide HTML, Markdown, PDFs and QA artifacts remain blank templates, and the
+publishing subprocess receives no registry values or passphrase. Insert export is
+offline and can run after debugging has been disabled.
+
+The PDF includes **all saved values in the latest record**, including ordinary unlocks,
+phone numbers, Session IDs, Proton VPN accounts, device duress credentials and per-
+profile Oblivion keys. Historical revisions are not supported. Values are grouped into
+one section per profile, with identical effective state and update/confirmation metadata
+shared within that section. Field-specific differences remain explicit; stale and
+unknown values are prominently flagged. Current means last operator-confirmed, not
+measured from the phone. Only recorded fields are printed; blank recipient, recovery and
+backup worksheets are omitted. Profiles without ordinary values and destructive sections
+without values are explicitly marked. Omitted fields are not recorded, which does not
+mean unconfigured.
 
 The output must be a new `.pdf` under project `secrets` or outside the project and
 product resources, in a private `0700` directory. Files are `0600`; existing files
@@ -148,11 +240,18 @@ browser profile are removed after success or failure. Console output contains on
 export metadata. The plaintext PDF remains sensitive: protect it and remove it when
 finished, accounting for backups and printer queues.
 
-Print landscape A4 at **100% / actual size, single-sided**. Check the 50 mm scale, cut solid lines and fold dashed lines with printing inside to 68 × 100 mm. Stack slips by number. Every continuation panel repeats the exact asset identifier and full profile identity in its reserved header. Body/values use 10 pt type; state/date metadata uses at least 8 pt. Keep destructive credential sheets detached and sealed separately
-from ordinary credentials. Never test duress or send an Oblivion key as a test. Match
-the asset to the phone and report, privately verify ordinary unlocks, and seal for
-the recipient. Store the completed insert securely apart from the phone. The insert
-is an operator record and does not certify readiness or erasure capability.
+Print landscape A4 at **100% / actual size, single-sided**. Check the 50 mm scale, cut
+solid lines and fold dashed lines with printing inside to 68 × 100 mm. Stack slips by
+number. The populated asset identifier appears once per A4 sheet; profile identity
+repeats on continuation panels. Ordinary device/profile credentials come first, with
+compact destructive credentials starting on a fresh sheet. Typical one- and five-profile
+records target two sheets; long values or larger records use extra sheets without
+truncation or smaller type. Values use 10 pt type; state/date metadata uses at least 8
+pt. Keep destructive credential sheets detached and sealed separately from ordinary
+credentials. Never test duress or send an Oblivion key as a test. Match the asset to the
+phone and report, privately verify ordinary unlocks, and seal for the recipient. Store
+the completed insert securely apart from the phone. The insert is an operator record and
+does not certify readiness or erasure capability.
 
 ## Identity and security boundaries
 

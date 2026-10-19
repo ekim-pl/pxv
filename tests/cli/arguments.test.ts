@@ -65,6 +65,16 @@ describe('CLI argument and consent boundaries', () => {
     Object.defineProperty(stdin, 'isTTY', { value: false, configurable: true });
     await expect(confirmation(io, 'Review', false)).rejects.toThrow('non-interactive');
   });
+  it('forwards cancellation to the terminal prompt and refuses an already aborted confirmation', async () => {
+    const controller = new AbortController();
+    const io = { out: vi.fn(), error: vi.fn() };
+    Object.defineProperty(stdin, 'isTTY', { value: true, configurable: true });
+    prompt.question.mockResolvedValueOnce('y');
+    await confirmation(io, 'Review', false, controller.signal);
+    expect(prompt.question).toHaveBeenLastCalledWith('Review [y/N] ', { signal: controller.signal });
+    controller.abort();
+    await expect(confirmation(io, 'Review', true, controller.signal)).rejects.toThrow();
+  });
   it('honors package identity only when candidate metadata contains strings', async () => {
     const out = vi.fn();
     const io = { out, error: vi.fn() };

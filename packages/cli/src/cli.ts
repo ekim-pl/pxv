@@ -104,6 +104,7 @@ async function executionMode(context: CliContext): Promise<number | undefined> {
   const { argv, value, projectRoot, extensionRoot } = context;
   const execution = value('execution', 'host');
   validateExecutionMode(context, execution);
+  assertLocalCollection(context, execution);
   if (execution === 'docker') {
     const mode = value('docker-mode', 'host-adb');
     if (mode !== 'direct' && mode !== 'host-adb') throw new Error('Invalid Docker transport mode');
@@ -124,6 +125,14 @@ function validateExecutionMode(context: CliContext, execution: string): void {
   };
   const reason = hostOnly[context.section ?? ''];
   if (reason && (execution === 'docker' || dockerMode)) throw new Error(reason);
+}
+
+function assertLocalCollection(context: CliContext, execution: string): void {
+  if (
+    ['collect-oblivion', 'collect-sessionid', 'collect-simcards'].includes(context.command ?? '') &&
+    (execution === 'docker' || context.dockerMode)
+  )
+    throw new Error('Private collection requires local host execution');
 }
 
 function assertDirectFlash({ dockerMode, section, command }: CliContext): void {

@@ -11,3 +11,6 @@ export { seedvaultConnections } from './seedvault-sessions.js';
 export type { SeedvaultWorkflowPort } from './seedvault-types.js';
 export * from './phone-registry.js';
 export * from './registry-anchor.js';
+export * from './oblivion-registry.js';
+export * from './collection-registry.js';
+export { NativeDeviceOwnership } from './ownership.js';

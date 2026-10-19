@@ -4,6 +4,7 @@ import {
   observeEmulatorProvenance,
   RecipeService,
   SeedvaultAdapter,
+  restoreCollectionForeground,
 } from '@pxv/adapters';
 import { canonicalJson, osPolicyForTarget, validateArtifact, type SelectedTarget } from '@pxv/contracts';
 import { containedPath, type ExecutionContext, type WorkflowPort } from '@pxv/engine';
@@ -56,6 +57,8 @@ function recoveryPort(deps: ApplicationDependencies): Pick<WorkflowPort, 'inspec
       return current;
     },
     async cleanup(target, obligation, context) {
+      if (['oblivion-foreground', 'collection-foreground'].includes(obligation.kind))
+        return restoreCollectionForeground(android, target, obligation, context);
       if (obligation.kind === 'seedvault-job' || obligation.kind === 'seedvault-foreground') {
         await new SeedvaultAdapter(android).cleanup(target, obligation, context);
         return;

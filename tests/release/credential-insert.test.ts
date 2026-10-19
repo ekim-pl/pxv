@@ -78,26 +78,50 @@ describe('private credential insert', () => {
       expect(html).toContain('Zażółć gęślą jaźń');
       expect(html).toContain('&lt;script&gt;&amp;&quot;&#39;');
       expect(html).not.toContain('PRIVATE-SERIAL');
-      expect(html).toContain(locale === 'en' ? 'Not recorded' : 'Nie zapisano');
+      expect(html).toContain(locale === 'en' ? 'No values recorded.' : 'Nie zapisano wartości.');
       expect(html).toContain(
         locale === 'en' ? 'STALE - verify privately' : 'NIEAKTUALNE - sprawdź prywatnie',
       );
       expect(html).toContain(locale === 'en' ? 'UNKNOWN - verify privately' : 'NIEZNANE - sprawdź prywatnie');
-      expect(html).toContain(at);
+      expect(html).toContain('2026-10-17 12:00:00Z');
       expect(html).toContain('Pixel 8 (shiba)');
       const ordinary = html.slice(0, html.indexOf('DURESS-PIN'));
       expect(ordinary).toContain('VPN-PASSWORD');
       expect(ordinary).not.toContain('OBLIVION-KEY');
     }
   });
-  it('preserves a maximum-length secret across labeled continuation pages', () => {
+  it('preserves maximum-length, multiline and whitespace-sensitive values without artificial breaks', () => {
     const data = record();
-    data.profiles[0]!.fields.password = value('x'.repeat(16_380) + 'TAIL');
-    const html = renderCredentialInsert(data, options);
-    const values = [...html.matchAll(/<pre>(.*?)<\/pre>/gsu)].map((match) => match[1]!.replaceAll('\n', ''));
-    expect(values.join('')).toContain('x'.repeat(16_380) + 'TAIL');
-    expect(html).toContain('(continued)');
-    expect(html.match(/<section style="page:private/gu)?.length).toBeGreaterThan(30);
+    const secret = '  start\t\r\n' + 'x'.repeat(16_360) + '\nTAIL  ';
+    data.profiles[0]!.fields.password = value(secret);
+    const html = renderCredentialInsert(data, options, 'ordinary');
+    expect(html).toContain('<pre class="value">' + secret + '</pre>');
+    expect(html).not.toContain('DURESS-PIN');
+    expect(html).not.toContain('OBLIVION-KEY');
+    expect(html).not.toContain('class="write-line"');
+    expect(html).not.toContain('PRIVATE-SERIAL');
+  });
+  it('groups ordinary values once per profile and deduplicates metadata with explicit exceptions', () => {
+    const data = record();
+    const html = renderCredentialInsert(data, options, 'ordinary');
+    expect(html.match(/Profile: Właściciel/gu)).toHaveLength(1);
+    expect(html.match(/Last operator-confirmed/gu)).toHaveLength(1);
+    expect(html).toContain('INITIAL');
+    expect(html).toContain('UNKNOWN - verify privately');
+    expect(html).not.toContain(data.assetId);
+    expect(html).not.toContain('Recovery');
+    expect(html).not.toContain('Backup');
+    data.profiles[0]!.fields.protonVpnPassword!.updatedAt = '2026-10-18T13:12:11.123+02:00';
+    expect(renderCredentialInsert(data, options, 'ordinary')).toContain('2026-10-18 13:12:11.123+02:00');
+    const destructive = renderCredentialInsert(data, options, 'erasure');
+    expect(destructive).not.toContain('VPN-PASSWORD');
+    expect(destructive).not.toContain('SESSION-ID');
+    expect(destructive).toContain('DURESS-PIN');
+    expect(destructive).toContain('OBLIVION-KEY');
+    data.fields = {};
+    data.profiles = [];
+    expect(renderCredentialInsert(data, options, 'ordinary')).toContain('No values recorded.');
+    expect(renderCredentialInsert(data, options, 'erasure')).toContain('No values recorded.');
   });
   it('writes only a private PDF and cleans the isolated renderer directory', async () => {
     const destination = join(await root(), 'private', 'insert.pdf');
@@ -108,7 +132,14 @@ describe('private credential insert', () => {
         expect((await stat(temporary)).mode & 0o777).toBe(0o700);
         const source = fileURLToPath(args.at(-1)!);
         expect((await stat(source)).mode & 0o777).toBe(0o600);
-        expect(await readFile(source, 'utf8')).toContain('VPN-PASSWORD');
+        const html = await readFile(source, 'utf8');
+        if (source.endsWith('insert-ordinary.html')) {
+          expect(html).toContain('VPN-PASSWORD');
+          expect(html).not.toContain('DURESS-PIN');
+        } else {
+          expect(html).toContain('DURESS-PIN');
+          expect(html).not.toContain('VPN-PASSWORD');
+        }
         expect(args).toContain('--disable-javascript');
         expect(args).toContain('--disable-background-networking');
         await writeFile(args.find((arg) => arg.startsWith('--print-to-pdf='))!.slice(15), await panelPdf());
@@ -172,7 +203,7 @@ it('renders blank secret lines and the codename fallback while rejecting an unsu
   data.fields.phoneNumber = value('\n');
   const minimal = { exportedAt: at, support: 'Private support' };
   expect(renderCredentialInsert(data, minimal)).toContain('shiba');
-  expect(renderCredentialInsert(data, minimal)).toContain('<pre>\n</pre>');
+  expect(renderCredentialInsert(data, minimal)).toContain('<pre class="value">\n</pre>');
   expect(() => renderCredentialInsert(data, { ...minimal, locale: 'de' as 'en' })).toThrow(
     'Unsupported insert locale',
   );
@@ -218,51 +249,110 @@ async function panelPdf(): Promise<Uint8Array> {
   return pdf.save();
 }
 
-it('repeats private asset/profile headers on every real continuation panel (PXV_CHROMIUM)', async (context) => {
+function populatedRecord(count: number): PhoneRegistryRecord {
+  const data = record();
+  data.profiles = Array.from({ length: count }, (_, i) => ({
+    profileId: 'profile-' + i,
+    user: {
+      userId: i === 0 ? 0 : i + 9,
+      serialNo: i,
+      name: ['Owner', 'Work', 'Travel', 'Personal', 'Backup'][i] ?? 'Profile ' + i,
+    },
+    fields: {
+      pin: value('12345' + i),
+      phoneNumber: value('+4812345678' + i),
+      sessionMessengerId: value('05' + String(i).repeat(64)),
+      protonVpnUsername: value('vpn-user-' + i),
+      protonVpnPassword: value('VPN-password-' + i + '-123456'),
+      oblivionNotificationWipeKey: value('WIPE-key-' + i + '-12345678901234567890'),
+    },
+  }));
+  return data;
+}
+
+it('renders one/five-profile EN/PL records on two readable A4 sheets (PXV_CHROMIUM)', async (context) => {
   const chromium = process.env['PXV_CHROMIUM'];
   if (!chromium) {
-    context.skip('Set PXV_CHROMIUM to run the real PDF/Poppler integration check');
+    context.skip('Set PXV_CHROMIUM to run real PDF/Poppler checks');
     return;
   }
-  const data = record();
-  data.profiles[0]!.fields.password = value('x'.repeat(1600) + 'TAIL');
-  data.profiles[0]!.user.name = 'Właściciel bardzo długiego profilu '.repeat(4).trim();
-  const destination = join(await root(), 'integration.pdf');
+  for (const count of [1, 5])
+    for (const locale of ['en', 'pl'] as const) {
+      const data = populatedRecord(count);
+      const destination = join(await root(), `compact-${count}-${locale}.pdf`);
+      await writeCredentialInsert(data, destination, { ...options, locale, chromiumExecutable: chromium });
+      const pdf = await PDFDocument.load(await readFile(destination));
+      expect(pdf.getPageCount()).toBe(2);
+      expect(pdf.getPage(0).getWidth()).toBeCloseTo((297 * 72) / 25.4, 4);
+      expect(pdf.getPage(0).getHeight()).toBeCloseTo((210 * 72) / 25.4, 4);
+      const text = execFileSync('pdftotext', ['-raw', destination, '-'], { encoding: 'utf8' });
+      const sheets = text.split('\f').filter((page) => page.trim());
+      for (const sheet of sheets) expect(sheet.match(/phone-01/gu)).toHaveLength(1);
+      expect(sheets[0]).toContain('VPN-password-0');
+      expect(sheets[0]).not.toContain('WIPE-key-');
+      expect(sheets[0]).not.toContain('DURESS-PIN');
+      expect(sheets[1]).toContain('DURESS-PIN');
+      expect(sheets[1]).toContain('Oblivion');
+      expect(sheets[1]).toContain('WIPE-key-0');
+      expect(sheets[1]).not.toContain('VPN-password-');
+      for (let i = 0; i < count; i++) {
+        expect(sheets[0]).toContain('vpn-user-' + i);
+        expect(sheets[0]!.replaceAll(/\s/gu, '')).toContain('05' + String(i).repeat(64));
+        expect(sheets[1]).toContain('WIPE-key-' + i);
+      }
+      const xml = execFileSync('pdftohtml', ['-xml', '-zoom', '1', '-hidden', '-stdout', destination], {
+        encoding: 'utf8',
+      });
+      const fonts = new Map(
+        [...xml.matchAll(/<fontspec id="(\d+)" size="([\d.]+)"/gu)].map((font) => [font[1], Number(font[2])]),
+      );
+      for (const size of fonts.values()) expect(size).toBeGreaterThanOrEqual(8);
+      for (const run of xml.matchAll(/<text[^>]*font="(\d+)"[^>]*>(?:VPN-password[^<]+|12345\d)<\/text>/gu))
+        expect(fonts.get(run[1])).toBeGreaterThanOrEqual(10);
+    }
+});
+
+it('preserves oversized secrets and long Unicode profile identities across extra sheets (PXV_CHROMIUM)', async (context) => {
+  const chromium = process.env['PXV_CHROMIUM'];
+  if (!chromium) {
+    context.skip('Set PXV_CHROMIUM to run real PDF/Poppler checks');
+    return;
+  }
+  const data = populatedRecord(1);
+  data.assetId = 'm'.repeat(128);
+  const name = 'Właściciel bardzo długiego profilu '.repeat(4).trim();
+  data.profiles[0]!.user.name = name;
+  data.profiles[0]!.fields.password = value('x'.repeat(16_380) + 'TAIL');
+  const destination = join(await root(), 'overflow.pdf');
   await writeCredentialInsert(data, destination, { ...options, chromiumExecutable: chromium });
   const pdf = await PDFDocument.load(await readFile(destination));
-  expect(pdf.getPage(0).getWidth()).toBeCloseTo((297 * 72) / 25.4, 4);
+  expect(pdf.getPageCount()).toBeGreaterThan(2);
   const text = execFileSync('pdftotext', ['-raw', destination, '-'], { encoding: 'utf8' });
-  const panelCount = (text.match(/(?:ordinary|erasure) \| Slip/gu) ?? []).length;
-  expect(panelCount).toBeGreaterThan(16);
-  expect(text.match(/Asset: phone-01/gu)).toHaveLength(panelCount);
-  expect((text.match(/x{3,}/gu) ?? []).join('')).toHaveLength(1600);
+  expect((text.match(/x{3,}/gu) ?? []).join('')).toHaveLength(16_380);
   expect(text).toContain('TAIL');
-  const xml = execFileSync('pdftohtml', ['-xml', '-zoom', '1', '-hidden', '-stdout', destination], {
-    encoding: 'utf8',
-  });
-  const fonts = new Map(
-    [...xml.matchAll(/<fontspec id="(\d+)" size="([\d.]+)"/gu)].map((font) => [font[1], Number(font[2])]),
-  );
-  for (const size of fonts.values()) expect(size).toBeGreaterThanOrEqual(8);
-  for (const run of xml.matchAll(/<text[^>]*font="(\d+)"[^>]*>(x{3,})<\/text>/gu))
-    expect(fonts.get(run[1])).toBeGreaterThanOrEqual(10);
-  for (const sheet of text.split('\f').filter((value) => value.trim())) {
+  const boxes = execFileSync('pdftotext', ['-bbox', destination, '-'], { encoding: 'utf8' });
+  const assetBoxes = [...boxes.matchAll(/<word[^>]*xMax="([\d.]+)"[^>]*>m{128}<\/word>/gu)];
+  expect(assetBoxes).toHaveLength(pdf.getPageCount());
+  for (const box of assetBoxes) expect(Number(box[1])).toBeLessThan((284.5 * 72) / 25.4);
+
+  for (const sheet of text.split('\f').filter((page) => page.trim())) {
+    expect(sheet.split(data.assetId)).toHaveLength(2);
     if (sheet.includes('ordinary |')) {
       expect(sheet).not.toContain('DURESS-PIN');
-      expect(sheet).not.toContain('OBLIVION-KEY');
+      expect(sheet).not.toContain('WIPE-key-');
+      expect(sheet).toContain('Właściciel');
     } else {
       expect(sheet).toContain('erasure |');
-      expect(sheet).not.toContain('VPN-PASSWORD');
+      expect(sheet).not.toContain('VPN-password-');
     }
   }
 });
 
-it('keeps profile names out of page-header CSS syntax', () => {
+it('escapes untrusted profile names as HTML without injecting CSS or script', () => {
   const data = record();
   data.profiles[0]!.user.name = '</style><script>sentinel</script>';
   const html = renderCredentialInsert(data, options);
   const css = html.slice(html.indexOf('<style>'), html.indexOf('</style>'));
-  expect(css).toContain('@top-left{content:');
   expect(css).not.toContain('<script>');
   expect(html).toContain('&lt;/style&gt;&lt;script&gt;sentinel&lt;/script&gt;');
 });

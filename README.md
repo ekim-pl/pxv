@@ -78,8 +78,12 @@ configuration before VPN lockdown and retain per-phone pause/recovery state.
 The [encrypted phone registry](docs/PHONE_REGISTRY.md) records operator-confirmed
 phone/profile credentials, Session messenger IDs, Oblivion keys, Proton VPN accounts
 and phone numbers. It retains encrypted history, exposes presence/state metadata in
-ordinary views and reveals values only to a chosen private file. It does not read
-live credentials or configure accounts.
+ordinary views and reveals values only to a chosen private file. Registry commands
+operate offline. Optional `device collect-oblivion`, `device collect-sessionid` and
+`device collect-simcards` commands collect profile wipe keys/account IDs and device
+SIM numbers before finalization, with private fallback entry and explicit retention
+confirmation. Both `registry print-insert` and `guides rebuild --private-insert-output`
+reuse saved values for a separate private PDF; see the registry documentation.
 
 ## Automation and distributions
 

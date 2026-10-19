@@ -61,6 +61,15 @@ it('guides manual receipts and review refresh while never replaying interrupted 
   expect(
     guidedNextSteps(product, { ...base, status: 'completed' }, 'en', '/tmp/project', 'all').join('\n'),
   ).toContain('before finalization');
+  const completed = guidedNextSteps(
+    product,
+    { ...base, status: 'completed' },
+    'en',
+    '/tmp/project',
+    'all',
+  ).join('\n');
+  for (const name of ['oblivion', 'sessionid', 'simcards'])
+    expect(completed).toContain(`device collect-${name}`);
 });
 
 it('shows distinct owner and secondary default locales independently of the guide language', () => {

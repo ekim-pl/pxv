@@ -12,6 +12,7 @@ import {
   readRegistryPrivateFile,
   writeRegistryPrivateFile,
   withDeviceLease,
+  updateEncryptedRegistry,
 } from '@pxv/runtime';
 import { REGISTRY_ENVELOPE_LIMIT } from '../../packages/runtime/src/encrypted-registry-crypto.js';
 
@@ -56,6 +57,40 @@ afterAll(async () => {
 });
 
 describe('authenticated encrypted registry storage with the production KDF', () => {
+  it('holds a private update transaction, skips cancelled writes and refuses stale or escaped commits', async () => {
+    await expect(
+      updateEncryptedRegistry(path, projectId, passphrase, decode, () =>
+        Promise.reject(new Error('Cancelled')),
+      ),
+    ).rejects.toThrow('Cancelled');
+    expect(await readFile(path)).toEqual(fixture);
+    let escaped: ((value: typeof initial) => Promise<void>) | undefined;
+    await updateEncryptedRegistry(path, projectId, passphrase, decode, (_current, commit) => {
+      escaped = commit;
+      return Promise.resolve();
+    });
+    await expect(escaped!(initial)).rejects.toThrow('while active');
+    await expect(
+      updateEncryptedRegistry(path, projectId, passphrase, decode, async (_current, commit) => {
+        await writeFile(path, Buffer.from('changed externally'));
+        await commit(initial);
+      }),
+    ).rejects.toThrow(failure);
+  });
+
+  it('commits private transformations once without retaining plaintext or overwriting caller buffers', async () => {
+    await updateEncryptedRegistry(path, projectId, passphrase, decode, async ({ value }, commit) => {
+      value.records[0]!.credential = sentinel + '-updated';
+      await commit(value);
+      await expect(commit(value)).rejects.toThrow('only once');
+    });
+    const encrypted = await readFile(path);
+    expect(encrypted.includes(sentinel)).toBe(false);
+    expect(
+      (await readEncryptedRegistry(path, projectId, passphrase, decode)).value.records[0]?.credential,
+    ).toBe(sentinel + '-updated');
+    expect(passphrase.toString()).toBe('fixture-key!');
+  });
   it('reopens genuine ciphertext, keeps secrets out of disk and ordinary inspection, and preserves caller key buffers', async () => {
     const loaded = await readEncryptedRegistry(path, projectId, passphrase, decode);
     expect(loaded.value).toEqual(initial);

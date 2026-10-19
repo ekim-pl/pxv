@@ -128,6 +128,8 @@ If review expires, `agent refresh --run RUN_ID` prepares the remaining work for 
 
 ## 7. Check, finalize and transfer custody
 
+Before final signoff, you may collect agreed registry values with the three optional device collectors in section 9. Complete collection before debugging is disabled.
+
 Read current requirements and stored readiness, then perform the actual checks on the phone:
 
 ```sh
@@ -179,6 +181,20 @@ The second command prepares fresh plans and asks for confirmation. Inspect its d
 
 ## 9. Retain current credentials for authorized support
 
+After private app setup and before final signoff/debugging shutdown, optionally run
+`device collect-oblivion`, `device collect-sessionid` and `device collect-simcards`,
+each with `--project-root "$P" --asset "$ASSET"`. Initialize the registry first.
+The app collectors visit enrolled profiles, verify signing identities and ask for
+private unlocking; SIM numbers are retained once at device level. Oblivion reads
+`net.oblivion.wipe`, distinct from the starter policies' `org.bepass.oblivion`.
+Opening it can enable wipe triggers; confirm opening it only after private setup.
+Unreadable values offer hidden manual entry or an explicit skip. Review outcomes
+and confirm retention; `--yes` bypasses neither unlocking nor retention. SIM retention
+replaces the complete saved device number list. No screenshots or messages are
+created. Changed identities or failed foreground restoration prevent saving; use
+[collection and recovery](../../../docs/PHONE_REGISTRY.md#opt-in-pre-handoff-collection).
+Finalization does not require these optional commands.
+
 The local encrypted registry joins asset ID, hardware serial and codename with per-profile stable Android identities. It can retain phone number and device duress PIN/password, plus each profile's PIN/password, Oblivion key, Session messenger ID, Proton VPN username/password and optional phone number. Reused service accounts are recorded explicitly; a Session ID is not an Android user ID.
 
 ```sh
@@ -191,6 +207,10 @@ pxv registry show --project-root "$P" --asset "$ASSET"
 Use revision zero only for the first record; subsequent updates require the revision shown by `show`. Each update replaces the complete current phone record and preserves all previous revisions encrypted. States are `initial`, `current`, `unknown` and `stale`; `current` means last explicitly confirmed by the operator, not automatically read from the phone. Coordinate private credential changes with a registry update.
 
 Unlock uses a hidden local prompt. Private inputs/outputs need an owned `0600` file in a `0700` directory. `list`, `show` and `history` omit values; `reveal --asset ID --output NEW_PRIVATE_FILE` deliberately writes plaintext. `rekey` rotates the unlock passphrase. `reconcile` explicitly accepts a restored/interrupted copy by appending stale revisions; reconfirm current values afterward. Read [registry storage, history and recovery](../../../docs/PHONE_REGISTRY.md) before use.
+
+For a prefilled private insert, use `pxv registry print-insert` with an asset, new private PDF output and local Chromium. The compact export groups ordinary values by profile and starts destructive credentials on a separate A4 cut-and-fold sheet. Typical records target two sheets; longer records use more without truncation or smaller values. The asset appears once per sheet, and blank recovery worksheets are omitted. See the [registry export instructions](../../../docs/PHONE_REGISTRY.md#prefilled-private-phone-sized-insert).
+
+Guide rebuilding can also create the same private PDF with `--private-insert-output FILE --project-root DIRECTORY --asset ID --output-dir DIRECTORY --chromium PATH`. It uses the project policy; keep the private output outside the shared guide directory. Shared guide artifacts remain blank.
 
 Flashing, profile creation, credential-default writes and lifecycle changes stale affected bindings; old values remain history. Registry commands are local/offline and do not configure phones or supply provisioning secrets. Per-profile Oblivion notification-wipe behavior is user-described as affecting the whole phone and is unqualified for any exact app/build. Keep its keys separate from GrapheneOS duress values; never place real keys in notifications, logs, ordinary exports or tests.
 

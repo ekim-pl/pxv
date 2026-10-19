@@ -3,6 +3,7 @@ import { access } from 'node:fs/promises';
 import { dirname, join, resolve, sep } from 'node:path';
 import { promisify } from 'node:util';
 import type { CliContext } from './arguments.js';
+import { prepareGuidePrivateInsert } from './guide-private-insert.js';
 
 const execFileAsync = promisify(execFile);
 const checkoutFiles = [
@@ -59,7 +60,7 @@ async function buildRenderer(root: string, context: CliContext, execute: Command
 }
 
 function outputDirectory(context: CliContext, callerDirectory: string, root: string): string | undefined {
-  const policy = context.values['policy'];
+  const policy = context.values['policy'] ?? context.values['private-insert-output'];
   const output = context.values['output-dir'];
   if (policy && !output) throw new Error('Policy booklets require an explicit --output-dir');
   if (!output) return undefined;
@@ -75,7 +76,8 @@ function rebuildArguments(context: CliContext, callerDirectory: string, root: st
   const output = outputDirectory(context, callerDirectory, root);
   if (output) args.push('--output-dir', output);
   if (context.values['policy']) args.push('--policy', resolve(callerDirectory, context.value('policy')));
-  if (context.values['chromium']) args.push('--chromium', context.value('chromium'));
+  if (context.values['chromium'])
+    args.push('--chromium', resolve(callerDirectory, context.value('chromium')));
   if (context.flag('html-only')) args.push('--html-only');
   if (context.flag('no-render')) args.push('--no-render');
   return args;
@@ -93,7 +95,9 @@ export async function guidesRebuildCommand(
     throw new Error(
       'The guides renderer requires a pxv source checkout with its development toolchain. Run this command from the repository checkout; installed builds do not include it.',
     );
+  const privateInsert = await prepareGuidePrivateInsert(context, callerDirectory);
   const args = rebuildArguments(context, callerDirectory, root);
+  if (privateInsert) args.push('--policy', privateInsert.policyFile);
   context.io.out(`Building guide renderer in ${root}`);
   const execute = dependencies.execute ?? run;
   await buildRenderer(root, context, execute);
@@ -103,6 +107,7 @@ export async function guidesRebuildCommand(
     root,
     context,
   );
+  await privateInsert?.export();
   context.output({ rebuilt: true });
   return 0;
 }

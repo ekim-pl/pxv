@@ -154,22 +154,91 @@ async function replaceRegistry(
   beforeCommit: CommitHook | undefined,
   afterCommit: CommitHook | undefined,
 ): Promise<void> {
+  await withRegistryLease(projectId, () =>
+    replaceRegistryOwned(
+      path,
+      projectId,
+      oldPassphrase,
+      newPassphrase,
+      expectedRevision,
+      value,
+      beforeCommit,
+      afterCommit,
+    ),
+  );
+}
+
+async function replaceRegistryOwned(
+  path: string,
+  projectId: string,
+  oldPassphrase: Buffer,
+  newPassphrase: Buffer,
+  expectedRevision: string,
+  value: Buffer | undefined,
+  beforeCommit: CommitHook | undefined,
+  afterCommit: CommitHook | undefined,
+): Promise<void> {
   validateRegistryInput(projectId, oldPassphrase);
   validateRegistryInput(projectId, newPassphrase);
   if (!/^[a-f0-9]{64}$/u.test(expectedRevision)) throw encryptedRegistryFailure();
-  await withRegistryLease(projectId, () =>
-    inDirectory(path, false, async (directory) => {
-      const current = await readRegistryBytes(directory, REGISTRY_ENVELOPE_LIMIT);
-      if (revision(current) !== expectedRevision) throw encryptedRegistryFailure();
-      const previous = await decryptRegistry(current, projectId, oldPassphrase);
+  await inDirectory(path, false, async (directory) => {
+    const current = await readRegistryBytes(directory, REGISTRY_ENVELOPE_LIMIT);
+    if (revision(current) !== expectedRevision) throw encryptedRegistryFailure();
+    const previous = await decryptRegistry(current, projectId, oldPassphrase);
+    try {
+      const encrypted = await encryptRegistry(value ?? previous, projectId, newPassphrase);
+      await commitEncryptedValue(directory, encrypted, true, beforeCommit, afterCommit);
+    } finally {
+      previous.fill(0);
+    }
+  });
+}
+
+/** Hold project ownership throughout a private read/collect/confirm/commit transaction. */
+export async function updateEncryptedRegistry<T>(
+  path: string,
+  projectId: string,
+  passphrase: Buffer,
+  validate: (value: unknown) => T,
+  update: (
+    current: { value: T; revision: string },
+    commit: (value: T, beforeCommit?: CommitHook, afterCommit?: CommitHook) => Promise<void>,
+  ) => Promise<void>,
+): Promise<void> {
+  let plaintext: Buffer | undefined;
+  const secret = Buffer.from(passphrase);
+  try {
+    await withRegistryLease(projectId, async () => {
+      const current = await readEncryptedRegistry(path, projectId, secret, validate);
+      let committed = false;
+      let active = true;
+      let pending: Promise<void> | undefined;
       try {
-        const encrypted = await encryptRegistry(value ?? previous, projectId, newPassphrase);
-        await commitEncryptedValue(directory, encrypted, true, beforeCommit, afterCommit);
+        await update(current, async (value, beforeCommit, afterCommit) => {
+          if (!active || committed) throw new Error('Registry transaction can commit only once while active');
+          committed = true;
+          plaintext = registryJson(value);
+          pending = replaceRegistryOwned(
+            path,
+            projectId,
+            secret,
+            secret,
+            current.revision,
+            plaintext,
+            beforeCommit,
+            afterCommit,
+          );
+          await pending;
+        });
       } finally {
-        previous.fill(0);
+        active = false;
+        await pending;
       }
-    }),
-  );
+    });
+  } finally {
+    plaintext?.fill(0);
+    secret.fill(0);
+  }
 }
 
 export async function writeEncryptedRegistry(
