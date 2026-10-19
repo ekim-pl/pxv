@@ -1,14 +1,14 @@
 import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { runBuildCommand } from './lib/build-command.mjs';
+import { buildJavaEnvironment, buildJavaExecutable, runBuildCommand } from './lib/build-command.mjs';
 const directory = await mkdtemp(join(tmpdir(), 'pxv-helper-quality-'));
 /** @type {{component:string,sha256:string,signerSha256:string}[]} */
 const helpers = [];
 try {
   await runBuildCommand(
     [
-      'javac',
+      buildJavaExecutable('javac'),
       '-Xlint:all',
       '-Werror',
       '--release',
@@ -17,7 +17,7 @@ try {
       directory,
       'resources/VerifyRepositoryIndex.java',
     ],
-    { env: process.env },
+    { env: buildJavaEnvironment() },
   );
   for (const component of ['probe', 'setup', 'e2e']) {
     const result = await runBuildCommand(

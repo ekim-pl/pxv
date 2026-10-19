@@ -1,4 +1,25 @@
 import { spawn } from 'node:child_process';
+import { delimiter, join } from 'node:path';
+
+/** @param {NodeJS.ProcessEnv} [env] */
+function buildJavaHome(env = process.env) {
+  return env['PXV_JAVA_HOME'] || env['JAVA_HOME'];
+}
+/** @param {string} name @param {NodeJS.ProcessEnv} [env] */
+export function buildJavaExecutable(name, env = process.env) {
+  const home = buildJavaHome(env);
+  return home ? join(home, 'bin', name) : name;
+}
+/** @param {NodeJS.ProcessEnv} [env] @returns {NodeJS.ProcessEnv} */
+export function buildJavaEnvironment(env = process.env) {
+  const home = buildJavaHome(env);
+  return {
+    PATH: home
+      ? join(home, 'bin') + (env['PATH'] ? delimiter + env['PATH'] : '')
+      : (env['PATH'] ?? '/usr/bin:/bin'),
+    ...(home ? { JAVA_HOME: home } : {}),
+  };
+}
 
 /** Build commands never access phones; bound their output, lifetime and diagnostics.
  * @param {string[]} args

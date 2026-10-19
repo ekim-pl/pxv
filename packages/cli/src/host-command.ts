@@ -68,7 +68,7 @@ async function helperHost(context: CliContext): Promise<number | undefined> {
     if (!['probe', 'setup', 'e2e'].includes(component)) throw new Error('Choose probe, setup or e2e');
     await confirmation(io, 'Build and sign this local Android helper?', flag('yes'));
     const env: Record<string, string> = { PATH: process.env['PATH'] ?? '/usr/bin:/bin' };
-    for (const name of ['HOME', 'JAVA_HOME', 'ANDROID_HOME', 'ANDROID_SDK_ROOT'])
+    for (const name of ['HOME', 'JAVA_HOME', 'PXV_JAVA_HOME', 'ANDROID_HOME', 'PXV_ANDROID_HOME'])
       if (process.env[name]) env[name] = process.env[name];
     const built = await runner.run(
       [

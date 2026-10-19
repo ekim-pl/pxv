@@ -4,6 +4,7 @@ import { execFileSync } from 'node:child_process';
 import { readdir, readFile, readlink, lstat, mkdir, writeFile } from 'node:fs/promises';
 import { join, relative } from 'node:path';
 import { createHash } from 'node:crypto';
+import { buildJavaEnvironment, buildJavaExecutable } from './build-command.mjs';
 import { qualityTools } from './quality-tools.mjs';
 
 /** @param {string} directory @param {RegExp} pattern @returns {Promise<string[]>} */
@@ -174,10 +175,15 @@ function nativeVersions() {
   return Object.fromEntries(
     ['javac', 'pnpm'].map((name) => [
       name,
-      execFileSync(name, [name === 'javac' ? '-version' : '--version'], {
-        encoding: 'utf8',
-        timeout: 10_000,
-      }).trim(),
+      execFileSync(
+        name === 'javac' ? buildJavaExecutable(name) : name,
+        [name === 'javac' ? '-version' : '--version'],
+        {
+          encoding: 'utf8',
+          ...(name === 'javac' ? { env: buildJavaEnvironment() } : {}),
+          timeout: 10_000,
+        },
+      ).trim(),
     ]),
   );
 }

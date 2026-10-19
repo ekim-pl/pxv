@@ -7,9 +7,9 @@ export interface AdbServerEndpoint {
   socketPath?: string;
 }
 export function configuredAdbServer(env: NodeJS.ProcessEnv = process.env): AdbServerEndpoint {
-  const host = env['PXV_HOST_ADB_HOST'] ?? env['ANDROID_ADB_SERVER_ADDRESS'] ?? '127.0.0.1';
-  const port = Number(env['PXV_HOST_ADB_PORT'] ?? env['ANDROID_ADB_SERVER_PORT'] ?? '5037');
-  const socket = env['ADB_SERVER_SOCKET'];
+  const host = env['PXV_HOST_ADB_HOST'] ?? '127.0.0.1';
+  const port = Number(env['PXV_HOST_ADB_PORT'] ?? '5037');
+  const socket = env['PXV_ADB_SERVER_SOCKET'];
   return socket ? socketEndpoint(socket, host, port) : validateAdbServer({ host, port });
 }
 function socketEndpoint(socket: string, host: string, port: number): AdbServerEndpoint {
@@ -92,10 +92,8 @@ export function adbClientEnvironment(endpoint: AdbServerEndpoint): Record<string
     ANDROID_ADB_SERVER_PORT: String(endpoint.port),
     LC_ALL: 'C',
   };
-  for (const key of ['HOME', 'ADB_VENDOR_KEYS']) {
-    const value = process.env[key];
-    if (value) env[key] = value;
-  }
+  if (process.env['HOME']) env['HOME'] = process.env['HOME'];
+  if (process.env['PXV_ADB_VENDOR_KEYS']) env['ADB_VENDOR_KEYS'] = process.env['PXV_ADB_VENDOR_KEYS'];
   if (endpoint.socketPath)
     env['ADB_SERVER_SOCKET'] = endpoint.socketPath.startsWith('\0')
       ? `localabstract:${endpoint.socketPath.slice(1)}`

@@ -100,6 +100,8 @@ describe('explicit Docker execution and independent ADB lifecycle', () => {
       sourceDigest: 'a'.repeat(64),
     } as CandidateManifest;
     expect(dockerfile(manifest)).toContain(' PXV_DOCKER_MODE=host-adb ');
+    expect(dockerfile(manifest)).toContain(' PXV_ANDROID_HOME=/opt/android-sdk ');
+    expect(dockerfile(manifest)).not.toContain('ANDROID_SDK_ROOT=');
   });
   it('prepares private persistent control and keys only through the explicit preparation command', async () => {
     const unprepared = {
@@ -156,6 +158,8 @@ describe('explicit Docker execution and independent ADB lifecycle', () => {
     expect(command).toContain(`type=bind,src=${extensions},dst=/extensions,readonly`);
     expect(command).toContain('PXV_HOST_ADB_PORT=5037');
     expect(command).toContain('PXV_DOCKER_MODE=host-adb');
+    expect(command).toContain('PXV_ADB_VENDOR_KEYS=/adb-home/.android');
+    expect(command).not.toContain('ADB_VENDOR_KEYS=/adb-home/.android');
     expect(command).not.toContain('/host/resources');
     expect(command).not.toContain('--execution');
     expect(command).not.toContain('--image=ignored');
@@ -170,6 +174,8 @@ describe('explicit Docker execution and independent ADB lifecycle', () => {
     const start = runner.calls.find((call) => call.args.includes('--detach'))?.args ?? [];
     expect(start).toContain('--entrypoint');
     expect(start).toContain('adb');
+    expect(start).toContain('ADB_VENDOR_KEYS=/adb-home/.android');
+    expect(start).not.toContain('PXV_ADB_VENDOR_KEYS=/adb-home/.android');
     expect(start).toContain('tcp:127.0.0.1:5038');
     expect(start.slice(-2)).toEqual(['nodaemon', 'server']);
     expect(start).toContain(`type=bind,src=${state.adbHome},dst=/adb-home`);
@@ -180,6 +186,7 @@ describe('explicit Docker execution and independent ADB lifecycle', () => {
     const worker = runner.calls.find((call) => call.args.includes('--rm'))?.args ?? [];
     expect(worker).toContain('PXV_HOST_ADB_PORT=5038');
     expect(worker).toContain('PXV_DOCKER_MODE=direct');
+    expect(worker).toContain('PXV_ADB_VENDOR_KEYS=/adb-home/.android');
     expect(worker).toContain('type=bind,src=/dev/bus/usb,dst=/dev/bus/usb');
     expect(runner.calls.some((call) => call.args.includes('kill-server') || call.args[1] === 'stop')).toBe(
       false,

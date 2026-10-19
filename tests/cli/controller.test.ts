@@ -557,11 +557,24 @@ describe('operator controller dispatch without device access', () => {
     );
     process.env['NPM_TOKEN'] = 'sentinel-do-not-inherit';
     process.env['ANDROID_HOME'] = '/sdk';
+    process.env['PXV_ANDROID_HOME'] = '/canonical sdk ';
+    process.env['PXV_JAVA_HOME'] = '/canonical jdk ';
+    process.env['JAVA_HOME'] = '/native jdk';
+    process.env['ANDROID_SDK_ROOT'] = '/ignored';
     expect(await runCli(args(['host', 'build-helper', '--type', 'probe', '--yes']), io)).toBe(0);
     const command = mocks.runCommand.mock.calls[0];
     expect(command?.[0]).toContain('--component');
-    expect(command?.[1]).toMatchObject({ env: { ANDROID_HOME: '/sdk' }, timeoutMs: 120000 });
+    expect(command?.[1]).toMatchObject({
+      env: {
+        ANDROID_HOME: '/sdk',
+        PXV_ANDROID_HOME: '/canonical sdk ',
+        PXV_JAVA_HOME: '/canonical jdk ',
+        JAVA_HOME: '/native jdk',
+      },
+      timeoutMs: 120000,
+    });
     expect(JSON.stringify(command)).not.toContain('sentinel-do-not-inherit');
+    expect(JSON.stringify(command)).not.toContain('ANDROID_SDK_ROOT');
     await expect(runCli(args(['host', 'build-helper', '--type', 'bad', '--yes']), io)).rejects.toThrow(
       /Choose/,
     );

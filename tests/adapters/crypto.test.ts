@@ -15,6 +15,7 @@ import {
   type CommandRunner,
   type RepositoryFloor,
 } from '../../packages/adapters/src/index.js';
+import { buildJavaEnvironment, buildJavaExecutable } from '../../tools/lib/build-command.mjs';
 import type { ArtifactPolicy, OsPolicy } from '@pxv/contracts';
 
 const native: CommandRunner = {
@@ -25,7 +26,7 @@ const native: CommandRunner = {
     return new Promise((resolveResult, reject) => {
       const child = spawn(executable, args.slice(1), {
         ...(options.cwd ? { cwd: options.cwd } : {}),
-        ...(options.env ? { env: options.env } : {}),
+        env: options.env ?? { ...process.env, ...buildJavaEnvironment() },
         stdio: ['pipe', 'pipe', 'pipe'],
       });
       const input = options.inputFile ? createReadStream(options.inputFile) : undefined;
@@ -81,7 +82,7 @@ beforeAll(async () => {
   directory = await mkdtemp(join(tmpdir(), 'pxv-crypto-fixtures-'));
   const keyStore = join(directory, 'fixture.p12');
   await run([
-    'keytool',
+    buildJavaExecutable('keytool'),
     '-genkeypair',
     '-alias',
     'fixture',
@@ -104,7 +105,7 @@ beforeAll(async () => {
     '-noprompt',
   ]);
   const certificate = await run([
-    'keytool',
+    buildJavaExecutable('keytool'),
     '-exportcert',
     '-rfc',
     '-alias',
@@ -122,11 +123,28 @@ beforeAll(async () => {
     JSON.stringify({ repo: { timestamp: Date.now() }, packages: {} }),
   );
   signedJar = join(directory, 'index-v1.jar');
-  await run(['jar', '--create', '--file', signedJar, '-C', indexDirectory, 'index-v1.json']);
-  await run(['jarsigner', '-keystore', keyStore, '-storepass', 'fixture-only', signedJar, 'fixture']);
+  await run([
+    buildJavaExecutable('jar'),
+    '--create',
+    '--file',
+    signedJar,
+    '-C',
+    indexDirectory,
+    'index-v1.json',
+  ]);
+  await run([
+    buildJavaExecutable('jarsigner'),
+    '-keystore',
+    keyStore,
+    '-storepass',
+    'fixture-only',
+    signedJar,
+    'fixture',
+  ]);
   const floors = new Map<string, RepositoryFloor>();
   repo = new RepositoryService({
     runner: native,
+    java: buildJavaExecutable('java'),
     verifierPath: resolve('resources/VerifyRepositoryIndex.java'),
     freshness: {
       read: (key) => Promise.resolve(floors.get(key)),
@@ -153,7 +171,7 @@ beforeAll(async () => {
     publicKey: (await readFile(`${key}.pub`, 'utf8')).trim().split(' ').slice(0, 2).join(' '),
   };
   const sdk =
-    process.env['ANDROID_HOME'] ?? process.env['ANDROID_SDK_ROOT'] ?? join(homedir(), 'Android/Sdk');
+    process.env['PXV_ANDROID_HOME'] || process.env['ANDROID_HOME'] || join(homedir(), 'Android/Sdk');
   const tools = process.env['PXV_BUILD_TOOLS'] ?? join(sdk, 'build-tools', '35.0.0');
   const aapt = join(tools, 'aapt');
   const apksigner = join(tools, 'apksigner');
@@ -304,7 +322,7 @@ describe('real cryptographic artifact checks', () => {
     const changes = join(directory, 'tamper');
     await mkdir(changes);
     await writeFile(join(changes, 'index-v1.json'), '{"repo":{"timestamp":1},"packages":{}}');
-    await run(['jar', '--update', '--file', tampered, '-C', changes, 'index-v1.json']);
+    await run([buildJavaExecutable('jar'), '--update', '--file', tampered, '-C', changes, 'index-v1.json']);
     await expect(repo.verifyJar(tampered, signer, 'index-v1.json')).rejects.toThrow(/authentication/);
   });
   it('verifies SSH image signatures and fails changed images and wrong keys', async () => {

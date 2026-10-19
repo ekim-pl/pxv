@@ -48,6 +48,28 @@ function versionAtLeast(version: string, minimum: number[]): boolean {
   }
   return true;
 }
+function pathDirectories(env: NodeJS.ProcessEnv): string[] {
+  return (env['PATH'] ?? '/usr/bin:/bin').split(delimiter).filter(Boolean);
+}
+function sdkDirectories(env: NodeJS.ProcessEnv): string[] {
+  const sdk = env['PXV_ANDROID_HOME'] || env['ANDROID_HOME'] || join(homedir(), 'Android', 'Sdk');
+  const managed = env['PXV_TOOLS_DIR'];
+  return [
+    ...(managed ? [join(managed, 'platform-tools'), join(managed, 'build-tools', '35.0.0')] : []),
+    join(sdk, 'platform-tools'),
+    env['PXV_BUILD_TOOLS'] ?? join(sdk, 'build-tools', '35.0.0'),
+    ...pathDirectories(env),
+  ];
+}
+function toolCandidates(env: NodeJS.ProcessEnv, tool: HostTool): string[] {
+  const override = env[`PXV_TOOL_${tool.replace('-', '_').toUpperCase()}`];
+  if (override !== undefined) return [override];
+  const javaHome = env['PXV_JAVA_HOME'] || env['JAVA_HOME'];
+  if (tool === 'java' && javaHome) return [join(javaHome, 'bin', 'java')];
+  return (tool === 'java' ? pathDirectories(env) : sdkDirectories(env)).map((directory) =>
+    join(directory, tool),
+  );
+}
 /** Discovery is read-only; it never downloads tools or starts an ADB server. */
 export class HostTools {
   readonly runner: CommandRunner;
@@ -57,16 +79,7 @@ export class HostTools {
     this.env = options.env ?? process.env;
   }
   async discover(tool: HostTool): Promise<string | undefined> {
-    const override = this.env[`PXV_TOOL_${tool.replace('-', '_').toUpperCase()}`];
-    const sdk = this.env['ANDROID_HOME'] ?? this.env['ANDROID_SDK_ROOT'] ?? join(homedir(), 'Android', 'Sdk');
-    const managed = this.env['PXV_TOOLS_DIR'];
-    const directories = [
-      ...(managed ? [join(managed, 'platform-tools'), join(managed, 'build-tools', '35.0.0')] : []),
-      join(sdk, 'platform-tools'),
-      this.env['PXV_BUILD_TOOLS'] ?? join(sdk, 'build-tools', '35.0.0'),
-      ...(this.env['PATH'] ?? '/usr/bin:/bin').split(delimiter).filter(Boolean),
-    ];
-    const candidates = override ? [override] : directories.map((directory) => join(directory, tool));
+    const candidates = toolCandidates(this.env, tool);
     for (const candidate of candidates) {
       try {
         const path = await realpath(candidate);

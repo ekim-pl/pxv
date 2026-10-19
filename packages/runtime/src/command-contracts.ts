@@ -1,3 +1,4 @@
+import { delimiter, join } from 'node:path';
 export interface CommandResult {
   code: number;
   stdout: string;
@@ -73,9 +74,15 @@ export function validateCommand(args: string[], options: CommandOptions): void {
 }
 export function commandEnvironment(explicit?: Record<string, string>): Record<string, string> {
   if (explicit) return { ...explicit };
-  return Object.fromEntries(
+  const env = Object.fromEntries(
     Object.entries(process.env).filter((entry): entry is [string, string] => entry[1] !== undefined),
   );
+  const javaHome = env['PXV_JAVA_HOME'] || env['JAVA_HOME'];
+  if (javaHome) {
+    env['JAVA_HOME'] = javaHome;
+    env['PATH'] = join(javaHome, 'bin') + (env['PATH'] ? delimiter + env['PATH'] : '');
+  }
+  return env;
 }
 export function nativeCommand(id: string, args: string[], options: CommandOptions): Record<string, unknown> {
   return {

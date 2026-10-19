@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from './../test-api.js';
+import { afterEach, describe, expect, it, vi } from './../test-api.js';
 import { createServer, type Server } from 'node:net';
 import {
   adbClientEnvironment,
@@ -11,6 +11,7 @@ import {
 } from '../../packages/adapters/src/index.js';
 const servers: Server[] = [];
 afterEach(async () => {
+  vi.unstubAllEnvs();
   await Promise.all(
     servers
       .splice(0)
@@ -32,22 +33,33 @@ async function server(response: string): Promise<AdbServerEndpoint> {
 }
 describe('independent shared ADB server lifecycle', () => {
   it('resolves explicit TCP, host and Unix endpoints without starting a daemon', () => {
-    expect(configuredAdbServer({})).toEqual({ host: '127.0.0.1', port: 5037 });
     expect(
-      configuredAdbServer({ ANDROID_ADB_SERVER_ADDRESS: '192.0.2.1', ANDROID_ADB_SERVER_PORT: '6000' }),
-    ).toEqual({ host: '192.0.2.1', port: 6000 });
-    expect(configuredAdbServer({ ADB_SERVER_SOCKET: 'tcp:[::1]:5038' })).toEqual({ host: '::1', port: 5038 });
-    expect(configuredAdbServer({ ADB_SERVER_SOCKET: 'tcp:5039' }).port).toBe(5039);
-    expect(configuredAdbServer({ ADB_SERVER_SOCKET: 'localfilesystem:/tmp/adb.sock' }).socketPath).toBe(
+      configuredAdbServer({
+        ANDROID_ADB_SERVER_ADDRESS: 'ignored',
+        ANDROID_ADB_SERVER_PORT: 'bad',
+        ADB_SERVER_SOCKET: 'unsupported:ignored',
+      }),
+    ).toEqual({ host: '127.0.0.1', port: 5037 });
+    expect(configuredAdbServer({})).toEqual({ host: '127.0.0.1', port: 5037 });
+    expect(configuredAdbServer({ PXV_HOST_ADB_HOST: '192.0.2.1', PXV_HOST_ADB_PORT: '6000' })).toEqual({
+      host: '192.0.2.1',
+      port: 6000,
+    });
+    expect(configuredAdbServer({ PXV_ADB_SERVER_SOCKET: 'tcp:[::1]:5038' })).toEqual({
+      host: '::1',
+      port: 5038,
+    });
+    expect(configuredAdbServer({ PXV_ADB_SERVER_SOCKET: 'tcp:5039' }).port).toBe(5039);
+    expect(configuredAdbServer({ PXV_ADB_SERVER_SOCKET: 'localfilesystem:/tmp/adb.sock' }).socketPath).toBe(
       '/tmp/adb.sock',
     );
-    expect(configuredAdbServer({ ADB_SERVER_SOCKET: 'localabstract:adb-name' }).socketPath).toBe(
+    expect(configuredAdbServer({ PXV_ADB_SERVER_SOCKET: 'localabstract:adb-name' }).socketPath).toBe(
       '\0adb-name',
     );
-    expect(() => configuredAdbServer({ ADB_SERVER_SOCKET: 'unsupported:thing' })).toThrow(/Unsupported/);
-    expect(() => configuredAdbServer({ ADB_SERVER_SOCKET: 'tcp:malformed' })).toThrow(/Invalid/);
+    expect(() => configuredAdbServer({ PXV_ADB_SERVER_SOCKET: 'unsupported:thing' })).toThrow(/Unsupported/);
+    expect(() => configuredAdbServer({ PXV_ADB_SERVER_SOCKET: 'tcp:malformed' })).toThrow(/Invalid/);
     expect(() => validateAdbServer({ host: 'invalid host', port: 5037 })).toThrow(/Invalid/);
-    expect(() => configuredAdbServer({ ANDROID_ADB_SERVER_PORT: '70000' })).toThrow(/Invalid/);
+    expect(() => configuredAdbServer({ PXV_HOST_ADB_PORT: '70000' })).toThrow(/Invalid/);
   });
   it('probes complete ADB version replies and rejects fake, partial and oversized responses', async () => {
     await expect(probeAdbServer(await server('OKAY00040029'))).resolves.toBeUndefined();
@@ -57,9 +69,15 @@ describe('independent shared ADB server lifecycle', () => {
       });
   });
   it('keeps explicit client hosts and socket selection while excluding inherited secrets', () => {
+    vi.stubEnv('PXV_ADB_VENDOR_KEYS', '/canonical keys ');
+    vi.stubEnv('ADB_VENDOR_KEYS', '/ignored keys');
     const tcp = adbClientEnvironment({ host: '192.0.2.2', port: 5037 });
     expect(tcp['ANDROID_ADB_SERVER_ADDRESS']).toBe('192.0.2.2');
     expect(tcp).not.toHaveProperty('NPM_TOKEN');
+    expect(tcp['ADB_VENDOR_KEYS']).toBe('/canonical keys ');
+    expect(tcp).not.toHaveProperty('PXV_ADB_VENDOR_KEYS');
+    vi.stubEnv('PXV_ADB_VENDOR_KEYS', undefined);
+    expect(adbClientEnvironment({ host: '127.0.0.1', port: 5037 })).not.toHaveProperty('ADB_VENDOR_KEYS');
     expect(
       adbClientEnvironment({ host: '127.0.0.1', port: 5037, socketPath: '/tmp/adb.sock' })[
         'ADB_SERVER_SOCKET'

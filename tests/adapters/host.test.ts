@@ -12,6 +12,7 @@ beforeEach(async () => {
 });
 afterEach(async () => {
   vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
   await rm(directory, { recursive: true, force: true });
 });
 const outputs: Record<string, string> = {
@@ -61,6 +62,56 @@ describe('read-only host discovery and explicit verified bootstrap', () => {
     });
     expect((await obsolete.inspect('fastboot')).compatible).toBe(false);
     await expect(obsolete.require('fastboot')).rejects.toThrow(/incompatible/);
+  });
+  it('selects canonical homes verbatim, falls back from empty homes and rejects invalid selected Java', async () => {
+    const canonical = join(directory, 'canonical home');
+    const native = join(directory, 'native home');
+    for (const home of [canonical, native]) {
+      await mkdir(join(home, 'bin'), { recursive: true });
+      await mkdir(join(home, 'platform-tools'));
+      await executable(join(home, 'bin', 'java'));
+      await executable(join(home, 'platform-tools', 'adb'));
+    }
+    const env = {
+      PXV_ANDROID_HOME: canonical,
+      ANDROID_HOME: native,
+      PXV_JAVA_HOME: canonical,
+      JAVA_HOME: native,
+      PATH: join(native, 'bin'),
+    };
+    const host = new HostTools({ runner, env });
+    expect(await host.discover('adb')).toBe(join(canonical, 'platform-tools', 'adb'));
+    expect(await host.discover('java')).toBe(join(canonical, 'bin', 'java'));
+    env.PXV_ANDROID_HOME = '';
+    env.PXV_JAVA_HOME = '';
+    expect(await host.discover('adb')).toBe(join(native, 'platform-tools', 'adb'));
+    expect(await host.discover('java')).toBe(join(native, 'bin', 'java'));
+    expect(
+      await new HostTools({
+        runner,
+        env: { PXV_JAVA_HOME: '', JAVA_HOME: '', PATH: join(native, 'bin') },
+      }).discover('java'),
+    ).toBe(join(native, 'bin', 'java'));
+    const fallback = join(directory, 'Android', 'Sdk', 'platform-tools');
+    await mkdir(fallback, { recursive: true });
+    await executable(join(fallback, 'adb'));
+    vi.stubEnv('HOME', directory);
+    expect(await new HostTools({ runner, env: { ANDROID_SDK_ROOT: native, PATH: '' } }).discover('adb')).toBe(
+      join(fallback, 'adb'),
+    );
+    env.PXV_JAVA_HOME = join(directory, 'missing');
+    expect(await host.discover('java')).toBeUndefined();
+    expect(
+      await new HostTools({ runner, env: { ...env, PXV_TOOL_JAVA: join(native, 'bin', 'java') } }).discover(
+        'java',
+      ),
+    ).toBe(join(native, 'bin', 'java'));
+    expect(
+      await new HostTools({ runner, env: { ...env, PXV_TOOL_JAVA: '' } }).discover('java'),
+    ).toBeUndefined();
+    expect(
+      await new HostTools({ runner, env: { ANDROID_SDK_ROOT: native, PATH: '' } }).discover('adb'),
+    ).not.toBe(join(native, 'platform-tools', 'adb'));
   });
   it('requires a working fdroidcl when explicitly selected', async () => {
     const path = join(directory, 'fdroidcl');

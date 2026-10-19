@@ -2,7 +2,7 @@ import { randomBytes, createHash } from 'node:crypto';
 import { lstat, mkdir, readFile, readdir, rm, writeFile, chmod, access } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
-import { runBuildCommand } from './build-command.mjs';
+import { buildJavaEnvironment, buildJavaExecutable, runBuildCommand } from './build-command.mjs';
 /** @typedef {{component:string,root:string,resources:string,sdk:string,build:string,alias:string}} BuildInput */
 /** @typedef {(args:string[],cwd?:string)=>Promise<string>} BuildCommand */
 /** @param {string} path */
@@ -31,8 +31,11 @@ function input(argv, resources) {
   const component = parsed.values.component;
   if (!component || !['probe', 'setup', 'e2e'].includes(component))
     throw new Error('Choose probe, setup or e2e');
-  const sdk = process.env['ANDROID_HOME'] ?? process.env['ANDROID_SDK_ROOT'];
-  if (!sdk) throw new Error('Set ANDROID_HOME to a reviewed SDK with platform 35 and Build Tools 35.0.0');
+  const sdk = process.env['PXV_ANDROID_HOME'] || process.env['ANDROID_HOME'];
+  if (!sdk)
+    throw new Error(
+      'Set PXV_ANDROID_HOME or ANDROID_HOME to a reviewed SDK with platform 35 and Build Tools 35.0.0',
+    );
   const root = resolve(parsed.values['project-root'] ?? process.env['PXV_ROOT'] ?? process.cwd());
   return {
     component,
@@ -73,8 +76,7 @@ async function signing(value) {
   if (!/^[a-f0-9]{64}$/u.test(password))
     throw new Error('Signing password must be 64 hexadecimal characters');
   const env = {
-    PATH: process.env['PATH'] ?? '/usr/bin:/bin',
-    JAVA_HOME: process.env['JAVA_HOME'] ?? '',
+    ...buildJavaEnvironment(),
     PXV_SIGNING_PASSWORD: password,
   };
   /** @type {BuildCommand} */
@@ -85,7 +87,7 @@ async function signing(value) {
 async function ensureKey(value, material) {
   if (!(await exists(material.key)))
     await material.run([
-      'keytool',
+      buildJavaExecutable('keytool'),
       '-genkeypair',
       '-keystore',
       material.key,
@@ -151,7 +153,7 @@ async function packageApk(value, run) {
   const sources = await javaSources(join(resources, 'android', component, 'src'));
   if (component === 'e2e') sources.push(...(await javaSources(generated)));
   await run([
-    'javac',
+    buildJavaExecutable('javac'),
     '--release',
     '8',
     '-Xlint:all',
@@ -163,7 +165,7 @@ async function packageApk(value, run) {
     ...sources,
   ]);
   const jar = join(build, `${component}.jar`);
-  await run(['jar', 'cf', jar, '-C', classes, '.']);
+  await run([buildJavaExecutable('jar'), 'cf', jar, '-C', classes, '.']);
   await run([join(tools, 'd8'), '--min-api', '28', '--lib', androidJar, '--output', join(build, 'dex'), jar]);
   await run([aapt, 'add', unsigned, 'classes.dex'], join(build, 'dex'));
   return unsigned;

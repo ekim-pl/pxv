@@ -1,7 +1,11 @@
-import { CommandError } from '../../packages/runtime/src/command-contracts.js';
+import {
+  CommandError,
+  commandEnvironment,
+  nativeCommand,
+} from '../../packages/runtime/src/command-contracts.js';
 import { spawn, execFileSync } from 'node:child_process';
 import { chmod, mkdtemp, readFile, readdir, stat, symlink, writeFile } from 'node:fs/promises';
-import { join, resolve } from 'node:path';
+import { delimiter, join, resolve } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { describe, expect, test, vi } from './../test-api.js';
 import {
@@ -59,6 +63,43 @@ describe('checked runtime', () => {
     await expect(runner.run(['echo'], { timeoutMs: 0 })).rejects.toThrow('timeout');
     await expect(runner.run(['echo'], { input: Buffer.alloc(9 * 1024 * 1024) })).rejects.toThrow('inputFile');
     await expect(runner.run(['echo'], { mutation: true, lease: {} })).rejects.toThrow('native DeviceLease');
+  });
+  test('translates inherited Java selection at the real launch boundary and isolates explicit environments', async () => {
+    const previous = { ...process.env };
+    try {
+      process.env['PXV_JAVA_HOME'] = '/selected Java home ';
+      process.env['JAVA_HOME'] = '/conflicting';
+      process.env['PATH'] = '/original';
+      const expected = {
+        JAVA_HOME: '/selected Java home ',
+        PATH: '/selected Java home /bin' + delimiter + '/original',
+      };
+      expect(commandEnvironment()).toMatchObject(expected);
+      expect(nativeCommand('test', [node], {}).env).toMatchObject(expected);
+      const script = 'console.log(JSON.stringify({JAVA_HOME:process.env.JAVA_HOME,PATH:process.env.PATH}))';
+      expect(JSON.parse((await runner.run([node, '-e', script])).stdout)).toEqual(expected);
+      const directory = await mkdtemp('/tmp/pxv-java-launch-');
+      await withDeviceLease(
+        join(directory, 'control'),
+        'java-device',
+        'java-transport',
+        'java-launch',
+        async (lease) => {
+          const result = await runner.run([node, '-e', script], { mutation: true, lease });
+          expect(JSON.parse(result.stdout)).toEqual(expected);
+        },
+      );
+      expect(commandEnvironment({})).toEqual({});
+      const explicit = { JAVA_HOME: '/explicit', PATH: '/explicit-path', PXV_JAVA_HOME: '/untranslated' };
+      expect(commandEnvironment(explicit)).toEqual(explicit);
+      expect(JSON.parse((await runner.run([node, '-e', script], { env: {} })).stdout)).toEqual({});
+      process.env['PXV_JAVA_HOME'] = '';
+      expect(commandEnvironment()['JAVA_HOME']).toBe('/conflicting');
+      process.env['JAVA_HOME'] = '';
+      expect(commandEnvironment()['PATH']).toBe('/original');
+    } finally {
+      process.env = previous;
+    }
   });
   test('streams regular file input without loading it into IPC', async () => {
     const directory = await mkdtemp('/tmp/pxv-command-');

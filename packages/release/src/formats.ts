@@ -56,7 +56,7 @@ export function dockerfile(manifest: CandidateManifest): string {
     ),
     'COPY candidate /opt/pxv',
     'COPY entrypoint.sh /usr/local/bin/pxv-entrypoint',
-    'ENV HOME=/tmp PXV_RESOURCE_ROOT=/opt/pxv PXV_SUPERVISOR=/opt/pxv/node_modules/@pxv/runtime/supervisor.js PXV_ROOT=/project PXV_CONTROL_ROOT=/control PXV_EXTENSION_ROOT=/extensions PXV_DOCKER_MODE=host-adb ANDROID_HOME=/opt/android-sdk ANDROID_SDK_ROOT=/opt/android-sdk PATH=/opt/platform-tools:/opt/android-sdk/build-tools/35.0.0:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin ADB_MDNS_AUTO_CONNECT=0',
+    'ENV HOME=/tmp PXV_RESOURCE_ROOT=/opt/pxv PXV_SUPERVISOR=/opt/pxv/node_modules/@pxv/runtime/supervisor.js PXV_ROOT=/project PXV_CONTROL_ROOT=/control PXV_EXTENSION_ROOT=/extensions PXV_DOCKER_MODE=host-adb PXV_ANDROID_HOME=/opt/android-sdk PATH=/opt/platform-tools:/opt/android-sdk/build-tools/35.0.0:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin ADB_MDNS_AUTO_CONNECT=0',
     `LABEL org.opencontainers.image.title=${JSON.stringify(manifest.product.name)} org.opencontainers.image.version=${JSON.stringify(manifest.version)} org.opencontainers.image.licenses="MIT" org.opencontainers.image.revision=${JSON.stringify(manifest.source.revision ?? 'working-tree')} org.pxv.source-digest=${JSON.stringify(manifest.sourceDigest)}`,
     'WORKDIR /project',
     'USER 65532:65532',

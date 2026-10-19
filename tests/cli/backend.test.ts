@@ -540,6 +540,21 @@ describe('MCP/CLI backend ports and detached execution', () => {
     const run = await engine.submit(prepared.plan.id, prepared.reviewSummary, 'operator');
     process.env['PXV_REGISTRY_TOKEN'] = 'private-registry-sentinel';
     process.env['PXV_TOOL_ADB'] = '/approved/adb';
+    const approved = {
+      PXV_ANDROID_HOME: '/selected sdk ',
+      ANDROID_HOME: '/native sdk',
+      PXV_JAVA_HOME: '/selected jdk ',
+      JAVA_HOME: '/native jdk',
+      PXV_ADB_SERVER_SOCKET: 'localfilesystem:/adb socket',
+      PXV_ADB_VENDOR_KEYS: '/adb keys',
+      XDG_DATA_HOME: '/data home',
+      PXV_TOOL_FDROIDCL: '/fdroidcl',
+    };
+    Object.assign(process.env, approved, {
+      ANDROID_SDK_ROOT: '/ignored',
+      ADB_SERVER_SOCKET: '/ignored',
+      ADB_VENDOR_KEYS: '/ignored',
+    });
     process.env['PXV_DOCKER_MODE'] = 'host-adb';
     const unref = vi.fn();
     detachedSpawn.mockImplementation(() => {
@@ -560,6 +575,9 @@ describe('MCP/CLI backend ports and detached execution', () => {
     expect(detachedSpawn).toHaveBeenCalledTimes(1);
     expect(unref).toHaveBeenCalledOnce();
     const options = detachedSpawn.mock.calls[0]?.[2];
+    expect(options?.env).toMatchObject(approved);
+    for (const key of ['ANDROID_SDK_ROOT', 'ADB_SERVER_SOCKET', 'ADB_VENDOR_KEYS'])
+      expect(options?.env).not.toHaveProperty(key);
     expect(options?.env?.['PXV_TOOL_ADB']).toBe('/approved/adb');
     expect(options?.env?.['PXV_DOCKER_MODE']).toBe('host-adb');
     expect(options?.env?.['PXV_REGISTRY_TOKEN']).toBeUndefined();

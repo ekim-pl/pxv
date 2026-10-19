@@ -18,7 +18,7 @@ x-environment: &environment
   PXV_CONTROL_ROOT: /control
   PXV_EXTENSION_ROOT: /extensions
   HOME: /adb-home
-  ADB_VENDOR_KEYS: /adb-home/.android
+  PXV_ADB_VENDOR_KEYS: /adb-home/.android
   ADB_MDNS_AUTO_CONNECT: "0"
 
 x-worker: &worker
