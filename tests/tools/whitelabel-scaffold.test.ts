@@ -118,7 +118,7 @@ it('accepts a Polish language override and optional brand assets', async () => {
   const starter = config['starter'] as Record<string, unknown>;
   product['id'] = 'acme-reference';
   product['name'] = 'Acme Reference';
-  starter['policyTemplate'] = 'reference-five';
+  starter['policyTemplate'] = 'fleet-nerd';
   delete starter['defaultLocale'];
   starter['language'] = 'pl-PL';
   starter['ownerProfileName'] = 'Koordynator';
@@ -146,7 +146,7 @@ it('canonicalizes a language-script-region default for every generated profile, 
   const root = await scratch();
   const config = await json<Record<string, unknown>>(join(repo, 'config/templates/white-label.example.json'));
   const starter = config['starter'] as Record<string, unknown>;
-  starter['policyTemplate'] = 'reference-five';
+  starter['policyTemplate'] = 'fleet-nerd';
   starter['defaultLocale'] = 'SR-latn-rs';
   const output = join(root, 'out');
 

@@ -51,7 +51,7 @@ OPERATOR='Your name'
 
 Review your policy before initialization:
 
-- For Owner-only use, start with [`simple`](../policy-packs/simple/policy.json).
+- For Owner-only use, start with [`single-simple`](../policy-packs/single-simple/policy.json).
   It is a structural starter with no apps or OS image pins, not a ready security
   configuration. Prepare your own reviewed copy.
 - For several profiles, choose their purposes, names, apps, permissions, VPN and

@@ -85,7 +85,7 @@ beforeEach(async () => {
   resources = join(root, 'resources');
   project = join(root, 'project');
   statePath = join(root, 'phone.json');
-  await mkdir(join(resources, 'policy-packs/reference-five'), { recursive: true });
+  await mkdir(join(resources, 'policy-packs/fleet-nerd'), { recursive: true });
   await writeFile(join(resources, 'product.json'), JSON.stringify(product));
   await writeFile(
     join(resources, product.defaultPolicy),

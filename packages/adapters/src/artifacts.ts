@@ -24,6 +24,29 @@ export interface ArtifactOptions {
   apksigner?: string;
   cacheRoot?: string;
 }
+
+function currentApkSigner(verification: string): string {
+  let signers = [
+    ...verification.matchAll(/^Signer #\d+ certificate SHA-256 digest:\s*([a-fA-F0-9]{64})\s*$/gm),
+  ].map((row) => row[1]?.toLowerCase());
+  const rotated = [
+    ...verification.matchAll(
+      /^Signer \(minSdkVersion=(\d+), maxSdkVersion=(\d+)\) certificate SHA-256 digest:\s*([a-fA-F0-9]{64})\s*$/gm,
+    ),
+  ];
+  if (rotated.length) {
+    const counts = [...verification.matchAll(/^Number of signers:\s*(\d+)\s*$/gm)];
+    if (signers.length || counts.length !== 1 || counts[0]?.[1] !== '1')
+      throw new AdapterError('APK requires exactly one verified signing certificate');
+    // apksigner verifies the rotation lineage; its unbounded SDK range identifies
+    // the current certificate rather than a historical compatibility signer.
+    signers = rotated.filter((row) => row[2] === '2147483647').map((row) => row[3]?.toLowerCase());
+  }
+  if (signers.length !== 1 || !signers[0])
+    throw new AdapterError('APK requires exactly one verified signing certificate');
+  return signers[0];
+}
+
 /** The only APK acquisition and verification path, shared by CLI, MCP and workflows. */
 export class ArtifactService {
   readonly runner: CommandRunner;
@@ -80,12 +103,7 @@ export class ArtifactService {
       ),
       'APK cryptographic verification',
     );
-    const signers = [
-      ...verification.matchAll(/^Signer #\d+ certificate SHA-256 digest:\s*([a-fA-F0-9]{64})\s*$/gm),
-    ].map((row) => row[1]?.toLowerCase());
-    if (signers.length !== 1 || !signers[0])
-      throw new AdapterError('APK requires exactly one verified signing certificate');
-    return { packageId: packageId(match[1]), versionCode, signerSha256: signers[0] };
+    return { packageId: packageId(match[1]), versionCode, signerSha256: currentApkSigner(verification) };
   }
   async inspect(
     path: string,

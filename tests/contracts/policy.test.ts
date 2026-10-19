@@ -292,10 +292,10 @@ describe('capability-based readiness and private setup', () => {
   });
 
   it('loads starter packs, the project template and the active Community product', () => {
-    for (const name of ['reference-five', 'simple', 'custom']) {
+    for (const name of ['fleet-nerd', 'single-simple', 'fleet-custom']) {
       const loaded = validatePolicy(parseDocument(readFileSync(`policy-packs/${name}/policy.json`, 'utf8')));
       expect(loaded.profiles.filter((profile) => profile.kind === 'owner')).toHaveLength(1);
-      expect(loaded.profiles.length).toBe(name === 'reference-five' ? 5 : name === 'simple' ? 1 : 3);
+      expect(loaded.profiles.length).toBe(name === 'fleet-nerd' ? 5 : name === 'single-simple' ? 1 : 3);
     }
     expect(validateProject(parseDocument(readFileSync('config/templates/project.json', 'utf8'))).format).toBe(
       'pxv-ts',
@@ -306,7 +306,7 @@ describe('capability-based readiness and private setup', () => {
       name: 'pxv Community',
       engineApi: 1,
       features: { extensions: false, seedvault: false },
-      defaultPolicy: 'policy-packs/reference-five/policy.json',
+      defaultPolicy: 'policy-packs/fleet-nerd/policy.json',
     });
     const defaultPolicy = validatePolicy(parseDocument(readFileSync(activeProduct.defaultPolicy, 'utf8')));
     expect(defaultPolicy.profiles).toHaveLength(5);

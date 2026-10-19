@@ -6,7 +6,7 @@ not record a pass. Use your own name for both roles and complete their confirmat
 separately. Follow the [self-managed guide](SELF_MANAGED_PHONE.md) for background and
 [verification boundaries](VERIFICATION.md) when interpreting evidence.
 
-The starter is [self-service-five](../policy-packs/self-service-five/policy.json).
+The starter is [single-nerd](../policy-packs/single-nerd/policy.json).
 It contains no app pins, OS pins, VPN configuration, credentials or destructive
 duress defaults. Schema validity alone is insufficient for the full test. Complete
 the private configuration gate below before phone-changing commands.
@@ -64,15 +64,15 @@ filled, even though its blank source is public:
 
 ```sh
 umask 077
-TEST_ROOT="$HOME/pxv-private/self-service-five-$(date +%Y%m%d-%H%M%S)"
+TEST_ROOT="$HOME/pxv-private/single-nerd-$(date +%Y%m%d-%H%M%S)"
 mkdir -p "$TEST_ROOT"
 chmod 700 "$TEST_ROOT"
 P="$TEST_ROOT/project"
 POLICY="$TEST_ROOT/policy.json"
 ASSET='self-test-phone'
 OPERATOR='REPLACE WITH YOUR NAME'
-cp "$S/policy-packs/self-service-five/policy.json" "$POLICY"
-cp "$S/tests/acceptance/self-service-five-results.md" "$TEST_ROOT/results.md"
+cp "$S/policy-packs/single-nerd/policy.json" "$POLICY"
+cp "$S/tests/acceptance/single-nerd-results.md" "$TEST_ROOT/results.md"
 chmod 600 "$POLICY" "$TEST_ROOT/results.md"
 ```
 
@@ -101,9 +101,12 @@ Before the full run, fill the private results matrix with:
 - The exact Pixel model/codename, approved GrapheneOS release and authenticated OS
   pin. Even when skipping installation, pinned OS verification must pass. Follow
   [policy format](POLICY_FORMAT.md); do not invent hashes, keys or signatures.
-- A shared catalog of actual approved APKs with exact versions, content and signer
-  digests and trusted sources; references for every profile's intended apps. Record
-  intentional absences. An empty catalog qualifies only a profile-layout rehearsal,
+- Review the starter's [pinned app catalog and assignments](../policy-packs/README.md#five-profile-apps),
+  including Rethink DNS in all five profiles, Oblivion in owner, Session/Telegram/Signal
+  in contacts, Aurora Store in google and Orbot in onion. Confirm the exact versions,
+  content and signer digests and trusted sources, and record any private changes or
+  intentional absences. Rethink's supplied APK requires arm64-v8a; replace its pin
+  for x86_64 emulator work. An empty catalog qualifies only a profile-layout rehearsal,
   not verified app deployment.
 - Explicit per-profile settings, permissions, account/import checkpoints and network
   expectations. Pin supported recipes where available; the standard CLI otherwise
@@ -116,7 +119,7 @@ Before the full run, fill the private results matrix with:
   `backup_recovery` check pending until a representative restore is demonstrated.
 - Five privately chosen ordinary screen locks and final languages. This starter
   has no credential-default files and no duress action; do not copy destructive
-  defaults from reference-five merely to satisfy a checklist.
+  defaults from fleet-nerd merely to satisfy a checklist.
 
 Leave `routes`, `network_failure_tests`, `backup_recovery`, `recipient_acceptance`
 and `operator_signoff` required. Ordinary credentials and physical verified boot

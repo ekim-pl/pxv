@@ -35,20 +35,28 @@
   ],
   "profileLayouts": [
     {
-      "pack": "reference-five",
+      "pack": "fleet-nerd",
       "count": 5
     },
     {
-      "pack": "simple",
+      "pack": "single-simple",
       "count": 1
     },
     {
-      "pack": "custom",
+      "pack": "fleet-custom",
       "count": 3
     },
     {
-      "pack": "self-service-five",
+      "pack": "single-nerd",
       "count": 5
+    },
+    {
+      "pack": "fleet-privacy",
+      "count": 3
+    },
+    {
+      "pack": "single-privacy",
+      "count": 3
     }
   ],
   "liveAcceptance": {

@@ -44,7 +44,7 @@ pxv guides rebuild [--policy FILE] [--output-dir DIR] [--chromium PATH] [--html-
 For an installation with five configured Android user profiles, use its policy directly:
 
 ```sh
-pxv guides rebuild --policy policy-packs/reference-five/policy.json --output-dir output/pdf/reference-five --chromium /usr/bin/google-chrome
+pxv guides rebuild --policy policy-packs/fleet-nerd/policy.json --output-dir output/pdf/fleet-nerd --chromium /usr/bin/google-chrome
 ```
 
 `--policy` accepts authoring policies and validates them through the same policy contracts used for installation. Use the installation's own policy path in place of this structural starter. Choose a separate `--output-dir` for every policy build; the builder refuses to replace authoritative guide sources. Relative policy and destination paths are resolved from the directory where you run the command. A policy build does not require project initialization, connect to the phone or alter the accepted handoff snapshot.

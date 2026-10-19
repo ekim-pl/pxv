@@ -47,7 +47,7 @@ describe('isolated project data', () => {
     expect(await loadProduct('product.json')).toEqual({
       ...product,
       features: { extensions: false, seedvault: false },
-      defaultPolicy: 'policy-packs/reference-five/policy.json',
+      defaultPolicy: 'policy-packs/fleet-nerd/policy.json',
       assets: { logo: 'assets/logo.svg' },
       support: { name: 'pxv Community', email: 'support@example.org', url: 'https://example.org/pxv' },
     });

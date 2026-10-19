@@ -69,6 +69,9 @@ its reviewed URL/repository supplies the bytes. Use the same app ID in several
 profiles rather than copying the artifact definition. An Android package update can
 affect every user where it is installed; review the cross-profile effects shown in
 the plan. Do not invent hashes or trust a download solely because it uses HTTPS.
+For an APK with a verified signing-key rotation lineage, `signerSha256` identifies
+the current certificate (the unbounded SDK range in Android `apksigner` output),
+not a historical compatibility certificate. Multiple independent signers are rejected.
 
 Per-profile settings, permission grants and VPN policy remain explicit. Configure
 device-wide `global` settings only in `deviceSettings`; profile settings cannot use

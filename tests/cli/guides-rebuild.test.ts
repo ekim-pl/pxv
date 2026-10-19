@@ -32,7 +32,7 @@ describe('guides rebuild command', () => {
         '--output-dir',
         '/tmp/guide-output',
         '--policy',
-        'policy-packs/simple/policy.json',
+        'policy-packs/single-simple/policy.json',
         '--chromium',
         '/usr/bin/chromium',
         '--html-only',
@@ -56,7 +56,7 @@ describe('guides rebuild command', () => {
           '--output-dir',
           '/tmp/guide-output',
           '--policy',
-          `${process.cwd()}/policy-packs/simple/policy.json`,
+          `${process.cwd()}/policy-packs/single-simple/policy.json`,
           '--chromium',
           '/usr/bin/chromium',
           '--html-only',
@@ -75,7 +75,7 @@ describe('guides rebuild command', () => {
         'guides',
         'rebuild',
         '--policy',
-        '../../policy-packs/simple/policy.json',
+        '../../policy-packs/single-simple/policy.json',
         '--output-dir',
         '../../output/profile',
       ],
@@ -94,7 +94,7 @@ describe('guides rebuild command', () => {
         '--output-dir',
         resolve('output/profile'),
         '--policy',
-        resolve('policy-packs/simple/policy.json'),
+        resolve('policy-packs/single-simple/policy.json'),
       ],
       cwd: process.cwd(),
     });
@@ -107,9 +107,9 @@ describe('guides rebuild command', () => {
       return Promise.resolve();
     };
     for (const args of [
-      ['--policy', 'policy-packs/simple/policy.json'],
-      ['--policy', 'policy-packs/simple/policy.json', '--output-dir', 'guides'],
-      ['--policy', 'policy-packs/simple/policy.json', '--output-dir', 'guides/private'],
+      ['--policy', 'policy-packs/single-simple/policy.json'],
+      ['--policy', 'policy-packs/single-simple/policy.json', '--output-dir', 'guides'],
+      ['--policy', 'policy-packs/single-simple/policy.json', '--output-dir', 'guides/private'],
     ]) {
       const context = await parseCli(['guides', 'rebuild', ...args], io);
       await expect(guidesRebuildCommand(context, { execute })).rejects.toThrow(/Policy booklets require/u);
@@ -178,7 +178,7 @@ describe('guides rebuild command', () => {
           'guides',
           'rebuild',
           '--policy',
-          '../../policy-packs/simple/policy.json',
+          '../../policy-packs/single-simple/policy.json',
           '--html-only',
           '--output-dir',
           outputRoot,
@@ -194,7 +194,7 @@ describe('guides rebuild command', () => {
         installation: { policyId: string; profileCount: number };
         editions: { name: string; sourceSha256: string; templateSha256: string }[];
       };
-      const policy = JSON.parse(await readFile('policy-packs/simple/policy.json', 'utf8')) as {
+      const policy = JSON.parse(await readFile('policy-packs/single-simple/policy.json', 'utf8')) as {
         id: string;
         profiles: unknown[];
       };

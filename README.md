@@ -64,7 +64,7 @@ empty inventory; it does not contact or flash a phone:
 
 ```sh
 pnpm pxv project init --path /absolute/private/fleet \
-  --policy policy-packs/reference-five/policy.json
+  --policy policy-packs/fleet-nerd/policy.json
 pnpm pxv policy validate --project-root /absolute/private/fleet
 ```
 

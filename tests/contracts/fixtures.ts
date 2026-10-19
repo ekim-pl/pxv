@@ -93,7 +93,7 @@ export const product: ProductDescriptor = {
   upstreamVersion: '0.1.0',
   engineApi: 1,
   assets: { logo: 'assets/logo.svg' },
-  defaultPolicy: 'policy-packs/reference-five/policy.json',
+  defaultPolicy: 'policy-packs/fleet-nerd/policy.json',
   support: { name: 'Community', email: 'support@example.org', url: 'https://example.org/pxv' },
 };
 export const obligation: RecoveryObligation = {

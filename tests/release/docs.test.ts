@@ -500,7 +500,7 @@ describe('public documentation generation', () => {
     }
     const operator = await readFile(join(directory, 'guides/source/markdown/operator-en.md'), 'utf8');
     for (const file of ['policy.json']) {
-      const policy = parseDocument(await readFile(`policy-packs/simple/${file}`, 'utf8'));
+      const policy = parseDocument(await readFile(`policy-packs/single-simple/${file}`, 'utf8'));
       const normalized = validatePolicy(policy);
       const destination = join(directory, file);
       await buildDocumentation(directory, destination, { policy });
@@ -528,7 +528,7 @@ describe('public documentation generation', () => {
     await expect(buildDocumentation(directory, destination, { policy: {} })).rejects.toThrow();
     await expect(access(destination)).rejects.toThrow();
     const invalidPolicy = {
-      ...(parseDocument(await readFile('policy-packs/simple/policy.json', 'utf8')) as object),
+      ...(parseDocument(await readFile('policy-packs/single-simple/policy.json', 'utf8')) as object),
       unexpected: true,
     };
     await expect(buildDocumentation(directory, destination, { policy: invalidPolicy })).rejects.toThrow(
@@ -543,7 +543,7 @@ describe('public documentation generation', () => {
 
   it('rejects policy output within authoritative guides and through symlink aliases before writes', async () => {
     await sources();
-    const policy = parseDocument(await readFile('policy-packs/simple/policy.json', 'utf8'));
+    const policy = parseDocument(await readFile('policy-packs/single-simple/policy.json', 'utf8'));
     const canonical = await readFile(join(directory, 'guides/source/markdown/guide.en.md'), 'utf8');
     const alias = join(directory, 'guide-alias');
     await symlink(join(directory, 'guides'), alias);
@@ -563,7 +563,7 @@ describe('public documentation generation', () => {
 
   it('rejects existing nested output symlinks before they can overwrite canonical source files', async () => {
     await sources();
-    const policy = parseDocument(await readFile('policy-packs/simple/policy.json', 'utf8'));
+    const policy = parseDocument(await readFile('policy-packs/single-simple/policy.json', 'utf8'));
     const canonicalPath = join(directory, 'guides/source/markdown/guide.en.md');
     const canonical = await readFile(canonicalPath, 'utf8');
     const fileOutput = join(directory, 'file-link-output');
@@ -583,7 +583,7 @@ describe('public documentation generation', () => {
 
   it('rejects output hardlinks before cross-file copies can overwrite canonical source files', async () => {
     await sources();
-    const policy = parseDocument(await readFile('policy-packs/simple/policy.json', 'utf8'));
+    const policy = parseDocument(await readFile('policy-packs/single-simple/policy.json', 'utf8'));
     const canonicalPath = join(directory, 'guides/source/markdown/guide.en.md');
     const canonical = await readFile(canonicalPath, 'utf8');
     const destination = join(directory, 'hardlink-output');

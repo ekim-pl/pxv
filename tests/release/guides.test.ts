@@ -7,7 +7,7 @@ import { renderHandoff, writeHandoff, type HandoffSnapshot } from '../../package
 
 async function snapshot(): Promise<HandoffSnapshot> {
   const product = JSON.parse(await readFile('product.json', 'utf8')) as ProductDescriptor;
-  const policy = validatePolicy(JSON.parse(await readFile('policy-packs/simple/policy.json', 'utf8')));
+  const policy = validatePolicy(JSON.parse(await readFile('policy-packs/single-simple/policy.json', 'utf8')));
   const resolvedPolicy = resolvePolicy(policy, { ...project, id: 'project' }, product);
   const record: HandoffRecord = {
     schemaVersion: 1,

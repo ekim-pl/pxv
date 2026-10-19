@@ -12,7 +12,7 @@ import {
   validateProject,
 } from '../../../packages/contracts/dist/index.js';
 
-/** @typedef {{schemaVersion:1,product:{id:string,name:string,command:string,packageName:string,debName:string,image:string,support:{name:string,email:string,url:string},features?:{extensions?:boolean,seedvault?:boolean}},brand:{primary:string,secondary:string,accent:string,fontFamily:string,logoPath?:string,fontFile?:string},starter:{policyTemplate?:'simple'|'reference-five',defaultLocale?:string,language?:string,ownerProfileName?:string}}} ScaffoldConfig */
+/** @typedef {{schemaVersion:1,product:{id:string,name:string,command:string,packageName:string,debName:string,image:string,support:{name:string,email:string,url:string},features?:{extensions?:boolean,seedvault?:boolean}},brand:{primary:string,secondary:string,accent:string,fontFamily:string,logoPath?:string,fontFile?:string},starter:{policyTemplate?:'single-simple'|'fleet-nerd',defaultLocale?:string,language?:string,ownerProfileName?:string}}} ScaffoldConfig */
 /** @typedef {ScaffoldConfig & {configPath:string}} ConfigWithPath */
 /** @typedef {ReturnType<typeof validateProduct>} Product */
 /** @typedef {ReturnType<typeof validatePolicyDocument>} Policy */
@@ -81,9 +81,9 @@ function parseStarter(value) {
   validateKeys(value, [], 'starter', ['defaultLocale', 'language', 'ownerProfileName', 'policyTemplate']);
   if (
     value['policyTemplate'] !== undefined &&
-    !['simple', 'reference-five'].includes(String(value['policyTemplate']))
+    !['single-simple', 'fleet-nerd'].includes(String(value['policyTemplate']))
   )
-    throw new Error('starter.policyTemplate must be simple or reference-five');
+    throw new Error('starter.policyTemplate must be single-simple or fleet-nerd');
   const locale = starterLocale(value);
   if (
     value['ownerProfileName'] !== undefined &&
@@ -167,7 +167,7 @@ function generatedProfiles(basePolicy, starter) {
 
 /** @param {ConfigWithPath} config @returns {Promise<Prepared>} */
 async function prepare(config) {
-  const template = config.starter.policyTemplate ?? 'simple';
+  const template = config.starter.policyTemplate ?? 'single-simple';
   const source = await readFile(join(sourceRoot, 'policy-packs', template, 'policy.json'), 'utf8');
   const basePolicy = validatePolicyDocument(parseDocument(source));
   const policyPath = `policy-packs/${config.product.id}/policy.json`;

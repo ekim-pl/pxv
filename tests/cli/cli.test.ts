@@ -16,7 +16,7 @@ beforeEach(async () => {
   resources = join(root, 'resources');
   project = join(root, 'project');
   output = [];
-  await mkdir(join(resources, 'policy-packs/reference-five'), { recursive: true });
+  await mkdir(join(resources, 'policy-packs/fleet-nerd'), { recursive: true });
   await writeFile(join(resources, 'product.json'), JSON.stringify(product));
   await writeFile(join(resources, product.defaultPolicy), JSON.stringify(toPolicyDocument(policy)));
   io = { out: (value) => output.push(value), error: (value) => output.push(value) };

@@ -1,19 +1,93 @@
 # Policy pack starters
 
-These packs demonstrate one, five and arbitrary profile layouts. They are structural templates, not certified hardening policies. No live device acceptance is claimed.
+These packs demonstrate one, three, five and arbitrary profile layouts. They are structural templates, not certified hardening policies. No live device acceptance is claimed.
 
 Use each pack's `policy.json` for Community projects. Its shared app catalog,
 profile app references and per-codename OS pins follow the [policy format](../docs/POLICY_FORMAT.md).
 
-Before using a pack on a phone, a product maintainer must add reviewed OS provenance, APK versions, content digests and signer pins, repository trust anchors, required settings, permission grants and VPN configuration. Empty package lists intentionally avoid presenting invented digests as trusted artifacts. Changes to the normalized execution policy change its resolved digest and invalidate the previous reviewed plan. Authoring-only changes, such as adding an unused app catalog entry, do not change that digest. Validate and lock the edited policy before reviewing a new plan.
+Before using a pack on a phone, a product maintainer must add reviewed OS provenance, required settings, permission grants and VPN configuration. The nerd and privacy packs include pinned apps listed below; review their versions, sources and signer pins for the deployment. The `single-simple` and `fleet-custom` app catalogs remain empty. Add repository trust anchors if using repository-backed artifacts. Changes to the normalized execution policy change its resolved digest and invalidate the previous reviewed plan. Authoring-only changes, such as adding an unused app catalog entry, do not change that digest. Validate and lock the edited policy before reviewing a new plan.
 
-`reference-five` retains owner, contacts, google, testing and onion roles. `simple` uses only the owner. `custom` demonstrates arbitrary role names and Polish recipient language. Exactly one owner is required; five profiles and the literal name owner are not engine requirements.
+`fleet-nerd` retains owner, contacts, google, testing and onion roles. `single-simple` uses only the owner. `fleet-custom` demonstrates arbitrary role names and Polish recipient language. Exactly one owner is required; five profiles and the literal name owner are not engine requirements.
 
 Every starter profile, including the owner, declares `defaultLocale`. Edit profiles independently, for example owner `en-US`, work `pl-PL` and travel `de-DE`. The field accepts one canonical BCP 47 language/region/script tag, such as `sr-Latn-RS`; it does not set a time zone or document language. The alternate `language` field is accepted, with conflicting aliases rejected. Locale setup runs after normal credentials and before optional duress through an accepted UI adapter or a manual checkpoint.
 
-## Reference-five defaults
+## Five-profile apps
 
-The `reference-five` policy initializes these ordinary screen locks and locales:
+`fleet-nerd` and `single-nerd` share these app assignments:
+
+| Profile | Apps |
+| --- | --- |
+| owner | Rethink DNS, Oblivion |
+| contacts | Rethink DNS, Session, Telegram, Signal |
+| google | Rethink DNS, Aurora Store |
+| testing | Rethink DNS |
+| onion | Rethink DNS, Orbot |
+
+[`fleet-privacy`](fleet-privacy/policy.json) copies `fleet-nerd`, and
+[`single-privacy`](single-privacy/policy.json) copies `single-nerd`, with the testing
+and onion profiles removed. Both privacy packs retain owner, contacts and google
+with the same app assignments above; the unused Orbot catalog entry is removed.
+`fleet-privacy` retains the fleet credential defaults and owner duress configuration
+for those three profiles. `single-privacy` retains private on-device credential
+entry with no initial credential references or duress configuration. Their
+capabilities, required attestations, locales, settings and VPN fields follow their
+respective nerd packs.
+
+F-Droid is not installed in any profile. PXV downloads the APKs directly from the
+pinned sources; using an F-Droid repository as a download source does not require
+the F-Droid app. Aurora Store is installed only in google. App accounts, permissions
+and network configuration still need deployment review and acceptance.
+
+The catalogs were pinned on 2026-10-19:
+
+| Catalog ID | Version (version code) | Distribution |
+| --- | --- | --- |
+| rethink | 0.5.8 (703) | F-Droid, arm64-v8a |
+| oblivion | 8.0.0 (800) | Upstream GitHub release v8 |
+| session | 1.33.7 (4555) | Session repository, universal |
+| telegram | 13.0.3 (71839) | Telegram website distribution |
+| signal | 8.31.2 (176601) | Signal website distribution, universal |
+| aurora | 4.8.4 (76) | F-Droid, universal |
+| orbot | 17.9.5-RC-4-tor-0.4.9.11 (1795300400) | Guardian Project, universal |
+
+Rethink's APK targets physical Pixels (arm64-v8a). For an x86_64 emulator,
+replace that catalog entry with an independently verified x86_64 artifact and
+review a fresh policy lock. Telegram's website APK has package ID
+`org.telegram.messenger.web`. Orbot's published version is a release candidate.
+Telegram's download endpoint and Guardian's `orbot-latest.apk` are mutable;
+new upstream bytes will fail the pinned digest check until the catalog is reviewed
+and updated. Preserve reviewed APKs in the private artifact cache for repeat runs.
+
+### App pin provenance
+
+Rethink and Aurora pins came from the [F-Droid repository](https://f-droid.org/repo/),
+Session from its [official repository](https://fdroid.getsession.org/fdroid/repo/),
+and Orbot from the [Guardian repository](https://guardianproject.info/fdroid/).
+For each, `entry.jar` was verified with PXV's repository verifier against the
+publisher's signing-certificate pin, then the index-v2 JSON size and SHA-256 were
+checked against that authenticated entry. Package IDs, version codes, APK hashes
+and APK signer hashes were taken from those verified indexes:
+
+| Repository | Repository signer SHA-256 | Index-v2 SHA-256 |
+| --- | --- | --- |
+| F-Droid | `43238d512c1e5eb2d6569f4a3afbf5523418b82e0a3ed1552770abb9a9c9ccab` | `e7bc9d24743e9c6f9c09312abe6245ef7c2e966aec178886a545fc97880196fe` |
+| Session | `db0e5297eb65cc22d6bd93c869943bdcfcb6a07dc69a48a0dd8c7ba698ec04e6` | `2f2193c2361e338d88ea52162b91ad3a5247b6fb2d0b4bf919e7e1a999fc9091` |
+| Guardian | `b7c2eefd8dac7806af67dfcd92eb18126bc08312a7f2d6f3862e46013c7a6135` | `4d670392c1bcaa717d3d75b2bc93fb8a11be06439efc7313ee816fe4dedd4474` |
+
+Telegram's downloaded APK signature was verified and its signer matched
+[Telegram's published Android association](https://telegram.org/.well-known/assetlinks.json).
+Signal's version and content hash came from its
+[update metadata](https://updates.signal.org/android/latest.json), with the signer
+checked against its [published certificate](https://signal.org/android/apk/).
+Oblivion's APK hash matched the publisher's
+[v8 release asset digest](https://api.github.com/repos/bepass-org/oblivion/releases/tags/v8);
+its signature, package ID and version code were inspected with Android Build Tools.
+The catalogs retain all APK content and signer pins. This artifact review does not
+claim live phone or routing acceptance.
+
+## Fleet Nerd defaults
+
+The `fleet-nerd` policy initializes these ordinary screen locks and locales:
 
 | Profile  | Lock     | Locale            | Private reference |
 | -------- | -------- | ----------------- | ----------------- |
@@ -52,15 +126,15 @@ Forks own these manifests, assets and release qualification. Preserve the engine
 
 ## One-person five-profile acceptance
 
-[`self-service-five/policy.json`](self-service-five/policy.json) keeps the Owner,
+[`single-nerd/policy.json`](single-nerd/policy.json) keeps the Owner,
 contacts, google, testing and onion layout with English Owner and Polish secondary
 profiles. It requires ordinary credentials and network/backup acceptance, but has
 no initial credential references or duress configuration. Enter ordinary credentials
 privately on the phone. The Owner display name starts as `Owner`; match it to the
 observed Owner before review.
 
-The app catalog and OS pins are deliberately empty, and no VPN route is configured.
-Complete a private copy with authentic artifacts and explicit per-profile network
-and backup expectations before the full test. A profile named onion does not route
-traffic through Tor, and a profile named google does not install Google services.
+The app catalog contains the pinned five-profile apps above. OS pins still need
+to be supplied, and no VPN route is configured. Review a private copy with explicit
+per-profile network and backup expectations before the full test. Installing Orbot
+does not configure Tor routing, and Aurora Store does not install Google services.
 Follow the [full self-service procedure](../docs/SELF_SERVICE_FIVE_PROFILE_TEST.md).

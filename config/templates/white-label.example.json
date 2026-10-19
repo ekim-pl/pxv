@@ -24,7 +24,7 @@
     "fontFamily": "DejaVu Sans"
   },
   "starter": {
-    "policyTemplate": "simple",
+    "policyTemplate": "single-simple",
     "defaultLocale": "en-US",
     "ownerProfileName": "Employee"
   }

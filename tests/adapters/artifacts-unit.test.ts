@@ -74,6 +74,40 @@ describe('strict APK identity and compatibility failures', () => {
       }).identity(path),
     ).rejects.toThrow(/exactly one/);
   });
+  it('uses the current verified rotation signer and rejects ambiguous rotation output', async () => {
+    const path = join(directory, 'rotated.apk');
+    await writeFile(path, 'signed-byte-fixture');
+    const badging = "package: name='org.example.app' versionCode='1'";
+    const current = `Signer (minSdkVersion=33, maxSdkVersion=2147483647) certificate SHA-256 digest: ${'b'.repeat(64)}\n`;
+    const historical = `Signer (minSdkVersion=24, maxSdkVersion=32) certificate SHA-256 digest: ${'a'.repeat(64)}\n`;
+    for (const order of [current + historical, historical + current]) {
+      const service = new ArtifactService({ runner: runner(badging, `Number of signers: 1\n${order}`) });
+      expect((await service.identity(path)).signerSha256).toBe('b'.repeat(64));
+    }
+    for (const invalid of [
+      current + historical,
+      `Number of signers: 2\n${current}${historical}`,
+      `Number of signers: 1\nNumber of signers: 1\n${current}`,
+      `Number of signers: 1\n${current}${current}`,
+      `Number of signers: 1\n${historical}`,
+      `Number of signers: 1\nSigner #1 certificate SHA-256 digest: ${'a'.repeat(64)}\n${current}`,
+    ])
+      await expect(new ArtifactService({ runner: runner(badging, invalid) }).identity(path)).rejects.toThrow(
+        /exactly one/,
+      );
+    await expect(
+      new ArtifactService({
+        runner: {
+          run: (args) =>
+            Promise.resolve({
+              code: args.includes('badging') ? 0 : 1,
+              stdout: args.includes('badging') ? badging : `Number of signers: 1\n${current}${historical}`,
+              stderr: 'Signature verification failed',
+            }),
+        },
+      }).identity(path),
+    ).rejects.toThrow(/cryptographic verification/);
+  });
   it('downloads only explicit approved sources, verifies bytes and removes failed snapshots', async () => {
     const data = 'apk bytes';
     const policy = {

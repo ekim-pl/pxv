@@ -1,6 +1,6 @@
 {
-  "id": "simple",
-  "name": "Single-owner structural starter",
+  "id": "single-simple",
+  "name": "Single Simple",
   "capabilities": [
     "normal_credentials"
   ],

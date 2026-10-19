@@ -1,0 +1,123 @@
+{
+  "id": "single-privacy",
+  "name": "Single Privacy",
+  "capabilities": [
+    "normal_credentials",
+    "network",
+    "backup"
+  ],
+  "requiredAttestations": [
+    "routes",
+    "network_failure_tests",
+    "backup_recovery",
+    "recipient_acceptance",
+    "operator_signoff"
+  ],
+  "repositories": [],
+  "apps": {
+    "rethink": {
+      "packageId": "com.celzero.bravedns",
+      "versionCode": 703,
+      "sha256": "f2685bc66ba3b1537c8bb2e04644360f9a8b307ed6de618c393cade12a2651ae",
+      "signerSha256": "abc6766ba34e027dc7dfa29b1c2b5b1d1dc14f7ba637895a81dfb68e40bc1579",
+      "url": "https://f-droid.org/repo/com.celzero.bravedns_703.apk"
+    },
+    "oblivion": {
+      "packageId": "org.bepass.oblivion",
+      "versionCode": 800,
+      "sha256": "ec9f166ff19509cb78f7f334939bed67f6da035b1fd5f4582edd5349238a8958",
+      "signerSha256": "c58b45eaf71a4655f170173bd614e15249a9475de6f3969fbf0ea741ce2b03c5",
+      "url": "https://github.com/bepass-org/oblivion/releases/download/v8/oblivion-v8-signed.apk",
+      "redirectHosts": [
+        "release-assets.githubusercontent.com"
+      ]
+    },
+    "session": {
+      "packageId": "network.loki.messenger",
+      "versionCode": 4555,
+      "sha256": "69b6de8d446effc5202acbbab7c297c5739336ec3472d9f14b0978529bf6a780",
+      "signerSha256": "f2a0ecf70686447d1d6c6cbbf58c42890500ccf41af372ae2099303980824edd",
+      "url": "https://fdroid.getsession.org/fdroid/repo/session-1.33.7-universal-fdroid-release.apk"
+    },
+    "telegram": {
+      "packageId": "org.telegram.messenger.web",
+      "versionCode": 71839,
+      "sha256": "8f8c6cd824eb47cd23b30e97468ed2a2ab2134130f50362f548bf0da0faf4d0a",
+      "signerSha256": "49c1522548ebacd46ce322b6fd47f6092bb745d0f88082145caf35e14dcc38e1",
+      "url": "https://telegram.org/dl/android/apk",
+      "redirectHosts": [
+        "cdn4.telesco.pe"
+      ]
+    },
+    "signal": {
+      "packageId": "org.thoughtcrime.securesms",
+      "versionCode": 176601,
+      "sha256": "c3e51db54b2af9f4a8a2d0ce3b469ef67d56a13a433208325bcb981e1ca3a536",
+      "signerSha256": "4be4f6cd5be844083e900279dc822af65a547fecc26aba7ff1f5203a45518cd8",
+      "url": "https://updates.signal.org/android/Signal-Android-website-prod-universal-release-8.31.2.apk"
+    },
+    "aurora": {
+      "packageId": "com.aurora.store",
+      "versionCode": 76,
+      "sha256": "fd9c75d90d0f4a7c132b9b4a5a2cf1992a45e03b8d8ff988b7dcfbc0db2c4d11",
+      "signerSha256": "5c83c7672b929955dc0a1db89a5e6ae4389e2eae7ec939956041694e5815f532",
+      "url": "https://f-droid.org/repo/com.aurora.store_76.apk"
+    }
+  },
+  "profiles": [
+    {
+      "id": "owner",
+      "name": "Owner",
+      "kind": "owner",
+      "settings": [],
+      "permissions": [],
+      "vpn": {
+        "packageId": null,
+        "alwaysOn": false,
+        "lockdown": false
+      },
+      "defaultLocale": "en-US",
+      "apps": [
+        "rethink",
+        "oblivion"
+      ]
+    },
+    {
+      "id": "contacts",
+      "name": "contacts",
+      "kind": "secondary",
+      "settings": [],
+      "permissions": [],
+      "vpn": {
+        "packageId": null,
+        "alwaysOn": false,
+        "lockdown": false
+      },
+      "defaultLocale": "pl-PL",
+      "apps": [
+        "rethink",
+        "session",
+        "telegram",
+        "signal"
+      ]
+    },
+    {
+      "id": "google",
+      "name": "google",
+      "kind": "secondary",
+      "settings": [],
+      "permissions": [],
+      "vpn": {
+        "packageId": null,
+        "alwaysOn": false,
+        "lockdown": false
+      },
+      "defaultLocale": "pl-PL",
+      "apps": [
+        "rethink",
+        "aurora"
+      ]
+    }
+  ],
+  "deviceSettings": []
+}

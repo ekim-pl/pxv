@@ -29,7 +29,7 @@ in the scaffold configuration, for example `"features": { "extensions": true }`.
 An omitted feature stays disabled in newly generated products. Existing product
 descriptors without `features` retain their compatibility behavior when read.
 
-`starter.policyTemplate` selects `simple` (one owner) or `reference-five` (five profile
+`starter.policyTemplate` selects `single-simple` (one owner) or `fleet-nerd` (five profile
 structures). Generated policies use the supported authoring format.
 Neither template supplies deployment-specific OS trust, app pins, VPN accounts,
 backup coverage or acceptance. Customize the [policy](POLICY_FORMAT.md) before
