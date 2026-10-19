@@ -152,7 +152,6 @@ function commandWords(tokens) {
     const token = tokens[index];
     if (!token) continue;
     if (token.operator) {
-      if (/<<-?$/u.test(token.text)) return [];
       index++; // A redirection operand belongs to the shell, never to argv.
     } else words.push(token);
   }

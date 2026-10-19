@@ -123,6 +123,31 @@ void test('heredocs and dynamic wrappers do not become fictitious commands', () 
   assert.deepEqual(checkCommandExamples(shell(text), 'guide.md'), []);
 });
 
+void test('heredoc bodies are skipped while the command and later commands remain validated', () => {
+  const source = shell(
+    [
+      'pxv host doctor --yes <<EOF',
+      'pxv unknown body text',
+      '$(touch /never-execute-this-substitution)',
+      'EOF',
+      "pxv project init <<-'END'",
+      '\tpxv unknown body text',
+      '\tEND',
+      'pxv version <<FIRST <<SECOND',
+      'pxv unknown body text',
+      'FIRST',
+      'pxv unknown body text',
+      'SECOND',
+      'pxv unknown',
+    ].join('\n'),
+  );
+  const errors = checkCommandExamples(source, 'guide.md');
+  assert.equal(errors.length, 3);
+  assert.match(errors[0] ?? '', /^guide\.md:4:17: --yes is not supported/u);
+  assert.match(errors[1] ?? '', /^guide\.md:8:1: --path is required/u);
+  assert.match(errors[2] ?? '', /^guide\.md:16:1: Unknown command/u);
+});
+
 void test('only true argument forwarding skips a segment; ordinary variable values stay opaque', () => {
   for (const forwarding of ['"$@"', '"$*"', '"${@}"', '"${*}"']) {
     const wrappers = [
