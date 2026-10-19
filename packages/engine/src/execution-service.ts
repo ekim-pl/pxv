@@ -95,21 +95,39 @@ export class ExecutionService {
     return this.projects.run(async () => {
       const queue = [...groups.values()];
       const results = new Map<string, RunRecord>();
+      const errors: unknown[] = [];
       await Promise.all(
-        Array.from({ length: Math.min(jobs, queue.length) }, async () => {
-          while (queue.length) {
-            const group = queue.shift();
-            if (!group) break;
-            for (const runId of group) results.set(runId, await this.executeOwned(runId, signal));
-          }
-        }),
+        Array.from({ length: Math.min(jobs, queue.length) }, () =>
+          this.executeFleetWorker(queue, results, errors, signal),
+        ),
       );
+      if (errors.length) throw new AggregateError(errors, 'Fleet execution failed');
       return runIds.map((id) => {
         const result = results.get(id);
         if (!result) throw new Error('Fleet result missing');
         return result;
       });
     });
+  }
+  private async executeFleetWorker(
+    queue: string[][],
+    results: Map<string, RunRecord>,
+    errors: unknown[],
+    signal?: AbortSignal,
+  ): Promise<void> {
+    while (!errors.length) {
+      const group = queue.shift();
+      if (!group) return;
+      for (const runId of group) {
+        if (errors.length) return;
+        try {
+          results.set(runId, await this.executeOwned(runId, signal));
+        } catch (error) {
+          errors.push(error);
+          return;
+        }
+      }
+    }
   }
   private workflowState(
     target: SelectedTarget,
