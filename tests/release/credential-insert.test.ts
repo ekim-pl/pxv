@@ -77,7 +77,8 @@ describe('private credential insert', () => {
         expect(html).toContain(sentinel);
       expect(html).toContain('Zażółć gęślą jaźń');
       expect(html).toContain('&lt;script&gt;&amp;&quot;&#39;');
-      expect(html).not.toContain('PRIVATE-SERIAL');
+      expect(html.match(/PRIVATE-SERIAL/gu)).toHaveLength(2);
+      expect(html).toContain(locale === 'en' ? 'Phone serial number' : 'Numer seryjny telefonu');
       expect(html).toContain(locale === 'en' ? 'No values recorded.' : 'Nie zapisano wartości.');
       expect(html).toContain(
         locale === 'en' ? 'STALE - verify privately' : 'NIEAKTUALNE - sprawdź prywatnie',
@@ -99,7 +100,7 @@ describe('private credential insert', () => {
     expect(html).not.toContain('DURESS-PIN');
     expect(html).not.toContain('OBLIVION-KEY');
     expect(html).not.toContain('class="write-line"');
-    expect(html).not.toContain('PRIVATE-SERIAL');
+    expect(html).toContain('PRIVATE-SERIAL');
   });
   it('groups ordinary values once per profile and deduplicates metadata with explicit exceptions', () => {
     const data = record();
@@ -289,6 +290,9 @@ it('renders one/five-profile EN/PL records on two readable A4 sheets (PXV_CHROMI
       const sheets = text.split('\f').filter((page) => page.trim());
       for (const sheet of sheets) expect(sheet.match(/phone-01/gu)).toHaveLength(1);
       expect(sheets[0]).toContain('VPN-password-0');
+      for (const sheet of sheets) expect(sheet).toContain(data.canonicalSerial);
+      expect(sheets[0]).toContain(locale === 'en' ? 'Phone serial number' : 'Numer seryjny telefonu');
+      expect(sheets[1]).toContain(locale === 'en' ? 'Phone serial number' : 'Numer seryjny telefonu');
       expect(sheets[0]).not.toContain('WIPE-key-');
       expect(sheets[0]).not.toContain('DURESS-PIN');
       expect(sheets[1]).toContain('DURESS-PIN');
@@ -320,6 +324,7 @@ it('preserves oversized secrets and long Unicode profile identities across extra
   }
   const data = populatedRecord(1);
   data.assetId = 'm'.repeat(128);
+  data.canonicalSerial = 'S'.repeat(256);
   const name = 'Właściciel bardzo długiego profilu '.repeat(4).trim();
   data.profiles[0]!.user.name = name;
   data.profiles[0]!.fields.password = value('x'.repeat(16_380) + 'TAIL');
@@ -330,6 +335,7 @@ it('preserves oversized secrets and long Unicode profile identities across extra
   const text = execFileSync('pdftotext', ['-raw', destination, '-'], { encoding: 'utf8' });
   expect((text.match(/x{3,}/gu) ?? []).join('')).toHaveLength(16_380);
   expect(text).toContain('TAIL');
+  expect((text.match(/S{3,}/gu) ?? []).join('')).toHaveLength(512);
   const boxes = execFileSync('pdftotext', ['-bbox', destination, '-'], { encoding: 'utf8' });
   const assetBoxes = [...boxes.matchAll(/<word[^>]*xMax="([\d.]+)"[^>]*>m{128}<\/word>/gu)];
   expect(assetBoxes).toHaveLength(pdf.getPageCount());
@@ -351,8 +357,10 @@ it('preserves oversized secrets and long Unicode profile identities across extra
 it('escapes untrusted profile names as HTML without injecting CSS or script', () => {
   const data = record();
   data.profiles[0]!.user.name = '</style><script>sentinel</script>';
+  data.canonicalSerial = 'SERIAL-<script>&-ŻÓŁĆ';
   const html = renderCredentialInsert(data, options);
   const css = html.slice(html.indexOf('<style>'), html.indexOf('</style>'));
   expect(css).not.toContain('<script>');
   expect(html).toContain('&lt;/style&gt;&lt;script&gt;sentinel&lt;/script&gt;');
+  expect(html).toContain('SERIAL-&lt;script&gt;&amp;-ŻÓŁĆ');
 });

@@ -165,6 +165,7 @@ class InsertRenderer {
       '<section data-fold-group="ordinary"><h1>' +
       escape(t.title) +
       '</h1>' +
+      this.deviceSerial() +
       '<div class="summary">' +
       summary +
       '</div><p class="note">' +
@@ -188,7 +189,9 @@ class InsertRenderer {
     return (
       '<section data-fold-group="erasure"><h1 class="credential-warning">' +
       escape(t.erasure) +
-      '</h1><p class="note warning">' +
+      '</h1>' +
+      this.deviceSerial() +
+      '<p class="note warning">' +
       escape(t.destructive) +
       '</p><p class="note">' +
       escape(t.missingNote) +
@@ -201,6 +204,16 @@ class InsertRenderer {
         ? profiles.map((profile, index) => this.profile(profile, true, index === 0 ? intro : '')).join('')
         : intro + '<p class="empty">' + escape(t.empty) + '</p>') +
       '</section>'
+    );
+  }
+
+  private deviceSerial(): string {
+    return (
+      '<p class="identity"><strong>' +
+      escape(this.t.serial) +
+      ':</strong><br>' +
+      escape(this.record.canonicalSerial) +
+      '</p>'
     );
   }
 }

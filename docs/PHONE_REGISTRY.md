@@ -233,6 +233,10 @@ backup worksheets are omitted. Profiles without ordinary values and destructive 
 without values are explicitly marked. Omitted fields are not recorded, which does not
 mean unconfigured.
 
+The phone's canonical hardware serial is printed in the device details of both
+the ordinary and destructive sections, labeled in the selected language. It comes
+from the saved registry record; it is distinct from an Android profile's user serial.
+
 The output must be a new `.pdf` under project `secrets` or outside the project and
 product resources, in a private `0700` directory. Files are `0600`; existing files
 and symlinks are refused. Only the PDF is retained. Temporary HTML and the isolated
