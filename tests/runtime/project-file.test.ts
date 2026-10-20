@@ -4,6 +4,26 @@ import { describe, expect, it } from './../test-api.js';
 import { commitProjectFile, hashFile } from '@pxv/runtime';
 
 describe('project configuration revision commits', () => {
+  it('honors cancellation after revision checks and before replacement', async () => {
+    const root = await mkdtemp('/tmp/pxv-cancel-commit-');
+    const path = join(root, 'policy.json');
+    await writeFile(path, 'original');
+    const controller = new AbortController();
+    await expect(
+      commitProjectFile({
+        path,
+        projectId: 'cancel',
+        controlRoot: join(root, 'control'),
+        expectedSha256: await hashFile(path),
+        signal: controller.signal,
+        get data() {
+          controller.abort(new Error('cancelled before replacement'));
+          return 'updated';
+        },
+      }),
+    ).rejects.toThrow('cancelled');
+    expect(await readFile(path, 'utf8')).toBe('original');
+  });
   it('serializes competing writes and rejects stale revisions without overwriting either source', async () => {
     const root = await mkdtemp('/tmp/pxv-project-commit-');
     const path = join(root, 'project.json');

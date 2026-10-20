@@ -43,6 +43,13 @@ authenticated F-Droid repositories; the reviewed plan installs PXV's verified
 cached APK. Aurora Store is installed only in google. App accounts, permissions and
 network configuration still need deployment review and acceptance.
 
+Refresh eligible F-Droid app pins in a selected starter with
+`pxv policy update-apps --policy policy-packs/fleet-nerd/policy.json --sdk 36 --abi arm64-v8a --dry-run`.
+Use the intended phone's actual SDK and ABI values, review the result, then replace
+`--dry-run` with `--yes` to write it. Run the command separately for each starter
+that should receive the update. Custom repositories require trust anchors in the
+policy. See [updating app pins](../docs/POLICY_FORMAT.md#updating-app-pins).
+
 The catalogs were pinned on 2026-10-19:
 
 | Catalog ID | Version (version code) | Distribution |

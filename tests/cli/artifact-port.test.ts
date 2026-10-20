@@ -60,7 +60,8 @@ it('authenticates and selects measured SDK/ABIs before exact-version fdroidcl do
     expect(options?.env).toMatchObject({
       XDG_CACHE_HOME: join(fixture.state.acquisitionRoot, 'cache'),
       XDG_CONFIG_HOME: join(fixture.state.acquisitionRoot, 'config'),
-      PATH: process.env['PATH'],
+      PATH: join(fixture.state.acquisitionRoot, 'no-adb'),
+      XDG_DATA_HOME: join(fixture.state.acquisitionRoot, 'data'),
     });
     expect(options?.env).not.toBe(process.env);
   }

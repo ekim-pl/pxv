@@ -4,7 +4,12 @@ import { lstat, mkdir, open, rename, unlink } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 
 /** Replace a private state file only after its contents are durable. */
-export async function atomicWritePrivate(path: string, data: string | Uint8Array): Promise<void> {
+export async function atomicWritePrivate(
+  path: string,
+  data: string | Uint8Array,
+  signal?: AbortSignal,
+): Promise<void> {
+  signal?.throwIfAborted();
   const parent = dirname(path);
   await mkdir(parent, { recursive: true, mode: 0o700 });
   if ((await lstat(parent)).isSymbolicLink()) throw new Error('Private state directory cannot be a symlink');
@@ -26,6 +31,7 @@ export async function atomicWritePrivate(path: string, data: string | Uint8Array
     await file.close();
   }
   try {
+    signal?.throwIfAborted();
     await rename(temporary, path);
     const directory = await open(parent, constants.O_RDONLY | constants.O_DIRECTORY);
     try {

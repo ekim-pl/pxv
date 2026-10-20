@@ -4,6 +4,7 @@ export * from './artifacts.js';
 export * from './android.js';
 export * from './images.js';
 export * from './repositories.js';
+export * from './fdroidcl.js';
 export * from './zip.js';
 export * from './ui.js';
 export * from './emulator.js';

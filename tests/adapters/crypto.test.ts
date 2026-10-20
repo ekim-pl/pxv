@@ -16,6 +16,7 @@ import {
   type RepositoryFloor,
 } from '../../packages/adapters/src/index.js';
 import { buildJavaEnvironment, buildJavaExecutable } from '../../tools/lib/build-command.mjs';
+import { CommandRunner as SupervisedCommandRunner } from '@pxv/runtime';
 import type { ArtifactPolicy, OsPolicy } from '@pxv/contracts';
 
 const native: CommandRunner = {
@@ -120,7 +121,11 @@ beforeAll(async () => {
   await mkdir(indexDirectory);
   await writeFile(
     join(indexDirectory, 'index-v1.json'),
-    JSON.stringify({ repo: { timestamp: Date.now() }, packages: {} }),
+    JSON.stringify({
+      repo: { address: 'https://example.test/repo', timestamp: Date.now() },
+      apps: [{ packageName: 'org.example.app', suggestedVersionCode: '7' }],
+      packages: {},
+    }),
   );
   signedJar = join(directory, 'index-v1.jar');
   await run([
@@ -315,6 +320,102 @@ describe('real cryptographic artifact checks', () => {
     await expect(repo.verifyJar(signedJar, '0'.repeat(64), 'index-v1.json')).rejects.toThrow(
       /authentication/,
     );
+  });
+  it('imports real signed fdroidcl indexes and rejects a mismatched repository pin', async () => {
+    const repository = {
+      id: 'updates',
+      url: 'https://example.test/repo',
+      signerSha256: signer,
+      maxAgeDays: 30,
+      redirectHosts: [],
+    };
+    const index = await repo.indexFromJar(repository, signedJar);
+    expect(index.suggestedVersionCodes).toEqual({ 'org.example.app': 7 });
+    await expect(
+      repo.indexFromJar({ ...repository, signerSha256: '0'.repeat(64) }, signedJar),
+    ).rejects.toThrow('authentication');
+  });
+  it('authenticates full v1 indexes exceeding supervised stdout limits through a private output file', async () => {
+    const source = join(directory, 'large-index');
+    await mkdir(source);
+    await writeFile(
+      join(source, 'index-v1.json'),
+      JSON.stringify({
+        repo: { address: 'https://example.test/repo', timestamp: Date.now() },
+        apps: [{ packageName: 'org.example.app', suggestedVersionCode: '7' }],
+        packages: {},
+        padding: 'x'.repeat(65 * 1024 * 1024),
+      }),
+    );
+    const jar = join(directory, 'large-index.jar');
+    await run([buildJavaExecutable('jar'), '--create', '--file', jar, '-C', source, 'index-v1.json']);
+    await run([
+      buildJavaExecutable('jarsigner'),
+      '-keystore',
+      join(directory, 'fixture.p12'),
+      '-storepass',
+      'fixture-only',
+      jar,
+      'fixture',
+    ]);
+    const service = new RepositoryService({
+      runner: new SupervisedCommandRunner(),
+      java: buildJavaExecutable('java'),
+      verifierPath: resolve('resources/VerifyRepositoryIndex.java'),
+      freshness: { read: () => Promise.resolve(undefined), advance: () => Promise.resolve() },
+    });
+    const index = await service.indexFromJar(
+      {
+        id: 'large',
+        url: 'https://example.test/repo',
+        signerSha256: signer,
+        maxAgeDays: 30,
+        redirectHosts: [],
+      },
+      jar,
+    );
+    expect(index.suggestedVersionCodes['org.example.app']).toBe(7);
+  });
+  it('authenticates pinned legacy SHA-1 v1 signatures while rejecting wrong pins and tampered contents', async () => {
+    const jar = join(directory, 'legacy-index.jar');
+    await run([
+      buildJavaExecutable('jar'),
+      '--create',
+      '--file',
+      jar,
+      '-C',
+      join(directory, 'repo'),
+      'index-v1.json',
+    ]);
+    await run([
+      buildJavaExecutable('jarsigner'),
+      '-keystore',
+      join(directory, 'fixture.p12'),
+      '-storepass',
+      'fixture-only',
+      '-digestalg',
+      'SHA1',
+      '-sigalg',
+      'SHA1withRSA',
+      jar,
+      'fixture',
+    ]);
+    const repository = {
+      id: 'legacy',
+      url: 'https://example.test/repo',
+      signerSha256: signer,
+      maxAgeDays: 30,
+      redirectHosts: [],
+    };
+    expect((await repo.indexFromJar(repository, jar)).suggestedVersionCodes['org.example.app']).toBe(7);
+    await expect(repo.indexFromJar({ ...repository, signerSha256: '0'.repeat(64) }, jar)).rejects.toThrow(
+      'authentication',
+    );
+    const changes = join(directory, 'legacy-tamper');
+    await mkdir(changes);
+    await writeFile(join(changes, 'index-v1.json'), '{"packages":{}}');
+    await run([buildJavaExecutable('jar'), '--update', '--file', jar, '-C', changes, 'index-v1.json']);
+    await expect(repo.indexFromJar(repository, jar)).rejects.toThrow('authentication');
   });
   it('rejects a tampered JAR even though the original signature files remain', async () => {
     const tampered = join(directory, 'tampered.jar');

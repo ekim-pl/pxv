@@ -1,18 +1,8 @@
-import { checked, type RepositoryEvidence } from '@pxv/adapters';
+import { FdroidclSession, type RepositoryEvidence } from '@pxv/adapters';
 import { digest, type ArtifactPolicy, type RepositoryPolicy, type SelectedTarget } from '@pxv/contracts';
 import { containedPath, type ArtifactPort } from '@pxv/engine';
-import { mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { isAbsolute, join, relative, resolve, sep } from 'node:path';
 import type { ApplicationDependencies } from './dependencies.js';
-
-const OFFICIAL_FDROID: RepositoryPolicy = {
-  id: 'fdroid-official',
-  url: 'https://f-droid.org/repo',
-  signerSha256: '43238d512c1e5eb2d6569f4a3afbf5523418b82e0a3ed1552770abb9a9c9ccab',
-  maxAgeDays: 30,
-  redirectHosts: [],
-};
+import { artifactRepository } from './artifact-repository.js';
 
 interface StoredArtifactProvenance {
   repository: RepositoryPolicy;
@@ -28,25 +18,6 @@ function artifactPins(
     sha256: artifact.sha256,
     signerSha256: artifact.signerSha256,
   };
-}
-
-function repositoryForArtifact(
-  deps: ApplicationDependencies,
-  artifact: ArtifactPolicy,
-): RepositoryPolicy | undefined {
-  const source = artifact.source;
-  if (source?.kind === 'fdroidcl') return OFFICIAL_FDROID;
-  if (source?.kind === 'fdroid-repository')
-    return {
-      id: `inline-${digest({ url: source.url, fingerprint: source.fingerprint }).slice(0, 32)}`,
-      url: source.url,
-      signerSha256: source.fingerprint,
-      maxAgeDays: source.maxAgeDays ?? 30,
-      redirectHosts: source.redirectHosts ?? [],
-    };
-  return artifact.repositoryId
-    ? deps.project.policy.repositories.find((value) => value.id === artifact.repositoryId)
-    : undefined;
 }
 
 async function repositorySource(
@@ -78,61 +49,6 @@ async function repositorySource(
   return { candidate, apkUrl: candidate.url, evidence: index.evidence };
 }
 
-async function acquireWithFdroidcl(
-  deps: ApplicationDependencies,
-  artifact: ArtifactPolicy,
-  signal?: AbortSignal,
-): Promise<{ root: string; apk: string }> {
-  const executable = await deps.tools.require('fdroidcl');
-  const root = await mkdtemp(join(tmpdir(), 'pxv-fdroidcl-'));
-  const cache = join(root, 'cache');
-  const config = join(root, 'config');
-  try {
-    await Promise.all([
-      mkdir(cache, { recursive: true, mode: 0o700 }),
-      mkdir(join(config, 'fdroidcl'), { recursive: true, mode: 0o700 }),
-    ]);
-    await writeFile(
-      join(config, 'fdroidcl', 'config.toml'),
-      '[[repos]]\nid = "f-droid"\nurl = "https://f-droid.org/repo"\nenabled = true\n',
-      { flag: 'wx', mode: 0o600 },
-    );
-    const env = Object.fromEntries(
-      Object.entries(process.env).filter((entry): entry is [string, string] => entry[1] !== undefined),
-    );
-    env['XDG_CACHE_HOME'] = cache;
-    env['XDG_CONFIG_HOME'] = config;
-    const options = {
-      cwd: root,
-      env,
-      timeoutMs: 600_000,
-      ...(signal ? { signal } : {}),
-    };
-    checked(await deps.runner.run([executable, 'update'], options), 'fdroidcl official index update');
-    const appVersion = `${artifact.packageId}:${artifact.versionCode}`;
-    const output = checked(
-      await deps.runner.run([executable, 'download', appVersion], options),
-      'fdroidcl APK download',
-    );
-    const matches = [...output.matchAll(/^APK available in (.+)$/gm)];
-    if (matches.length !== 1 || !matches[0]?.[1])
-      throw new Error('fdroidcl did not identify one downloaded APK');
-    const apk = await realpath(resolve(root, matches[0][1].trim()));
-    const cacheRelative = relative(resolve(cache), apk);
-    if (
-      !cacheRelative ||
-      cacheRelative === '..' ||
-      cacheRelative.startsWith(`..${sep}`) ||
-      isAbsolute(cacheRelative)
-    )
-      throw new Error('fdroidcl returned an APK outside its isolated cache');
-    return { root, apk };
-  } catch (error) {
-    await rm(root, { recursive: true, force: true });
-    throw error;
-  }
-}
-
 async function directAcquisition(root: string, artifact: ArtifactPolicy): Promise<ArtifactPolicy> {
   if (artifact.path) return { ...artifactPins(artifact), path: await containedPath(root, artifact.path) };
   if (artifact.source?.kind === 'direct')
@@ -158,20 +74,26 @@ export function createArtifactPort(deps: ApplicationDependencies): ArtifactPort 
       await Promise.all([tools.require('aapt'), tools.require('apksigner')]);
       let acquisition: ArtifactPolicy = artifact;
       let evidence: RepositoryEvidence | undefined;
-      const repository = repositoryForArtifact(deps, artifact);
+      const repository = artifactRepository(artifact, project.policy.repositories);
       if (artifact.repositoryId && !repository) throw new Error('Unknown authenticated repository');
       if (repository) {
         const selected = await repositorySource(deps, artifact, repository, target, signal);
         evidence = selected.evidence;
         if (artifact.source?.kind === 'fdroidcl') {
-          const downloaded = await acquireWithFdroidcl(deps, artifact, signal);
+          const session = await FdroidclSession.open(
+            deps.runner,
+            await tools.require('fdroidcl'),
+            repository,
+            signal,
+          );
           try {
-            acquisition = { ...artifactPins(artifact), path: downloaded.apk };
+            await session.update();
+            acquisition = { ...artifactPins(artifact), path: await session.download(artifact) };
             const verified = await artifacts.snapshot(acquisition, destination, signal);
             await store.set('artifact-provenance', digest(destination), { repository, evidence });
             return { ...verified, path: verified.path };
           } finally {
-            await rm(downloaded.root, { recursive: true, force: true });
+            await session.close();
           }
         }
         acquisition = {

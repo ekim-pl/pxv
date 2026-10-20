@@ -1,9 +1,24 @@
-import { mkdir, mkdtemp, readFile, stat, symlink, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, readdir, rm, stat, symlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { describe, expect, test } from './../test-api.js';
 import { atomicWritePrivate, hashFile, readBounded } from '../../packages/runtime/src/index.js';
 
 describe('private durable files', () => {
+  test('cancels before atomic replacement and removes temporary bytes', async () => {
+    const directory = await mkdtemp('/tmp/pxv-cancel-files-');
+    try {
+      const path = join(directory, 'policy.json');
+      await writeFile(path, 'original policy');
+      const controller = new AbortController();
+      const pending = atomicWritePrivate(path, 'new policy', controller.signal);
+      queueMicrotask(() => controller.abort(new Error('cancelled before commit')));
+      await expect(pending).rejects.toThrow('cancelled');
+      expect(await readFile(path, 'utf8')).toBe('original policy');
+      expect(await readdir(directory)).toEqual(['policy.json']);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
   test('atomically replaces private files and hashes exact contents', async () => {
     const directory = await mkdtemp('/tmp/pxv-files-');
     const path = join(directory, 'nested', 'record');

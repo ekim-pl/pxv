@@ -1,11 +1,11 @@
-import { object, positiveInteger, text, repositoryFilename } from './repository-values.js';
+import { object, positiveInteger, text, repositoryFilename, suggestedVersions } from './repository-values.js';
 import { parseDocument, type ArtifactPolicy, type RepositoryPolicy } from '@pxv/contracts';
 import { createHash } from 'node:crypto';
 import { lstat, mkdtemp, readFile, realpath, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { AdapterError, checked, packageId, sha256Pin, type CommandRunner } from './command.js';
-import { download, fileDigest } from './files.js';
+import { download, fileDigest, regularFile } from './files.js';
 import { cacheSignedFiles } from './artifact-cache.js';
 
 const MAX_INDEX_BYTES = 128 * 1024 * 1024;
@@ -40,6 +40,13 @@ export interface CandidateDevice {
 export interface AuthenticatedRepository {
   evidence: RepositoryEvidence;
   packages: Record<string, RepositoryApk[]>;
+}
+export interface AuthenticatedUpdateRepository extends AuthenticatedRepository {
+  suggestedVersionCodes: Record<string, number>;
+}
+export interface DownloadedIndexOptions {
+  signal?: AbortSignal;
+  packageIds?: readonly string[];
 }
 export interface RepositoryOptions {
   runner: CommandRunner;
@@ -111,6 +118,64 @@ export class RepositoryService {
     if (Buffer.byteLength(stdout) > (entry === 'entry.json' ? 1024 * 1024 : 64 * 1024 * 1024))
       throw new AdapterError('Authenticated repository JSON exceeds its size limit');
     return object(strictJson(stdout), 'repository index');
+  }
+  /** Authenticate fdroidcl's downloaded v1 index without advancing the execution freshness floor. */
+  async indexFromJar(
+    repository: RepositoryPolicy,
+    path: string,
+    options: DownloadedIndexOptions = {},
+  ): Promise<AuthenticatedUpdateRepository> {
+    const { signal } = options;
+    const before = await fileDigest(path, 32 * 1024 * 1024, signal);
+    const index = await this.downloadedJarJson(path, repository.signerSha256, signal);
+    const repo = object(index['repo'], 'repository');
+    const url = repository.url.replace(/\/$/, '');
+    if (text(repo['address'], 'repository address').replace(/\/$/, '') !== url)
+      throw new AdapterError('Authenticated repository address differs from the configured repository');
+    const timestamp = positiveInteger(repo['timestamp'], 'repository timestamp');
+    this.assertFresh(repository, timestamp, await this.freshness.read(this.key(repository)));
+    const selected = options.packageIds ? new Set(options.packageIds) : undefined;
+    const rawPackages = object(index['packages'], 'package set');
+    const selectedPackages = selected
+      ? Object.fromEntries(
+          [...selected].filter((id) => Object.hasOwn(rawPackages, id)).map((id) => [id, rawPackages[id]]),
+        )
+      : rawPackages;
+    const packages = this.normalize(repository, selectedPackages, false);
+    const suggestedVersionCodes = suggestedVersions(index['apps'], selected);
+    if ((await fileDigest(path, 32 * 1024 * 1024, signal)) !== before)
+      throw new AdapterError('Repository JAR changed during authentication');
+    return {
+      packages,
+      suggestedVersionCodes,
+      evidence: {
+        url,
+        signerSha256: sha256Pin(repository.signerSha256),
+        timestamp,
+        entrySha256: before,
+        indexSha256: before,
+        format: 'v1',
+        maxAgeDays: repository.maxAgeDays,
+      },
+    };
+  }
+  private async downloadedJarJson(path: string, signer: string, signal?: AbortSignal): Promise<Row> {
+    const directory = await mkdtemp(join(tmpdir(), 'pxv-repository-json-'));
+    const output = join(directory, 'index.json');
+    try {
+      // Full official v1 indexes exceed the command runner's bounded stdout channel.
+      checked(
+        await this.runner.run(
+          [this.java, '-Xmx512m', this.verifierPath, path, sha256Pin(signer), 'index-v1.json', output],
+          { timeoutMs: 120_000, check: false, ...(signal ? { signal } : {}) },
+        ),
+        'Repository JAR authentication',
+      );
+      await regularFile(output, MAX_INDEX_BYTES);
+      return object(strictJson(await readFile(output, 'utf8')), 'repository index');
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
   }
   async index(repository: RepositoryPolicy, options: IndexOptions = {}): Promise<AuthenticatedRepository> {
     const url = repository.url.replace(/\/$/, '');

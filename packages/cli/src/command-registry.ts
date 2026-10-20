@@ -1,7 +1,10 @@
 import type { ProductDescriptor } from '@pxv/contracts';
 import { parseArgs } from 'node:util';
+import { validatePolicyUpdateArguments } from './policy-update-options.js';
 
 export const stringFlags = [
+  'sdk',
+  'abi',
   'project-root',
   'resource-root',
   'policy',
@@ -106,6 +109,7 @@ function command(
   return { name, description, flags: [...common, ...executionFlags(name), ...flags], required, ...options };
 }
 function executionFlags(name: string): readonly Flag[] {
+  if (name === 'policy update-apps') return ['execution'];
   if (name === 'inventory print-label') return ['execution'];
   if (['extension install', 'extension update'].includes(name)) return ['execution'];
   const section = name.split(' ')[0];
@@ -120,6 +124,15 @@ const commands: readonly CommandDefinition[] = [
   command('project init', 'Create a new isolated project.', ['path', 'policy'], ['path']),
   command('policy validate', 'Validate the authored policy and lock.'),
   command('policy lock', 'Record the current policy and extension lock.', ['yes']),
+  command('policy update-apps', 'Update app pins to verified compatible stable F-Droid versions.', [
+    'policy',
+    'asset',
+    'transport',
+    'sdk',
+    'abi',
+    'dry-run',
+    'yes',
+  ]),
   command('inventory list', 'List enrolled targets.'),
   command('inventory import', 'Import explicitly reviewed enrollment.', ['file', 'yes'], ['file']),
   command(
@@ -369,6 +382,7 @@ function validateCommand(
   const unsupported = Object.keys(values).find((name) => !definition.flags.includes(name as Flag));
   if (unsupported) throw new Error(`--${unsupported} is not supported for ${definition.name}`);
   if (values['help']) return definition;
+  if (definition.name === 'policy update-apps') validatePolicyUpdateArguments(values);
   validateExecutionFlags(definition, values);
   validateExactSelection(definition, values);
   validateConditionalInput(definition, values);

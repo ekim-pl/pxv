@@ -12,6 +12,7 @@ function withProjectLease<T>(controlRoot: string, projectId: string, action: () 
   );
 }
 export interface ProjectFileCommit {
+  signal?: AbortSignal;
   controlRoot?: string;
   projectId: string;
   path: string;
@@ -28,6 +29,7 @@ async function revision(path: string): Promise<string | undefined> {
   }
 }
 export async function commitProjectFile(input: ProjectFileCommit): Promise<void> {
+  input.signal?.throwIfAborted();
   if (input.expectedSha256 !== undefined && !/^[a-f0-9]{64}$/u.test(input.expectedSha256))
     throw new Error('Invalid expected project file revision');
   for (const source of input.expectedSources ?? [])
@@ -38,6 +40,6 @@ export async function commitProjectFile(input: ProjectFileCommit): Promise<void>
     for (const source of input.expectedSources ?? [])
       if ((await revision(source.path)) !== source.sha256)
         throw new Error('Project source changed; reload and review before writing');
-    await atomicWritePrivate(input.path, input.data);
+    await atomicWritePrivate(input.path, input.data, input.signal);
   });
 }

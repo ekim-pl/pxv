@@ -88,6 +88,78 @@ does not affect it, while a change to referenced apps or other normalized fields
 does. Review actual changes instead of treating every authoring byte as a new
 execution identity.
 
+## Updating app pins
+
+`policy update-apps` refreshes trusted F-Droid repositories through the host
+`fdroidcl` command, verifies each proposed APK and updates its exact version code
+and SHA-256. It supports a project's configured policy and standalone authored
+policy files, including starter packs. Preview a project update against an enrolled
+phone, then apply the reviewed result:
+
+```sh
+pxv policy update-apps --project-root "$P" --asset PHONE --dry-run
+pxv policy update-apps --project-root "$P" --asset PHONE --yes
+pxv policy validate --project-root "$P"
+pxv policy lock --project-root "$P"
+```
+
+For an offline update, supply the intended Android SDK level and CPU ABIs. Use the
+same pair with `--project-root` when a phone is unavailable. Standalone files require
+the pair and cannot be combined with `--project-root` or `--asset`:
+
+```sh
+pxv policy update-apps --policy policy-packs/fleet-nerd/policy.json \
+  --sdk 36 --abi arm64-v8a --dry-run
+pxv policy update-apps --policy policy-packs/fleet-nerd/policy.json \
+  --sdk 36 --abi arm64-v8a --yes --json
+```
+
+Choose the SDK level of the intended phone; `--abi` accepts a comma-separated list.
+`--asset` reads and checks the enrolled phone's identity, SDK and ABIs through its
+selected transport. The command refreshes repository metadata and downloads APKs
+for verification. It edits the policy after confirmation; `--yes` accepts that
+write and `--dry-run` only reports verified proposed changes. `--json` emits one
+result document on stdout, with progress and the pre-write review on stderr.
+
+Trusted sources are official F-Droid, inline `fdroid-repository` sources, and shared
+`repositoryId` references. Direct URLs beneath an unambiguous trusted repository
+root can be refreshed while retaining their existing source representation. Custom
+repository signing-certificate pins must already appear in the policy. Publisher
+downloads and local APKs without a trusted repository mapping are reported as
+skipped. Consequently, the current starter packs can refresh Rethink and Aurora;
+Session and Orbot need repository trust anchors in their policy before this command
+can refresh their direct URLs. Other publisher downloads need their own release
+review.
+
+Each repository must expose `index-v1.jar` for `fdroidcl`. PXV independently
+authenticates the downloaded JAR, checks its timestamp against the configured
+freshness window and any existing project freshness floor, and reads its signed
+`suggestedVersionCode`. The highest compatible version at or below that value is
+eligible as stable. Missing stable metadata or compatible builds produce a skip
+reason. Stability is never guessed from version names. Discovery leaves execution
+freshness floors unchanged.
+
+The v1 verifier accepts the protocol's legacy SHA-1 JAR signatures only inside its
+separate verification process, with the exact repository certificate pin and all
+other Java JAR algorithm restrictions retained. Host Java security settings remain
+unchanged. Full v1 index JSON is bounded to 128 MiB; APK hashes and repository/APK
+certificate fingerprints use SHA-256.
+
+The updater preserves the existing APK signer and prevents downgrades. Signing-key
+changes, conflicting APK identities, replacement bytes for an existing pinned
+version, or verification failures stop the entire write. Every new APK must match
+the authenticated repository's content hash, package ID, version code and signer,
+and pass APK compatibility inspection. Temporary client state is isolated from the
+host's fdroidcl configuration and removed after completion or cancellation.
+
+All authored catalog entries are considered, including unused entries. Catalog IDs,
+profile references and unrelated policy configuration are preserved. No-op runs
+leave the original file bytes intact. Revision checks preserve concurrent edits
+while a download or confirmation is pending. The result lists `updates` with
+`before`/`after` pins, `unchanged` IDs, `skipped` reasons, `written` and
+`policyLockRequired`. Project writes leave the previous lock in place for explicit
+replacement; validate and lock the policy and review a fresh plan before execution.
+
 ## Profiles, apps and configuration
 
 Exactly one profile has `kind: owner`; other profile IDs and display names are

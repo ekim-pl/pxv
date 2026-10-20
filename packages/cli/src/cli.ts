@@ -27,6 +27,8 @@ async function externalCommand(context: CliContext): Promise<number | undefined>
   if (guides !== undefined) return guides;
   const delegated = await executionMode(context);
   if (delegated !== undefined) return delegated;
+  if (section === 'policy' && command === 'update-apps')
+    return (await import('./policy-update-command.js')).policyUpdateCommand(context);
   if (section === 'guide' && command !== 'project') return staticGuide(context);
   if (section === 'host') return hostCommand(context);
   return initializeProject(context);
