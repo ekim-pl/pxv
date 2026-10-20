@@ -1,5 +1,5 @@
 import { recordObligation } from '../engine/obligations.js';
-import { afterAll, beforeAll, describe, expect, it } from './../test-api.js';
+import { afterAll, beforeAll, describe, expect, it, vi } from './../test-api.js';
 import { createServer, type Server } from 'node:net';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -363,7 +363,7 @@ describe('identity-bound Android adapter', () => {
       ),
     ).rejects.toThrow(/runtime permission/);
     await expect(
-      android.applyVpn(
+      android.verifyVpnConfiguration(
         target,
         user,
         { packageId: 'org.uninstalled.app', alwaysOn: true, lockdown: true },
@@ -587,12 +587,16 @@ describe('identity-bound Android adapter', () => {
     for (const permission of profile.permissions)
       await android.applyPermission(target, user, permission, { lease: {} });
     expect(runner.granted).toBe(true);
-    await android.applyVpn(
+    runner.values.set('secure:always_on_vpn_app', 'org.example.app');
+    runner.values.set('secure:always_on_vpn_lockdown', '1');
+    const priorCommands = runner.calls.length;
+    await android.verifyVpnConfiguration(
       target,
       user,
       { packageId: 'org.example.app', alwaysOn: true, lockdown: true },
       { lease: {} },
     );
+    expect(runner.calls.slice(priorCommands).some((call) => call.args.includes("'put'"))).toBe(false);
     expect(await android.vpn(target, user)).toEqual({
       packageId: 'org.example.app',
       alwaysOn: true,
@@ -603,7 +607,12 @@ describe('identity-bound Android adapter', () => {
     await android.applyPermission(target, user, { ...permission, granted: false }, { lease: {} });
     expect(runner.granted).toBe(false);
     await expect(
-      android.applyVpn(target, user, { packageId: null, alwaysOn: false, lockdown: true }, { lease: {} }),
+      android.verifyVpnConfiguration(
+        target,
+        user,
+        { packageId: null, alwaysOn: false, lockdown: true },
+        { lease: {} },
+      ),
     ).rejects.toThrow(/Inconsistent/);
   });
   it('restores settings and deletes absent old values only for the recorded stable user', async () => {
@@ -1072,8 +1081,13 @@ describe('fail-closed observation and mutation boundaries', () => {
       ),
     ).rejects.toThrow(/retain/);
     await expect(
-      android.applyVpn(target, user, { packageId: null, alwaysOn: false, lockdown: false }, { lease: {} }),
-    ).rejects.toThrow(/retain/);
+      android.verifyVpnConfiguration(
+        target,
+        user,
+        { packageId: null, alwaysOn: false, lockdown: false },
+        { lease: {} },
+      ),
+    ).rejects.toThrow(/VPN lockdown observation|witnessed/);
   });
 });
 
@@ -1121,3 +1135,16 @@ it('explicitly retries a blocked durable obligation through the real Android cle
     await rm(directory, { recursive: true, force: true });
   }
 });
+
+it.each(['always_on_vpn_app', 'always_on_vpn_lockdown'])(
+  'rejects generic secure VPN setting %s before any device command',
+  async (key) => {
+    const runner = new FakeRunner();
+    const android = adapter(runner);
+    const shell = vi.spyOn(android, 'shell');
+    await expect(
+      android.applySetting(target, user, { namespace: 'secure', key, value: '0' }, { lease: {} }),
+    ).rejects.toThrow('vpn block');
+    expect(shell).not.toHaveBeenCalled();
+  },
+);

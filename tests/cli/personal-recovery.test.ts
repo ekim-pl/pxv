@@ -172,7 +172,7 @@ it('requires an explicit recovery mode and defaults recovery finalization while 
     'never provisions',
   );
 });
-it('canonical recovery commands offer help; dry-run reads inputs without a CLI call or filesystem changes', async () => {
+it('recovery help remains available and Community dry-run refuses before any CLI call or filesystem change', async () => {
   for (const mode of ['create', 'recover']) {
     const help = spawnSync(process.execPath, [join(repo, 'tools/personal-recovery.mjs'), mode, '--help'], {
       encoding: 'utf8',
@@ -208,9 +208,9 @@ it('canonical recovery commands offer help; dry-run reads inputs without a CLI c
     ],
     { encoding: 'utf8', env: { ...process.env, PXV_BIN: '/not/a/real/cli' } },
   );
-  expect(result.stderr).toBe('');
-  expect(result.status).toBe(0);
-  expect(JSON.parse(result.stdout) as unknown).toMatchObject({ dryRun: true, mutationsPerformed: false });
+  expect(result.stderr).toContain('Seedvault-enabled product');
+  expect(result.status).toBe(2);
+  expect(result.stdout).toBe('');
   expect(await treeFiles(fixture.root)).toEqual(before);
   await expect(lstat(join(fixture.root, 'new-project'))).rejects.toThrow();
 });

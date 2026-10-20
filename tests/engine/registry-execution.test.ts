@@ -1,3 +1,4 @@
+import { executeWithWitnesses } from './fixtures.js';
 import { toPolicyDocument } from '@pxv/contracts';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -105,7 +106,7 @@ describe('registry invalidation before destructive execution', () => {
       });
       const prepared = await engine.prepare(target, operation);
       const run = await engine.submit(prepared.plan.id, prepared.reviewSummary, 'Synthetic operator');
-      const result = await engine.execute(run.id);
+      const result = await executeWithWitnesses(engine, run.id);
       expect(result.status).toBe('needs-inspection');
       expect(mutation).toHaveBeenCalledOnce();
       const retained = inspectRegistryBinding(original.devices[0]!, await durableEpoch(), inventory);
@@ -126,7 +127,7 @@ describe('registry invalidation before destructive execution', () => {
       const mutation = vi.spyOn(port, operation === 'install-os' ? 'flash' : 'createUser');
       const prepared = await engine.prepare(target, operation);
       const run = await engine.submit(prepared.plan.id, prepared.reviewSummary, 'Synthetic operator');
-      expect((await engine.execute(run.id)).status).toBe('needs-inspection');
+      expect((await executeWithWitnesses(engine, run.id)).status).toBe('needs-inspection');
       expect(mutation).not.toHaveBeenCalled();
       expect((await readRegistryGeneration(store, device)).deviceEpoch).toBe('');
       expect(await store.get('registry-generation', device.assetId)).toBeUndefined();

@@ -354,11 +354,24 @@ const requirementText: Record<string, { en: string; pl: string }> = {
   },
 };
 
+/** Every profile witnesses configured VPN Settings, including disabled and already matching values. */
+export function vpnSettingsRequirement(profile: ProfilePolicy): ReadinessRequirement {
+  const { packageId, alwaysOn, lockdown } = profile.vpn;
+  return {
+    id: `vpn-settings:${profile.id}`,
+    kind: 'operator',
+    profileIds: [profile.id],
+    instructions: {
+      en: `After app configuration and before network probes, open Android VPN Settings in profile ${profile.id} (${profile.name}); witness package ${packageId ?? 'none'}, always-on ${alwaysOn}, block connections without VPN ${lockdown}. Confirm only the active profile with vpn_settings, then resume. This is operator-witnessed configured-state evidence; it does not measure live VPN enforcement.`,
+      pl: `Po konfiguracji aplikacji, przed testami sieci, otwórz ustawienia VPN Androida w profilu ${profile.id} (${profile.name}); potwierdź pakiet ${packageId ?? 'brak'}, zawsze włączony VPN ${alwaysOn}, blokowanie połączeń bez VPN ${lockdown}. Potwierdź tylko aktywny profil przez vpn_settings, następnie wznów. To potwierdzenie ustawień przez operatora; nie jest pomiarem aktywnego wymuszania VPN.`,
+    },
+  };
+}
 export function buildReadinessRequirements(
   policy: ExecutionPolicy,
   deviceKind: DeviceTarget['kind'] = 'pixel',
 ): ReadinessRequirement[] {
-  return requiredAttestations(policy, deviceKind).map((id) => ({
+  const acceptance: ReadinessRequirement[] = requiredAttestations(policy, deviceKind).map((id) => ({
     id,
     kind: 'operator',
     profileIds: [
@@ -376,6 +389,7 @@ export function buildReadinessRequirements(
       pl: `Wykonaj kontrolę polityki: ${id}.`,
     },
   }));
+  return [...policy.profiles.map(vpnSettingsRequirement), ...acceptance];
 }
 
 /** Private normal credentials precede language setup; duress is always last and never activated. */

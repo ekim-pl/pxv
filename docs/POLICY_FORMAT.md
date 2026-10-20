@@ -103,7 +103,7 @@ For an APK with a verified signing-key rotation lineage, `signerSha256` identifi
 the current certificate (the unbounded SDK range in Android `apksigner` output),
 not a historical compatibility certificate. Multiple independent signers are rejected.
 
-Per-profile settings, permission grants and VPN policy remain explicit. Configure
+Per-profile settings, permission grants and VPN policy remain explicit. A non-null VPN package requires `alwaysOn: true`; disabling always-on requires `packageId: null`. Lockdown requires always-on VPN. Probe endpoints support exact HTTPS query strings, and expected egress CIDRs must have valid prefixes and no host bits or IPv6 zone scopes. Invalid combinations are rejected during validation. Configure
 device-wide `global` settings only in `deviceSettings`; profile settings cannot use
 that namespace. See [network policy](NETWORK_POLICIES.md) for always-on VPN,
 lockdown and helper-based egress checks.
@@ -178,3 +178,25 @@ pins, supply `--codename CODE`; a single model pin remains the default. Backup-o
 work and retained masters bind the model to the enrolled device's canonical serial
 or the recorded master codename. These tools retain their existing private file,
 artifact digest, and product/build identity checks.
+
+## Executable Android constraints
+
+Profile names contain 1–80 characters and exclude control characters, `:` and `}`.
+Setting keys match `[A-Za-z][A-Za-z0-9_.:-]{0,127}`; values contain at most 4096
+characters and exclude NUL, CR and LF. Runtime permission names match
+`android.permission.[A-Z0-9_]+`. These constraints apply to authored policies,
+expanded policies and contributed actions; retained observation parsing stays
+separate. Errors identify the affected field before artifact acquisition or device
+changes.
+
+The secure keys `always_on_vpn_app` and `always_on_vpn_lockdown` are reserved for
+the witnessed VPN workflow. Remove them from `settings` and use the `vpn` block,
+even when their values match. Policies, contributed actions and the adapter reject
+these declarations before device commands; retained observations remain readable.
+
+Each provisioning run includes a witnessed `vpn_settings` checkpoint for every
+profile. Saved VPN configuration is read back; PXV does not enable live enforcement
+by writing secure settings. See [VPN verification](NETWORK_POLICIES.md). Probe
+endpoints reject empty user-info (`https://@host`) and empty fragments (`https://host/#`)
+as well as populated credentials/fragments and raw whitespace or controls. Accepted
+query strings, including `%23` and `@` in parameter values, remain byte-exact.

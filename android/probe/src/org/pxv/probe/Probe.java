@@ -35,8 +35,11 @@ public final class Probe extends Instrumentation {
     }
 
     private HttpsURLConnection connection() throws Exception {
+        if (endpoint == null || !endpoint.regionMatches(true, 0, "https://", 0, 8) || endpoint.length() > 4096 || endpoint.matches("(?s).*[\\s\\p{Z}\\p{Cc}\\ufeff#\\\\].*")) {
+            throw new IllegalArgumentException("An exact HTTPS endpoint is required");
+        }
         URL url = new URL(endpoint);
-        if (!"https".equals(url.getProtocol()) || url.getUserInfo() != null || url.getQuery() != null || url.getRef() != null) {
+        if (!"https".equals(url.getProtocol()) || url.getHost().isEmpty() || url.getUserInfo() != null || url.getRef() != null) {
             throw new IllegalArgumentException("An approved HTTPS endpoint is required");
         }
         HttpsURLConnection result = (HttpsURLConnection) url.openConnection();

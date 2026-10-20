@@ -235,14 +235,23 @@ async function assertCredentialPrivacy(input?: string): Promise<void> {
   }
 }
 
+async function confirmVpnSettings(runId: string): Promise<void> {
+  expect(
+    await runCli(device(['attest', '--check', 'vpn_settings', '--operator', 'operator', '--yes']), io),
+  ).toBe(0);
+  expect(await runCli(args(['agent', 'resume', '--run', runId, '--yes']), io)).toBe(4);
+}
+
 it('initializes private defaults once through real CLI checkpoints without retaining echoed credentials', async () => {
   const input = await configureCredentialDefaults();
   expect(await runCli(device(['provision', '--yes']), io)).toBe(4);
   const first = JSON.parse(output.at(-1) ?? '{}') as {
     runs: { id: string; status: string; manualGate?: string }[];
   };
-  expect(first.runs[0]).toMatchObject({ status: 'pending', manualGate: 'normal_credentials' });
+  expect(first.runs[0]).toMatchObject({ status: 'pending', manualGate: 'vpn_settings' });
   const runId = first.runs[0]!.id;
+  expect(await credentialCommands()).toEqual([]);
+  await confirmVpnSettings(runId);
   expect(await credentialCommands()).toEqual([{ command: 'set-pin', userId: 0 }]);
   expect(
     await runCli(device(['attest', '--check', 'normal_credentials', '--operator', 'operator', '--yes']), io),
@@ -282,6 +291,8 @@ it('executes real supervised CLI provisioning, rechecks evidence, shuts down deb
   expect(JSON.parse(await readFile(statePath, 'utf8'))).toMatchObject({
     settings: { screen_off_timeout: '60000' },
   });
+  const result = JSON.parse(output.at(-1) ?? '{}') as { runs: { id: string }[] };
+  await confirmVpnSettings(result.runs[0]!.id);
   for (const check of ['verified_boot', 'recipient_acceptance', 'operator_signoff'])
     expect(await runCli(device(['attest', '--check', check, '--operator', 'operator', '--yes']), io)).toBe(0);
   expect(await runCli(device(['report']), io)).toBe(0);

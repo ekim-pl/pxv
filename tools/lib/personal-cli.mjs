@@ -111,16 +111,26 @@ async function refresh(session, id) {
   const prepared = await jsonCommand(session, ['agent', 'refresh', '--run', id]);
   return approve(session, prepared);
 }
+/** @param {any} run */
+function checkpointInstructions(run) {
+  return (
+    'Complete the phone checkpoint: ' +
+    run.manualGate +
+    '.\n' +
+    (run.pauseReason?.instructions ?? '') +
+    '\nUnlock only the intended profile; enter passwords and recovery words privately on the phone.'
+  );
+}
+/** @param {Session} session @param {any} run */
+async function continueCheckpoint(session, run) {
+  if (run.reviewStatus === 'expired') return refresh(session, run.id);
+  return resumeCheckpoint(session, run);
+}
 /** @param {Session} session @param {any} run */
 async function resumeCheckpoint(session, run) {
   const gate = run.manualGate;
   if (gate.startsWith('seedvault')) await showSeedvaultInstructions(session, run.id);
-  await checkpoint(
-    session,
-    'Complete the phone checkpoint: ' +
-      gate +
-      '.\nUnlock only the intended profile; enter passwords and recovery words privately on the phone.',
-  );
+  await checkpoint(session, checkpointInstructions(run));
   if (!gate.startsWith('language:') && !gate.startsWith('seedvault'))
     await jsonCommand(session, [
       'device',
@@ -177,7 +187,7 @@ async function monitor(session, initialId, kind) {
       const status = await jsonCommand(session, ['agent', 'status', '--run', id]);
       if (terminalRun(status, kind)) return status.run;
       if (status.run.manualGate) {
-        id = await resumeCheckpoint(session, status.run);
+        id = await continueCheckpoint(session, status.run);
         continue;
       }
       if (announced !== status.run.status) {

@@ -133,7 +133,7 @@ describe('policy-specific recipient booklets', () => {
   test('renders all metadata literally without HTML, Markdown, image or link injection', () => {
     const policy = installation(1);
     policy.name = '<img src=x> [go](https://bad.invalid) **x**';
-    policy.profiles[0]!.name = policy.name;
+    policy.profiles[0]!.name = '<img src=x> [go](//bad.invalid) **x**';
     for (const locale of locales) {
       for (const kind of kinds) {
         const rendered = html(renderPolicyBooklet(sources[locale][kind], kind, policy, locale));
@@ -152,7 +152,7 @@ describe('policy-specific recipient booklets', () => {
     policy.name = '🏠'.repeat(120);
     const profile = policy.profiles[0]!;
     profile.id = 'p'.repeat(128);
-    profile.name = '🦊'.repeat(110);
+    profile.name = '🦊'.repeat(40);
     const vpn = `org.${'v'.repeat(150)}`;
     profile.packages[0]!.packageId = vpn;
     profile.permissions = [];

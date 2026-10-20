@@ -13,6 +13,7 @@ import type {
   NetworkProbePolicy,
   RecoveryObligation,
   ObligationWriter,
+  OperatorAttestation,
 } from '@pxv/contracts';
 import type { DeviceLease, Store } from '@pxv/runtime';
 import type { ProjectContext } from './project.js';
@@ -77,11 +78,29 @@ export interface ProbeExecutionResult {
 }
 
 export interface CapabilityEvidenceRef {
-  kind: 'recipe' | 'network-probe';
+  kind: 'recipe' | 'network-probe' | 'vpn-settings';
   profileId: string;
   configurationDigest: string;
   evidenceId: string;
   status: 'measured' | 'manual-completed';
+}
+export interface VpnSettingsProof {
+  assetId: string;
+  deviceSerial: string;
+  kind: 'vpn-settings';
+  scope: 'operator-witnessed-settings';
+  status: 'manual-completed';
+  runId: string;
+  planId: string;
+  planDigest: string;
+  actionIndex: number;
+  profileId: string;
+  policyDigest: string;
+  configurationDigest: string;
+  user: AndroidUserIdentity;
+  receipt: OperatorAttestation;
+  observationDigest: string;
+  proofDigest: string;
 }
 
 export interface WorkflowPort {
@@ -110,7 +129,7 @@ export interface WorkflowPort {
     permission: ProfilePolicy['permissions'][number],
     context: ExecutionContext,
   ): Promise<void>;
-  applyVpn(
+  verifyVpnConfiguration(
     target: SelectedTarget,
     user: AndroidUserIdentity,
     vpn: ProfilePolicy['vpn'],
@@ -293,7 +312,7 @@ export interface ActiveExecution {
 }
 
 export interface CapabilityRequirement {
-  kind: 'recipe' | 'network-probe';
+  kind: CapabilityEvidenceRef['kind'];
   configurationDigest: string;
   label: string;
 }

@@ -357,10 +357,9 @@ export class PreparationService implements Preparation {
     for (const permission of profile.permissions)
       if (!observed?.permissions.some((value) => digest(value) === digest(permission)))
         actions.push({ kind: 'permission', profileId: profile.id, permission });
-    if (!observed || digest(observed.vpn) !== digest(profile.vpn)) {
+    if (!observed || digest(observed.vpn) !== digest(profile.vpn))
       actions.push(...this.manualVpnSetup(profile));
-      actions.push({ kind: 'vpn', profileId: profile.id, vpn: profile.vpn });
-    }
+    actions.push({ kind: 'vpn', profileId: profile.id, vpn: profile.vpn });
     return actions;
   }
   private manualVpnSetup(profile: ProfilePolicy): Action[] {

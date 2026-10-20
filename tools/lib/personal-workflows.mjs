@@ -25,7 +25,12 @@ import {
   workingUsb,
 } from './personal-master.mjs';
 import { checkpoint, invoke, jsonCommand, reviewedOperation, seedvaultOperation } from './personal-cli.mjs';
-import { qualifiedAdapter, readCoverage, validateRestoreReport } from './personal-validation.mjs';
+import {
+  qualifiedAdapter,
+  readCoverage,
+  requirePersonalRecovery,
+  validateRestoreReport,
+} from './personal-validation.mjs';
 
 /** @typedef {Record<string,string|boolean|undefined>} Options */
 /** @param {Options} options @param {string} name @param {string} [fallback] */
@@ -36,6 +41,7 @@ export function option(options, name, fallback) {
 }
 /** @param {Options} options @param {string} root */
 export async function preflight(options, root) {
+  await requirePersonalRecovery(root);
   for (const name of ['project-root', 'usb-root']) await safePath(option(options, name));
   const usb = await lstat(option(options, 'usb-root'));
   if (!usb.isDirectory()) throw new Error('--usb-root must be the mounted USB drive directory');
@@ -256,6 +262,7 @@ async function finishPhone(session, options, policy, refreshed = false) {
 }
 /** @param {any} session @param {Options} options */
 export async function createPersonalMaster(session, options) {
+  await requirePersonalRecovery(session.root);
   const usb = resolve(option(options, 'usb-root')),
     destination = resolve(option(options, 'backup-dir'));
   await distinctRoots([session.project, usb, destination]);
@@ -334,6 +341,7 @@ async function createInputs(session, options) {
 }
 /** @param {any} session @param {Options} options */
 export async function recoverPersonalDevice(session, options) {
+  await requirePersonalRecovery(session.root);
   const master = resolve(option(options, 'master')),
     usb = resolve(option(options, 'usb-root'));
   await distinctRoots([master, usb, session.project]);

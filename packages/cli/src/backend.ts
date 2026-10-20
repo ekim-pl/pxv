@@ -29,6 +29,10 @@ function requireExtensions(engine: WorkflowEngine): void {
   if (engine.project.product.features?.extensions === false)
     throw new Error('Extensions are outside this core product; use an extension-enabled product');
 }
+function requireHostExtensionInstall(): void {
+  if (process.env['PXV_DOCKER_MODE'] !== undefined)
+    throw new Error('Extension installation and updates require local host execution');
+}
 function backendContext(engine: WorkflowEngine, allowMutations: boolean) {
   const serials = engine.project.inventory.devices.flatMap((value) => [
     value.canonicalSerial,
@@ -325,6 +329,7 @@ function writeExtensions(
   const manager = extensionManager;
   return {
     async extensionInstall(source, reviewed, registry) {
+      requireHostExtensionInstall();
       requireReview(reviewed);
       requireExtensions(engine);
       const installed = await manager(registry).install(source);
@@ -335,6 +340,7 @@ function writeExtensions(
       return publicValue(installed);
     },
     async extensionUpdate(id, source, reviewed, registry) {
+      requireHostExtensionInstall();
       requireReview(reviewed);
       requireExtensions(engine);
       const installed = await manager(registry).update(pinned(id), source);

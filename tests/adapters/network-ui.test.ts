@@ -177,6 +177,12 @@ describe('app-UID network observations and cleanup ownership', () => {
     expect(evidence.scope).toBe('probe-app-uid-https-only');
     expect(resolved.at(-1)).toBe(obligation.id);
   });
+  it('passes the exact reviewed query endpoint to instrumentation', async () => {
+    const android = new ProbeAndroid();
+    const endpoint = 'https://probe.example/ip?format=json&tag=a%2Bb';
+    await new NetworkProbeService(android).observe(target, user, { ...request, endpoint }, { lease: {} });
+    expect(android.mutations[0]).toContain(endpoint);
+  });
   it('handles canonical IPv4/IPv6 route ranges and rejects invalid ranges', () => {
     expect(ipInCidrs('203.0.113.5', ['203.0.113.0/24'])).toBe(true);
     expect(ipInCidrs('203.0.114.5', ['203.0.113.0/24'])).toBe(false);
@@ -225,9 +231,15 @@ describe('app-UID network observations and cleanup ownership', () => {
         () => Promise.resolve(),
       ),
     };
-    await expect(
-      service.run(target, user, helper, { ...request, endpoint: 'http://probe.example/ip' }, options),
-    ).rejects.toThrow(/HTTPS/);
+    for (const endpoint of [
+      'http://probe.example/ip',
+      'https://@probe.example/ip',
+      'https://probe.example/ip#',
+      'https://probe.example/ip\n',
+    ])
+      await expect(service.run(target, user, helper, { ...request, endpoint }, options)).rejects.toThrow(
+        /HTTPS/,
+      );
     await expect(
       service.run(target, user, helper, { ...request, expectedEgressCidrs: [] }, options),
     ).rejects.toThrow(/CIDRs/);

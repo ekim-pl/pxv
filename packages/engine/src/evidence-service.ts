@@ -6,6 +6,7 @@ import {
   validateAttestation,
   validateObservation,
   sameAndroidUser as sameUser,
+  vpnSettingsRequirement,
 } from '@pxv/contracts';
 import type { SelectedTarget, OperatorAttestation, ProfilePolicy, AndroidUserIdentity } from '@pxv/contracts';
 import type { Store, DeviceLease } from '@pxv/runtime';
@@ -15,6 +16,7 @@ import type { ObservationReader } from './observation-service.js';
 import type { DeviceOwnership } from './ownership.js';
 import type { WorkflowState, CapabilityRequirement, BoundEmulatorEvidence } from './workflow-types.js';
 import { normalReceiptMatches } from './setup-evidence.js';
+import type { VpnProofVerifier, VpnProofSession } from './vpn-proof-verifier.js';
 export interface EvidenceReader {
   state(assetId: string): Promise<WorkflowState>;
   requireFresh(state: WorkflowState): void;
@@ -32,6 +34,7 @@ export class EvidenceService implements EvidenceReader {
     readonly observations: ObservationReader,
     readonly ownership: DeviceOwnership,
     readonly clock: () => Date,
+    readonly vpnProofs: VpnProofVerifier,
   ) {}
   async receipts(assetId: string): Promise<OperatorAttestation[]> {
     return this.parseReceipts(await this.store.get<unknown>('attestations', assetId));
@@ -111,11 +114,18 @@ export class EvidenceService implements EvidenceReader {
     return missing;
   }
   private capabilityRequirements(profile: ProfilePolicy): CapabilityRequirement[] {
-    const required: CapabilityRequirement[] = (profile.recipes ?? []).map((recipe) => ({
-      kind: 'recipe',
-      configurationDigest: digest(recipe),
-      label: `recipe:${profile.id}:${recipe.id}`,
-    }));
+    const required: CapabilityRequirement[] = [
+      {
+        kind: 'vpn-settings',
+        configurationDigest: digest(profile.vpn),
+        label: vpnSettingsRequirement(profile).id,
+      },
+      ...(profile.recipes ?? []).map((recipe) => ({
+        kind: 'recipe' as const,
+        configurationDigest: digest(recipe),
+        label: `recipe:${profile.id}:${recipe.id}`,
+      })),
+    ];
     if (profile.networkProbe)
       required.push({
         kind: 'network-probe',
@@ -126,9 +136,10 @@ export class EvidenceService implements EvidenceReader {
   }
   private async missingCapabilities(state: WorkflowState): Promise<string[]> {
     const missing: string[] = [];
+    const vpn = this.vpnProofs.session(state);
     for (const profile of this.project.policy.profiles)
       for (const requirement of this.capabilityRequirements(profile)) {
-        if (!(await this.capabilityReady(profile, requirement, state))) missing.push(requirement.label);
+        if (!(await this.capabilityReady(profile, requirement, state, vpn))) missing.push(requirement.label);
       }
     return missing;
   }
@@ -136,6 +147,7 @@ export class EvidenceService implements EvidenceReader {
     profile: ProfilePolicy,
     requirement: CapabilityRequirement,
     state: WorkflowState,
+    vpn: VpnProofSession,
   ): Promise<boolean> {
     const reference = state.capabilityEvidence?.find(
       (value) =>
@@ -144,6 +156,7 @@ export class EvidenceService implements EvidenceReader {
         value.configurationDigest === requirement.configurationDigest,
     );
     if (!reference) return false;
+    if (requirement.kind === 'vpn-settings') return vpn.valid(reference);
     const proof = await this.store.get<{
       policyDigest: string;
       configurationDigest: string;

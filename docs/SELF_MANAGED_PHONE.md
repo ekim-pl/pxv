@@ -160,12 +160,24 @@ last event cursor to read new events. A pending run still needs work; process ex
 alone does not establish readiness. Use `pxv COMMAND --help` for supported flags.
 `--yes` confirms your review or physical check; it does not perform either.
 
-If a review expires, `pxv agent refresh --project-root "$P" --run "$RUN"` prepares
+If a review expires at an intentional manual checkpoint, `pxv agent refresh --project-root "$P" --run "$RUN"` prepares
 remaining work for a new review. Review and submit its new plan with the exact
 review-file procedure in [automation](AUTOMATION.md). Refresh is not recovery for
 an uncertain interrupted mutation.
 
+Execution review expiry does not prevent attestation after completed provisioning when measurements are still fresh (within 15 minutes) and live state is unchanged. Stale acceptance measurements require a newly reviewed provisioning run; `agent refresh` applies only to manual checkpoints.
+
 ## 5. Complete private checkpoints yourself
+
+Every profile has a `vpn_settings` checkpoint, even if its saved configuration
+already matches or VPN is disabled. In the named profile, open Android VPN Settings
+and configure or witness the selected app, Always-on VPN and Block connections
+without VPN toggles. Run `pxv device attest --project-root "$P" --asset "$ASSET"
+--check vpn_settings --operator "$OPERATOR"`, then resume the run. Repeat for each
+profile. PXV records a manual Settings witness and reads back saved values; it does
+not claim an automated measurement of live enforcement. Required network probes
+remain separate. Complete this phase before ordinary credential/language/duress gates.
+
 
 Work through the named pause in the correct profile. Follow this order:
 

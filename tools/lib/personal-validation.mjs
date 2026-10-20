@@ -7,6 +7,14 @@ const resources = fileURLToPath(new URL('../../', import.meta.url));
 async function contracts() {
   return import(pathToFileURL(resolve(resources, 'packages/contracts/dist/index.js')).href);
 }
+/** Check the same resource descriptor supplied to every child CLI before any mutation.
+ * @param {string} root */
+export async function requirePersonalRecovery(root) {
+  const { validateProduct } = await contracts();
+  const product = validateProduct(await readJson(resolve(root, 'product.json')));
+  if (product.features?.seedvault === false)
+    throw new Error('Personal recovery requires a Seedvault-enabled product; no changes were made');
+}
 /** @param {string} path */
 export async function qualifiedAdapter(path) {
   const { validateSeedvaultAdapter } = await contracts();

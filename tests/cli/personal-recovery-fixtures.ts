@@ -13,6 +13,7 @@ import { device, policy, product, project } from '../contracts/fixtures.js';
 
 export async function personalFixture() {
   const root = await mkdtemp(join(tmpdir(), 'pxv-personal-'));
+  await writeFile(join(root, 'product.json'), JSON.stringify(product));
   const projectRoot = join(root, 'project'),
     usb = join(root, 'usb'),
     masters = join(root, 'masters');

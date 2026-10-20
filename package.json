@@ -25,7 +25,8 @@
     "quality:setup": "node tools/bootstrap-quality.mjs",
     "quality": "node tools/quality.mjs",
     "check:helpers": "node tools/check-helpers.mjs",
-    "test:supervisor": "pnpm build && node tools/run-tests.mjs 'tests/runtime/supervisor*.test.ts' tests/runtime/commands.test.ts"
+    "test:supervisor": "pnpm build && node tools/run-tests.mjs 'tests/runtime/supervisor*.test.ts' tests/runtime/commands.test.ts",
+    "check:docker": "pnpm build && node tools/check-docker-worker.mjs"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",

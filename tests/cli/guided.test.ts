@@ -34,7 +34,7 @@ it('derives localized guides from arbitrary policy profiles and device capabilit
       'pixel',
       'en',
     ),
-  ).toContain('No additional private setup');
+  ).not.toContain('No additional private setup');
 });
 it('guides manual receipts and review refresh while never replaying interrupted mutations', () => {
   const base: RunRecord = {
@@ -112,4 +112,32 @@ it('gives re-enrollment instructions instead of manual attestation after an OS f
   expect(steps).toContain('device provision');
   expect(steps).not.toContain('device attest');
   expect(steps).not.toContain('agent resume');
+});
+
+it('includes matching and disabled per-profile VPN checkpoints in both guide languages', () => {
+  const selected = structuredClone(policy);
+  selected.profiles.push({
+    ...selected.profiles[0]!,
+    id: 'work',
+    name: 'Praca',
+    kind: 'secondary',
+    vpn: { packageId: null, alwaysOn: false, lockdown: false },
+  });
+  for (const locale of ['en', 'pl'] as const) {
+    const guide = renderProjectGuide(product, selected, 'pixel', locale);
+    for (const profile of selected.profiles) {
+      expect(guide).toContain(`vpn-settings:${profile.id}`);
+      expect(guide).toContain(profile.name);
+      expect(guide).toContain(profile.vpn.packageId ?? (locale === 'pl' ? 'brak' : 'none'));
+    }
+    expect(guide).toContain('true');
+    expect(guide).toContain('false');
+    expect(guide).toContain('device attest --asset ASSET --check vpn_settings');
+    expect(guide).toContain('agent resume --run RUN');
+    expect(guide.indexOf('--check vpn_settings')).toBeLessThan(
+      guide.indexOf(locale === 'pl' ? 'Kolejność prywatnej' : 'Private setup sequence'),
+    );
+    expect(guide).toContain(locale === 'pl' ? 'przed testami sieci' : 'before network probes');
+    expect(guide).toContain(locale === 'pl' ? 'nie jest pomiarem' : 'does not measure');
+  }
 });

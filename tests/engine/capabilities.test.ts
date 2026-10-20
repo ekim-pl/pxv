@@ -1,3 +1,4 @@
+import { executeWithWitnesses } from './fixtures.js';
 import { toPolicyDocument } from '@pxv/contracts';
 import { recordObligation } from './obligations.js';
 import { DatabaseSync } from 'node:sqlite';
@@ -73,7 +74,7 @@ describe('scoped recipe, network and recovery evidence', () => {
     await rm(root, { recursive: true, force: true });
   });
 
-  it('runs pinned recipes and helper-UID probes, retains parent resources and requires final operator checks', async () => {
+  it('runs pinned recipes and probes, retaining parent cleanup at the VPN checkpoint until inspected recovery', async () => {
     const policy = basePolicy();
     const profile = policy.profiles[0];
     if (!profile) throw new Error('Fixture profile missing');
@@ -93,12 +94,12 @@ describe('scoped recipe, network and recovery evidence', () => {
         payload: { original: '0' },
         status: 'pending',
       });
-      return {
+      return Promise.resolve({
         status: 'measured',
         capability: 'app-setup',
         recipeDigest: digest(configured),
         postconditions: 1,
-      };
+      });
     };
     port.runProbe = async (_target, user, configured, execution) => {
       if (!execution.operationId || !execution.obligations || !execution.reviewedDeviceWideEffect)
@@ -133,7 +134,7 @@ describe('scoped recipe, network and recovery evidence', () => {
     };
     const engine = await configure(policy);
     const run = await approve(engine);
-    expect((await engine.execute(run.id)).status).toBe('pending');
+    expect((await engine.execute(run.id)).manualGate).toBe('vpn_settings');
     const scope = new ResourceScope(store, device.canonicalSerial, run.id);
     expect((await scope.list()).find((value) => value.id === 'parent-keep-awake')?.status).toBe('pending');
     const before = await engine.readiness(target);
@@ -144,6 +145,7 @@ describe('scoped recipe, network and recovery evidence', () => {
       return Promise.resolve();
     };
     expect((await engine.recover(target, run.id)).resolved).toBe(1);
+    await executeWithWitnesses(engine, run.id);
     for (const check of requiredAttestations(policy)) await engine.attest(target, check, 'Alice');
     expect((await engine.readiness(target)).ready).toBe(true);
     const reference = (await engine.state('all')).capabilityEvidence?.find(
@@ -188,7 +190,7 @@ describe('scoped recipe, network and recovery evidence', () => {
     ]);
     expect(prepared.plan.actions.map((action) => action.kind)).toEqual(['recipe', 'vpn']);
     const run = await engine.submit(prepared.plan.id, prepared.reviewSummary, 'Alice');
-    expect((await engine.execute(run.id)).pauseReason).toMatchObject({
+    expect((await executeWithWitnesses(engine, run.id)).pauseReason).toMatchObject({
       kind: 'manual-step',
       gate: 'app_setup',
       profileId: profile.id,
@@ -196,11 +198,13 @@ describe('scoped recipe, network and recovery evidence', () => {
       instructions: 'Complete setup privately.',
     });
     expect(port.calls).not.toContain('vpn');
-    expect((await engine.execute(run.id)).manualGate).toBe('app_setup');
+    expect((await executeWithWitnesses(engine, run.id)).manualGate).toBe('app_setup');
     expect(calls).toEqual(['manual-import']);
     await engine.attest(target, 'app_setup', 'Alice');
-    expect((await engine.execute(run.id)).manualGate).toBeUndefined();
-    expect(port.calls).toContain('vpn');
+    expect((await executeWithWitnesses(engine, run.id)).manualGate).toBeUndefined();
+    expect(
+      (await engine.state('all')).capabilityEvidence?.some((value) => value.kind === 'vpn-settings'),
+    ).toBe(true);
     expect(calls).toEqual(['manual-import']);
     expect((await engine.state('all')).capabilityEvidence?.[0]?.status).toBe('manual-completed');
   });
@@ -255,13 +259,19 @@ describe('scoped recipe, network and recovery evidence', () => {
       });
     const engine = await configure(policy);
     const run = await approve(engine);
-    expect((await engine.execute(run.id)).pauseReason).toMatchObject({ recipeId: recipe.id });
+    expect((await executeWithWitnesses(engine, run.id)).pauseReason).toMatchObject({ recipeId: recipe.id });
     await engine.attest(target, 'app_setup', 'Alice');
-    expect((await engine.execute(run.id)).pauseReason).toMatchObject({ recipeId: 'second-setup' });
-    expect((await engine.execute(run.id)).pauseReason).toMatchObject({ recipeId: 'second-setup' });
+    expect((await executeWithWitnesses(engine, run.id)).pauseReason).toMatchObject({
+      recipeId: 'second-setup',
+    });
+    expect((await executeWithWitnesses(engine, run.id)).pauseReason).toMatchObject({
+      recipeId: 'second-setup',
+    });
     await engine.attest(target, 'app_setup', 'Alice');
-    expect((await engine.execute(run.id)).manualGate).toBeUndefined();
-    expect((await engine.state('all')).capabilityEvidence).toHaveLength(2);
+    expect((await executeWithWitnesses(engine, run.id)).manualGate).toBeUndefined();
+    expect(
+      (await engine.state('all')).capabilityEvidence?.filter((value) => value.kind === 'recipe'),
+    ).toHaveLength(2);
   });
 
   it('requires named VPN setup and consent before a changed lockdown policy without a matching recipe', async () => {
@@ -276,17 +286,19 @@ describe('scoped recipe, network and recovery evidence', () => {
     expect(setup.instructions).toContain('org.example.vpn in profile admin');
     expect(prepared.reviewSummary).toContain('assisted');
     const run = await engine.submit(prepared.plan.id, prepared.reviewSummary, 'Alice');
-    const pause = (await engine.execute(run.id)).pauseReason;
+    const pause = (await executeWithWitnesses(engine, run.id)).pauseReason;
     if (pause?.kind !== 'manual-step') throw new Error('Expected a manual setup pause');
     expect(pause.gate).toBe('app_setup');
     expect(pause.instructions).toContain('Android VPN consent');
     expect(port.calls).toEqual([]);
     await expect(engine.attest(target, 'operator_signoff', 'Alice')).rejects.toThrow('Contradictory');
     await engine.attest(target, 'app_setup', 'Alice');
-    expect((await engine.execute(run.id)).pauseReason?.kind).toBe('acceptance');
-    expect(port.calls).toEqual(['vpn']);
+    expect((await executeWithWitnesses(engine, run.id)).pauseReason?.kind).toBe('acceptance');
+    expect(port.calls).toEqual([]);
     expect((await engine.state('all')).status).toBe('verified');
-    expect((await engine.prepare(target)).plan.actions).toEqual([]);
+    expect((await engine.prepare(target)).plan.actions).toEqual([
+      { kind: 'vpn', profileId: 'admin', vpn: engine.project.policy.profiles[0]!.vpn },
+    ]);
   });
 
   it('does not excuse drift in a VPN action that completed before the current app configuration gate', async () => {
@@ -307,7 +319,7 @@ describe('scoped recipe, network and recovery evidence', () => {
       { kind: 'recipe', profileId: profile.id, recipe },
     ]);
     const run = await engine.submit(prepared.plan.id, prepared.reviewSummary, 'Alice');
-    expect((await engine.execute(run.id)).manualGate).toBe('app_setup');
+    expect((await executeWithWitnesses(engine, run.id)).manualGate).toBe('app_setup');
     await expect(engine.attest(target, 'app_setup', 'Alice')).rejects.toThrow('Contradictory');
     await expect(engine.attest(target, 'operator_signoff', 'Alice')).rejects.toThrow('Contradictory');
   });
@@ -327,7 +339,7 @@ describe('scoped recipe, network and recovery evidence', () => {
         postconditions: 1,
       });
     let run = await approve(engine);
-    expect((await engine.execute(run.id)).error).toContain('different configuration');
+    expect((await executeWithWitnesses(engine, run.id)).error).toContain('different configuration');
     delete profile.recipes;
     profile.networkProbe = probe;
     engine = await configure(policy);
@@ -346,7 +358,7 @@ describe('scoped recipe, network and recovery evidence', () => {
         failures: [],
       });
     run = await approve(engine);
-    expect((await engine.execute(run.id)).error).toContain('incomplete');
+    expect((await executeWithWitnesses(engine, run.id)).error).toContain('incomplete');
     const measured = port.observation.profiles[0];
     if (!measured) throw new Error('Fixture measured profile missing');
     measured.packages.push({ packageId: 'org.pxv.probe', versionCode: 1, signerSha256: hashB });
@@ -364,7 +376,7 @@ describe('scoped recipe, network and recovery evidence', () => {
       { userId: 0, serialNo: 0, name: 'Administrator' },
     );
     const run = await approve(engine);
-    expect((await engine.execute(run.id)).error).toContain('unresolved recovery');
+    expect((await executeWithWitnesses(engine, run.id)).error).toContain('unresolved recovery');
     await expect(engine.recover(target, 'old-run')).rejects.toThrow('Typed device cleanup');
     port.cleanup = () => Promise.resolve();
     const user = port.observation.profiles[0]?.user;
@@ -472,16 +484,16 @@ describe('scoped recipe, network and recovery evidence', () => {
     };
     const engine = await configure(setupPolicy);
     const run = await approve(engine);
-    expect((await engine.execute(run.id)).manualGate).toBe('normal_credentials');
+    expect((await executeWithWitnesses(engine, run.id)).manualGate).toBe('normal_credentials');
     await engine.attest(target, 'normal_credentials', 'Alice');
-    expect((await engine.execute(run.id)).manualGate).toBe('language:admin');
-    expect((await engine.execute(run.id)).manualGate).toBe('language:admin');
+    expect((await executeWithWitnesses(engine, run.id)).manualGate).toBe('language:admin');
+    expect((await executeWithWitnesses(engine, run.id)).manualGate).toBe('language:admin');
     expect(calls).toEqual(['language-attempt']);
     actual.language = 'pl-PL';
-    expect((await engine.execute(run.id)).manualGate).toBe('duress');
+    expect((await executeWithWitnesses(engine, run.id)).manualGate).toBe('duress');
     expect(calls).toEqual(['language-attempt']);
     await engine.attest(target, 'duress', 'Alice');
-    expect((await engine.execute(run.id)).manualGate).toBeUndefined();
+    expect((await executeWithWitnesses(engine, run.id)).manualGate).toBeUndefined();
     expect(
       (await store.events<{ type: string }>(run.id)).some(
         (value) => value.event.type === 'language-observed',
@@ -497,12 +509,12 @@ describe('scoped recipe, network and recovery evidence', () => {
     port.language = () => Promise.resolve({ status: 'manual-pending', instructions: 'Choose Polish.' });
     const engine = await configure(setupPolicy);
     const run = await approve(engine);
-    await engine.execute(run.id);
+    await executeWithWitnesses(engine, run.id);
     await engine.attest(target, 'normal_credentials', 'Alice');
-    await engine.execute(run.id);
+    await executeWithWitnesses(engine, run.id);
     actual.language = 'pl-PL';
     permission.granted = false;
-    expect((await engine.execute(run.id)).error).toContain('Other live requirements changed');
+    expect((await executeWithWitnesses(engine, run.id)).error).toContain('Other live requirements changed');
   });
   it('retains cleanup when the original Android user disappears before explicit recovery', async () => {
     const engine = await configure(basePolicy());

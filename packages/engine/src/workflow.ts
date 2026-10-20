@@ -114,6 +114,7 @@ export class WorkflowEngine {
       ...readiness,
       currentStateVerified: false,
       evidenceSource: 'stored' as const,
+      vpnEvidenceScope: 'operator-witnessed-settings' as const,
       ...(run ? { run } : {}),
     };
   }

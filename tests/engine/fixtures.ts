@@ -7,7 +7,7 @@ import type {
   SelectedTarget,
   SharedApkEffect,
 } from '@pxv/contracts';
-import type { ExecutionContext, WorkflowPort } from '@pxv/engine';
+import type { ExecutionContext, WorkflowPort, WorkflowEngine } from '@pxv/engine';
 import { observation, policy } from '../contracts/fixtures.js';
 
 export function basePolicy(): ExecutionPolicy {
@@ -19,6 +19,23 @@ export function basePolicy(): ExecutionPolicy {
     delete profile.defaultLocale;
   }
   return result;
+}
+
+/** Existing workflow regressions explicitly simulate the new witnessed Settings steps. */
+export async function executeWithWitnesses(engine: WorkflowEngine, runId: string, signal?: AbortSignal) {
+  let run = await engine.execute(runId, signal);
+  while (run.status === 'pending' && run.manualGate === 'vpn_settings') {
+    const prepared = await engine.plan(run.planId);
+    const action = prepared.plan.actions[run.cursor ?? -1];
+    const port = engine.port;
+    if (action?.kind !== 'vpn' || !(port instanceof MemoryPort)) throw new Error('VPN fixture missing');
+    const profile = port.observation.profiles.find((value) => value.profileId === action.profileId);
+    if (!profile) throw new Error('VPN fixture profile missing');
+    profile.vpn = structuredClone(action.vpn);
+    await engine.attest(prepared.target, 'vpn_settings', 'Fixture witness');
+    run = await engine.execute(runId, signal);
+  }
+  return run;
 }
 
 export class MemoryPort implements WorkflowPort {
@@ -128,14 +145,15 @@ export class MemoryPort implements WorkflowPort {
     ];
     return Promise.resolve();
   }
-  applyVpn(
+  verifyVpnConfiguration(
     _target: SelectedTarget,
     user: AndroidUserIdentity,
     vpn: ProfilePolicy['vpn'],
     context: ExecutionContext,
   ): Promise<void> {
-    this.mark('vpn', context);
-    this.profile(user).vpn = vpn;
+    context.signal?.throwIfAborted();
+    if (JSON.stringify(this.profile(user).vpn) !== JSON.stringify(vpn))
+      throw new Error('VPN configuration differs from witnessed Settings');
     return Promise.resolve();
   }
   language(

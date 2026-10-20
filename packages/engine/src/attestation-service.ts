@@ -26,6 +26,7 @@ import type {
   RunRecord,
 } from './workflow-types.js';
 import { normalReceiptMatches } from './setup-evidence.js';
+import { pausedVpnAction, checkVpnDelta } from './vpn-evidence.js';
 
 export class AttestationService {
   constructor(
@@ -63,29 +64,48 @@ export class AttestationService {
     const state = await this.evidence.state(target.device.assetId);
     this.evidence.requireFresh(state);
     const live = await this.observations.observe(target);
-    if (observationDigest(live) !== observationDigest(state.observation))
+    const vpn = check === 'vpn_settings' ? await this.vpnCheckpoint(state) : undefined;
+    if (vpn) {
+      checkVpnDelta(state.observation, live, vpn);
+      if (digest(live.profiles.find((value) => value.profileId === vpn.profileId)?.vpn) !== digest(vpn.vpn))
+        throw new Error('Configure the reviewed VPN Settings before confirming this profile');
+    } else if (observationDigest(live) !== observationDigest(state.observation))
       throw new Error('Live state changed; refresh provisioning before recording checks');
-    await this.assertAttestationAllowed(target, state, live, check);
+    await this.assertAttestationAllowed(target, state, live, check, vpn);
     const provenance =
       check === 'emulator_image_provenance'
         ? await this.measureEmulatorEvidence(target, state, live, evidence)
         : undefined;
-    const receipt = this.createAttestation(state, live, check, operator, note);
+    const receipt = this.createAttestation(state, live, check, operator, note, vpn?.profileId);
     await this.commitAttestation(target.device.assetId, state, receipt, provenance);
     return receipt;
+  }
+  private async vpnCheckpoint(state: WorkflowState): Promise<Extract<Action, { kind: 'vpn' }> | undefined> {
+    if (!state.planId) return undefined;
+    const prepared = await this.plans.read(state.planId, undefined, true);
+    const run = await this.store.get<RunRecord>(
+      'runs',
+      digest({ project: this.project.config.id, plan: prepared.plan.digest }),
+    );
+    return pausedVpnAction(prepared, run);
   }
   private async assertAttestationAllowed(
     target: SelectedTarget,
     state: WorkflowState,
     live: DeviceObservation,
     check: string,
+    vpn?: Extract<Action, { kind: 'vpn' }>,
   ): Promise<void> {
-    const prepared = state.planId ? await this.plans.read(state.planId) : undefined;
+    const prepared = state.planId ? await this.plans.read(state.planId, undefined, true) : undefined;
     const manual =
       prepared?.plan.actions
         .filter((action) => action.kind === 'manual')
         .map((action) => action.capability) ?? [];
-    if (![...requiredAttestations(this.project.policy, target.device.kind), ...manual].includes(check))
+    if (
+      check === 'vpn_settings'
+        ? !vpn
+        : ![...requiredAttestations(this.project.policy, target.device.kind), ...manual].includes(check)
+    )
       throw new Error('Check does not belong to this workflow');
     await this.assertSetupMeasurements(check, state, live, prepared);
     if (check !== 'duress') return;
@@ -112,10 +132,18 @@ export class AttestationService {
     state: WorkflowState,
     prepared: PreparedOperation | undefined,
   ): Promise<string[]> {
-    if (check !== 'app_setup' || !state.pending.includes('manual:app_setup') || !prepared) return [];
+    if (
+      !['app_setup', 'vpn_settings'].includes(check) ||
+      !state.pending.includes(`manual:${check}`) ||
+      !prepared
+    )
+      return [];
     const runId = digest({ project: this.project.config.id, plan: prepared.plan.digest });
     const run = await this.store.get<RunRecord>('runs', runId);
-    const cursor = this.appSetupCursor(run, prepared);
+    const cursor =
+      check === 'vpn_settings' && pausedVpnAction(prepared, run)
+        ? run?.cursor
+        : this.appSetupCursor(run, prepared);
     if (cursor === undefined) return [];
     return prepared.plan.actions
       .slice(cursor + 1)
@@ -133,7 +161,7 @@ export class AttestationService {
   }
   private pendingSetupCheck(check: string, key: string, deferredVpn: string[]): boolean {
     return (
-      (['normal_credentials', 'app_setup'].includes(check) && key.endsWith('.language')) ||
+      (['normal_credentials', 'app_setup', 'vpn_settings'].includes(check) && key.endsWith('.language')) ||
       deferredVpn.includes(key)
     );
   }
@@ -202,6 +230,7 @@ export class AttestationService {
     check: string,
     operator: string,
     note?: string,
+    profileId?: string,
   ): OperatorAttestation {
     return validateAttestation({
       schemaVersion: 1,
@@ -211,7 +240,7 @@ export class AttestationService {
       check,
       operator,
       recordedAt: this.clock().toISOString(),
-      profileIds: this.project.policy.profiles.map((value) => value.id),
+      profileIds: profileId ? [profileId] : this.project.policy.profiles.map((value) => value.id),
       ...(note ? { note } : {}),
     });
   }

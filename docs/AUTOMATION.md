@@ -102,6 +102,23 @@ Inspect its new `reviewSummary`, save it exactly and submit the new plan through
 It does not apply to the other pause kinds. Changed configuration requires renewed
 review; an interrupted mutation still needs recovery first.
 
+Every provisioning profile pauses at `vpn_settings` after app setup and before
+network probes. Follow the returned profile-specific Settings instructions, record
+`device attest --check vpn_settings --asset ASSET --operator OPERATOR`, then resume.
+This is an operator witness of Android's VPN Settings, not an automated live VPN
+manager measurement. Receipts are scoped to the active profile and action; reports
+label their evidence `operator-witnessed-settings`. Review refresh retains validated
+completed proofs and requires new confirmation for an unfinished VPN action.
+
+Use the policy `vpn` block for the requested configuration. Ordinary secure-setting
+declarations for `always_on_vpn_app` or `always_on_vpn_lockdown` fail validation,
+including matching duplicates. Generated project guides include each profile's
+mandatory VPN witness before probes, with separate attest/resume instructions.
+Readiness and refresh require retained plan/run completion and the audited witness
+receipt; a proof with a new checksum and unrelated plan identity is insufficient.
+
+Attestation may inspect an expired execution plan, but still requires unchanged live state and provisioning measurements no older than 15 minutes. Submission and resume still require an unexpired review. For stale acceptance measurements, prepare and execute a newly reviewed provisioning run; acceptance-only pauses cannot use `agent refresh`.
+
 Event cursors are exclusive sequence numbers. Retain the last returned sequence
 and request later events. A single page is not the whole history. Native completion
 events preserve their first-observation timestamp across polling and recovery;
@@ -135,8 +152,12 @@ project state and closes its application storage context afterward.
 | Mode | Tool families |
 | --- | --- |
 | Default | Host/device inspection, plan preparation, run reading, extension listing/inspection/guides. |
-| Mutation-enabled | Exact-reviewed execution, cancellation, refresh, attestation, finalization, custody, inspected recovery and lifecycle changes. |
-| Extension-enabled product plus mutation mode | Explicit extension installation/update/removal, policy selection and reviewed contributions. |
+| Mutation-enabled | Exact-reviewed execution, cancellation, refresh, attestation, finalization, custody, inspected recovery, lifecycle changes and explicit extension removal (also available in Community). |
+| Extension-enabled product plus mutation mode | Explicit extension installation/update, policy selection and reviewed contributions. |
+
+Extension installation and updates require host execution. Container-hosted MCP
+rejects both before acquiring an archive; installed extensions remain mounted
+read-only for permitted container operations.
 
 Discover the current schemas through the server's tool listing. `execute_plan`
 requires the exact returned review summary and operator identity. `inspected`,

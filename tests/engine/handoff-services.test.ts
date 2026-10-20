@@ -5,15 +5,16 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from './../test-api.js';
 import { requiredAttestations, type SelectedTarget } from '@pxv/contracts';
 import { SqliteStore } from '@pxv/runtime';
-import { createProject, loadProject, saveInventory, type WorkflowState } from '@pxv/engine';
+import { createProject, loadProject, saveInventory, WorkflowEngine, type WorkflowState } from '@pxv/engine';
 import { AttestationService } from '../../packages/engine/src/attestation-service.js';
 import { HandoffService } from '../../packages/engine/src/handoff-service.js';
 import { ObservationService } from '../../packages/engine/src/observation-service.js';
+import { VpnProofVerifier } from '../../packages/engine/src/vpn-proof-verifier.js';
 import { EvidenceService } from '../../packages/engine/src/evidence-service.js';
 import { NativeDeviceOwnership, NativeProjectOwnership } from '../../packages/engine/src/ownership.js';
 import { PlanRepository } from '../../packages/engine/src/plan-repository.js';
 import { device, product } from '../contracts/fixtures.js';
-import { basePolicy, MemoryPort } from './fixtures.js';
+import { basePolicy, MemoryPort, executeWithWitnesses } from './fixtures.js';
 
 describe('independently composed attestation and handoff services', () => {
   let root: string;
@@ -34,8 +35,15 @@ describe('independently composed attestation and handoff services', () => {
     const observations = new ObservationService(project, port);
     const devices = new NativeDeviceOwnership(join(root, 'control'));
     const projects = new NativeProjectOwnership(project, join(root, 'control'));
-    const evidence = new EvidenceService(project, store, observations, devices, clock);
     const plans = new PlanRepository(project, store, observations, clock);
+    const evidence = new EvidenceService(
+      project,
+      store,
+      observations,
+      devices,
+      clock,
+      new VpnProofVerifier(project, store, plans),
+    );
     attestation = new AttestationService(
       project,
       store,
@@ -48,17 +56,19 @@ describe('independently composed attestation and handoff services', () => {
       clock,
     );
     handoff = new HandoffService(project, store, port, observations, evidence, devices, projects, clock);
-    state = {
-      schemaVersion: 1,
-      assetId: device.assetId,
-      policyDigest: project.resolved.digest,
-      planDigest: 'a'.repeat(64),
-      observation: structuredClone(port.observation),
-      observedAt: clock().toISOString(),
-      status: 'verified',
-      pending: [],
-      languageReady: true,
-    };
+    const engine = new WorkflowEngine({
+      project,
+      store,
+      port,
+      clock,
+      controlRoot: join(root, 'control'),
+      artifacts: { snapshot: (artifact, path) => Promise.resolve({ ...artifact, path }) },
+    });
+    const prepared = await engine.prepare(target);
+    const run = await engine.submit(prepared.plan.id, prepared.reviewSummary, 'Alice');
+    await executeWithWitnesses(engine, run.id);
+    state = await engine.state(device.assetId);
+    await store.delete('attestations', device.assetId);
     await store.set('workflow', device.assetId, state);
   });
   afterEach(async () => {
@@ -69,7 +79,7 @@ describe('independently composed attestation and handoff services', () => {
   const signoff = async () => {
     for (const check of requiredAttestations(basePolicy())) await attestation.attest(target, check, 'Alice');
   };
-  it('records a supported receipt without depending on a workflow facade or a historical plan', async () => {
+  it('records a supported receipt through independently composed services', async () => {
     const receipt = await attestation.attest(target, 'operator_signoff', 'Alice', 'Inspected locally');
     expect(receipt.note).toBe('Inspected locally');
     expect(await store.get('attestations', device.assetId)).toEqual([receipt]);

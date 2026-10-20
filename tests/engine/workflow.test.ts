@@ -1,3 +1,4 @@
+import { executeWithWitnesses } from './fixtures.js';
 import { toPolicyDocument } from '@pxv/contracts';
 import { recordObligation } from './obligations.js';
 import { DatabaseSync } from 'node:sqlite';
@@ -48,7 +49,7 @@ describe('reviewed workflows, operator and recipient gates', () => {
   };
   const ready = async (): Promise<void> => {
     const { run } = await preparedRun();
-    expect((await engine.execute(run.id)).status).toBe('pending');
+    expect((await executeWithWitnesses(engine, run.id)).status).toBe('pending');
     for (const check of requiredAttestations(context.policy)) await engine.attest(target, check, 'Alice');
     expect((await engine.readiness(target)).ready).toBe(true);
   };
@@ -67,10 +68,29 @@ describe('reviewed workflows, operator and recipient gates', () => {
     await rm(root, { recursive: true, force: true });
   });
 
+  it('attests fresh evidence after a long execution without renewing execution approval', async () => {
+    const { prepared, run } = await preparedRun();
+    await engine.execute(run.id);
+    await engine.attest(target, 'vpn_settings', 'Alice');
+    const inspect = port.inspect.bind(port);
+    port.inspect = (...args) => {
+      now = new Date('2026-10-16T09:16:00Z');
+      return inspect(...args);
+    };
+    await executeWithWitnesses(engine, run.id);
+    for (const check of requiredAttestations(context.policy)) await engine.attest(target, check, 'Alice');
+    expect((await engine.readiness(target)).ready).toBe(true);
+    await expect(engine.submit(prepared.plan.id, prepared.reviewSummary, 'Alice')).rejects.toThrow('expired');
+    await expect(engine.refreshReview(run.id)).rejects.toThrow('intentional manual');
+    await engine.finalize(target, 'Alice');
+  });
+
   it('prepares without phone mutation and atomically deduplicates concurrent exact approvals', async () => {
     const prepared = await engine.prepare(target);
     expect(port.calls).toEqual([]);
-    expect(prepared.plan.actions).toEqual([]);
+    expect(prepared.plan.actions).toEqual([
+      { kind: 'vpn', profileId: 'admin', vpn: context.policy.profiles[0]!.vpn },
+    ]);
     const submitted = await Promise.all(
       Array.from({ length: 6 }, () => engine.submit(prepared.plan.id, prepared.reviewSummary, 'Alice')),
     );
@@ -156,13 +176,13 @@ describe('reviewed workflows, operator and recipient gates', () => {
       'vpn',
       'vpn',
     ]);
-    expect((await engine.execute(run.id)).manualGate).toBe('app_setup');
+    expect((await executeWithWitnesses(engine, run.id)).manualGate).toBe('app_setup');
     expect(port.calls).not.toContain('vpn');
     await engine.attest(target, 'app_setup', 'Alice');
-    expect((await engine.execute(run.id)).manualGate).toBe('app_setup');
+    expect((await executeWithWitnesses(engine, run.id)).manualGate).toBe('app_setup');
     expect(port.calls).not.toContain('vpn');
     await engine.attest(target, 'app_setup', 'Alice');
-    expect((await engine.execute(run.id)).status).toBe('pending');
+    expect((await executeWithWitnesses(engine, run.id)).status).toBe('pending');
     expect((await engine.state('all')).status).toBe('verified');
     expect(port.calls).toContain('create-user');
     expect(port.calls.filter((call) => call === 'install-apk')).toHaveLength(2);
@@ -177,7 +197,7 @@ describe('reviewed workflows, operator and recipient gates', () => {
     await configure(two);
     await expect(engine.prepare(target, 'deploy-apps')).rejects.toThrow('existing Android users');
     const { run } = await preparedRun('create-users');
-    expect((await engine.execute(run.id)).status).toBe('pending');
+    expect((await executeWithWitnesses(engine, run.id)).status).toBe('pending');
     expect(port.calls).toEqual(['create-user']);
     port.observation.profiles = [];
     await expect(engine.prepare(target)).rejects.toThrow('owner user');
@@ -261,12 +281,12 @@ describe('reviewed workflows, operator and recipient gates', () => {
     profile.settings = [];
     const { run } = await preparedRun();
     port.observation.debuggingEnabled = false;
-    expect((await engine.execute(run.id)).status).toBe('needs-inspection');
+    expect((await executeWithWitnesses(engine, run.id)).status).toBe('needs-inspection');
     expect(port.calls).toEqual([]);
-    expect((await engine.execute(run.id)).status).toBe('needs-inspection');
+    expect((await executeWithWitnesses(engine, run.id)).status).toBe('needs-inspection');
     await store.set('runs', run.id, { ...run, status: 'running' });
-    expect((await engine.execute(run.id)).status).toBe('running');
-    await expect(engine.execute('unknown')).rejects.toThrow('Unknown approved');
+    expect((await executeWithWitnesses(engine, run.id)).status).toBe('running');
+    await expect(executeWithWitnesses(engine, 'unknown')).rejects.toThrow('Unknown approved');
   });
 
   it('preserves pending intent and inspection barriers when a mutation fails', async () => {
@@ -275,7 +295,7 @@ describe('reviewed workflows, operator and recipient gates', () => {
     profile.settings = [];
     port.failAt = 'setting';
     const { run } = await preparedRun();
-    expect(await engine.execute(run.id)).toMatchObject({
+    expect(await executeWithWitnesses(engine, run.id)).toMatchObject({
       status: 'needs-inspection',
       error: 'Injected setting failure',
     });
@@ -283,19 +303,19 @@ describe('reviewed workflows, operator and recipient gates', () => {
       (await store.events<{ type: string }>(run.id)).some((value) => value.event.type === 'intent'),
     ).toBe(true);
     expect(port.calls).toEqual(['setting']);
-    await engine.execute(run.id);
+    await executeWithWitnesses(engine, run.id);
     expect(port.calls).toEqual(['setting']);
   });
 
   it('honors persisted and external cancellation without replay', async () => {
     const { run } = await preparedRun();
     await engine.cancel(run.id);
-    expect((await engine.execute(run.id)).status).toBe('cancelled');
+    expect((await executeWithWitnesses(engine, run.id)).status).toBe('cancelled');
     await expect(engine.cancel('unknown')).rejects.toThrow('Unknown run');
     const next = await preparedRun();
     const controller = new AbortController();
     controller.abort();
-    expect((await engine.execute(next.run.id, controller.signal)).status).toBe('cancelled');
+    expect((await executeWithWitnesses(engine, next.run.id, controller.signal)).status).toBe('cancelled');
   });
 
   it('pauses for normal credentials, applies final language once, then pauses for optional duress', async () => {
@@ -306,17 +326,17 @@ describe('reviewed workflows, operator and recipient gates', () => {
     profile.language = 'en-US';
     await configure(desired);
     const { run } = await preparedRun();
-    const first = await engine.execute(run.id);
+    const first = await executeWithWitnesses(engine, run.id);
     expect(first).toMatchObject({ status: 'pending', manualGate: 'normal_credentials' });
     expect(port.calls).toEqual([]);
     expect((await engine.state('all')).pending).toContain('manual:normal_credentials');
     await expect(engine.attest(target, 'duress', 'Alice')).rejects.toThrow('Contradictory');
     await engine.attest(target, 'normal_credentials', 'Alice');
-    const second = await engine.execute(run.id);
+    const second = await executeWithWitnesses(engine, run.id);
     expect(second).toMatchObject({ status: 'pending', manualGate: 'duress' });
     expect(port.calls).toEqual(['language']);
     await engine.attest(target, 'duress', 'Alice');
-    const third = await engine.execute(run.id);
+    const third = await executeWithWitnesses(engine, run.id);
     expect(third.status).toBe('pending');
     expect(third.manualGate).toBeUndefined();
     expect(port.calls).toEqual(['language']);
@@ -330,13 +350,13 @@ describe('reviewed workflows, operator and recipient gates', () => {
   it('requires normal credential receipts and completed language setup before duress attestation', async () => {
     await configure(structuredClone(setupPolicy));
     const { run } = await preparedRun();
-    await engine.execute(run.id);
+    await executeWithWitnesses(engine, run.id);
     expect(port.observation.profiles[0]?.language).toBe(context.policy.profiles[0]?.language);
     await expect(engine.attest(target, 'duress', 'Alice')).rejects.toThrow(
       'Normal credentials and final language must be complete',
     );
     await engine.attest(target, 'normal_credentials', 'Alice');
-    await engine.execute(run.id);
+    await executeWithWitnesses(engine, run.id);
     expect((await engine.state('all')).languageReady).toBe(true);
     await store.delete('attestations', 'all');
     await expect(engine.attest(target, 'duress', 'Alice')).rejects.toThrow(
@@ -348,7 +368,7 @@ describe('reviewed workflows, operator and recipient gates', () => {
     const desired = structuredClone(setupPolicy);
     await configure(desired);
     const { run } = await preparedRun();
-    await engine.execute(run.id);
+    await executeWithWitnesses(engine, run.id);
     const state = await engine.state('all');
     const permission = port.observation.profiles[0]?.permissions[0];
     if (!permission) throw new Error('Fixture permission missing');
@@ -360,28 +380,28 @@ describe('reviewed workflows, operator and recipient gates', () => {
   it('refreshes an expired normal-credential checkpoint only through a new exact review', async () => {
     await configure(structuredClone(setupPolicy));
     const { prepared, run } = await preparedRun();
-    await engine.execute(run.id);
+    await executeWithWitnesses(engine, run.id);
     now = new Date(now.getTime() + 16 * 60_000);
     await expect(engine.attest(target, 'normal_credentials', 'Alice')).rejects.toThrow('15 minutes');
-    await expect(engine.execute(run.id)).rejects.toThrow('expired');
+    await expect(executeWithWitnesses(engine, run.id)).rejects.toThrow('expired');
     const refreshed = await engine.refreshReview(run.id);
     expect(refreshed.plan.id).not.toBe(prepared.plan.id);
-    expect(refreshed.plan.actions).toEqual(prepared.plan.actions);
+    expect(refreshed.plan.actions).toEqual(prepared.plan.actions.slice(1));
     expect(refreshed.refreshedFrom).toMatchObject({
       runId: run.id,
-      completedActions: 0,
+      completedActions: 1,
       completedSetup: [],
     });
-    expect(await engine.execute(run.id)).toMatchObject({
+    expect(await executeWithWitnesses(engine, run.id)).toMatchObject({
       status: 'superseded',
       supersededBy: refreshed.plan.id,
     });
     await expect(engine.submit(refreshed.plan.id, prepared.reviewSummary, 'Alice')).rejects.toThrow('exact');
     const next = await engine.submit(refreshed.plan.id, refreshed.reviewSummary, 'Alice');
     expect(next.cursor).toBe(0);
-    expect((await engine.execute(next.id)).manualGate).toBe('normal_credentials');
+    expect((await executeWithWitnesses(engine, next.id)).manualGate).toBe('normal_credentials');
     await engine.attest(target, 'normal_credentials', 'Alice');
-    expect((await engine.execute(next.id)).manualGate).toBe('duress');
+    expect((await executeWithWitnesses(engine, next.id)).manualGate).toBe('duress');
     expect((await engine.readiness(target)).missing).toContain('operator_signoff');
     await expect(engine.refreshReview(run.id)).rejects.toThrow('intentional manual');
   });
@@ -394,9 +414,9 @@ describe('reviewed workflows, operator and recipient gates', () => {
     port.language = () =>
       Promise.resolve({ status: 'manual-pending', instructions: 'Set the language privately.' });
     const { run } = await preparedRun();
-    await engine.execute(run.id);
+    await executeWithWitnesses(engine, run.id);
     const normal = await engine.attest(target, 'normal_credentials', 'Alice');
-    expect((await engine.execute(run.id)).manualGate).toBe('language:admin');
+    expect((await executeWithWitnesses(engine, run.id)).manualGate).toBe('language:admin');
     now = new Date(now.getTime() + 16 * 60_000);
     observed.language = 'pl-PL';
     const refreshed = await engine.refreshReview(run.id);
@@ -407,9 +427,9 @@ describe('reviewed workflows, operator and recipient gates', () => {
       { check: 'normal_credentials', receiptId: normal.id, planDigest: normal.planDigest },
     ]);
     const next = await engine.submit(refreshed.plan.id, refreshed.reviewSummary, 'Alice');
-    expect((await engine.execute(next.id)).manualGate).toBe('duress');
+    expect((await executeWithWitnesses(engine, next.id)).manualGate).toBe('duress');
     await engine.attest(target, 'duress', 'Alice');
-    await engine.execute(next.id);
+    await executeWithWitnesses(engine, next.id);
     expect((await engine.readiness(target)).missing).not.toContain('normal_credentials');
     expect((await engine.readiness(target)).missing).toContain('operator_signoff');
     expect(port.calls).toEqual([]);
@@ -426,20 +446,20 @@ describe('reviewed workflows, operator and recipient gates', () => {
       return Promise.resolve({ status: 'manual-pending', instructions: 'Set the language privately.' });
     };
     const { run } = await preparedRun();
-    await engine.execute(run.id);
+    await executeWithWitnesses(engine, run.id);
     await engine.attest(target, 'normal_credentials', 'Alice');
-    await engine.execute(run.id);
+    await executeWithWitnesses(engine, run.id);
     now = new Date(now.getTime() + 16 * 60_000);
     const refreshed = await engine.refreshReview(run.id);
     expect(refreshed.plan.actions[0]?.kind).toBe('language');
     const next = await engine.submit(refreshed.plan.id, refreshed.reviewSummary, 'Alice');
-    expect((await engine.execute(next.id)).manualGate).toBe('language:admin');
+    expect((await executeWithWitnesses(engine, next.id)).manualGate).toBe('language:admin');
     expect(calls).toBe(2); // Reopening the explicitly reviewed remaining language guide is allowed.
     now = new Date(now.getTime() + 16 * 60_000);
     observed.language = 'pl-PL';
     const again = await engine.refreshReview(next.id);
     const final = await engine.submit(again.plan.id, again.reviewSummary, 'Alice');
-    expect((await engine.execute(final.id)).manualGate).toBe('duress');
+    expect((await executeWithWitnesses(engine, final.id)).manualGate).toBe('duress');
     await engine.attest(target, 'duress', 'Alice');
     expect(calls).toBe(2);
   });
@@ -454,10 +474,10 @@ describe('reviewed workflows, operator and recipient gates', () => {
       port.language = () =>
         Promise.resolve({ status: 'manual-pending', instructions: 'Set the language privately.' });
       const { run } = await preparedRun();
-      await engine.execute(run.id);
+      await executeWithWitnesses(engine, run.id);
       if (drift === 'language-and-permission') {
         await engine.attest(target, 'normal_credentials', 'Alice');
-        await engine.execute(run.id);
+        await executeWithWitnesses(engine, run.id);
         observed.language = 'pl-PL';
       }
       if (drift === 'serial') observed.user.serialNo++;
@@ -474,7 +494,7 @@ describe('reviewed workflows, operator and recipient gates', () => {
     await configure(structuredClone(setupPolicy));
     const { run } = await preparedRun();
     await expect(engine.refreshReview(run.id)).rejects.toThrow('intentional manual');
-    await engine.execute(run.id);
+    await executeWithWitnesses(engine, run.id);
     const scope = new ResourceScope(store, device.canonicalSerial, run.id);
     await recordObligation(scope, 'helper', 'test-helper', {});
     await expect(engine.refreshReview(run.id)).rejects.toThrow('Recover unresolved');
@@ -521,18 +541,20 @@ describe('reviewed workflows, operator and recipient gates', () => {
     };
     await configure(policy);
     const { run } = await preparedRun();
-    expect((await engine.execute(run.id)).manualGate).toBe('app_setup');
+    expect((await executeWithWitnesses(engine, run.id)).manualGate).toBe('app_setup');
     await engine.attest(target, 'app_setup', 'Alice');
     now = new Date(now.getTime() + 16 * 60_000);
     const refreshed = await engine.refreshReview(run.id);
     expect(refreshed.plan.actions[0]).toMatchObject({ kind: 'recipe', recipe: { id: 'private-import' } });
     expect(refreshed.refreshedFrom?.capabilityEvidence).toHaveLength(1);
     const next = await engine.submit(refreshed.plan.id, refreshed.reviewSummary, 'Alice');
-    expect((await engine.execute(next.id)).manualGate).toBe('app_setup');
+    expect((await executeWithWitnesses(engine, next.id)).manualGate).toBe('app_setup');
     expect(calls).toEqual(['first', 'private-import']);
     await engine.attest(target, 'app_setup', 'Alice');
-    expect((await engine.execute(next.id)).manualGate).toBe('normal_credentials');
-    expect((await engine.state('all')).capabilityEvidence).toHaveLength(2);
+    expect((await executeWithWitnesses(engine, next.id)).manualGate).toBe('normal_credentials');
+    expect(
+      (await engine.state('all')).capabilityEvidence?.filter((value) => value.kind === 'recipe'),
+    ).toHaveLength(2);
     expect(calls).toEqual(['first', 'private-import']);
   });
 
@@ -639,9 +661,9 @@ describe('reviewed workflows, operator and recipient gates', () => {
       artifact: { path: join(context.root, 'state/plans', prepared.plan.id, '0-admin-org.example.vpn.apk') },
     });
     const run = await engine.submit(prepared.plan.id, prepared.reviewSummary, 'Alice');
-    expect((await engine.execute(run.id)).manualGate).toBe('operator_signoff');
+    expect((await executeWithWitnesses(engine, run.id)).manualGate).toBe('operator_signoff');
     await engine.attest(target, 'operator_signoff', 'Alice');
-    expect((await engine.execute(run.id)).status).toBe('completed');
+    expect((await executeWithWitnesses(engine, run.id)).status).toBe('completed');
     await expect(engine.prepareExtension(target, [])).rejects.toThrow('bounded nonempty');
     await expect(engine.prepare(target, 'extension')).rejects.toThrow('prepareExtension');
     await expect(
@@ -685,7 +707,7 @@ describe('reviewed workflows, operator and recipient gates', () => {
     expect(prepared.baseline.os.release).toBe('unobserved');
     expect(prepared.osSnapshot?.sha256).toBe(hashA);
     const run = await engine.submit(prepared.plan.id, prepared.reviewSummary, 'Alice');
-    expect(await engine.execute(run.id)).toMatchObject({
+    expect(await executeWithWitnesses(engine, run.id)).toMatchObject({
       status: 'pending',
       pauseReason: { kind: 'reenrollment' },
     });
@@ -788,7 +810,7 @@ describe('reviewed workflows, operator and recipient gates', () => {
   });
   it('rejects attestation against a workflow generation changed during live measurement', async () => {
     const { run } = await preparedRun();
-    await engine.execute(run.id);
+    await executeWithWitnesses(engine, run.id);
     const before = await engine.state('all');
     const inspect = port.inspect.bind(port);
     vi.spyOn(port, 'inspect').mockImplementationOnce(async (...args) => {
@@ -796,7 +818,7 @@ describe('reviewed workflows, operator and recipient gates', () => {
       return inspect(...args);
     });
     await expect(engine.attest(target, 'operator_signoff', 'Alice')).rejects.toThrow('evidence changed');
-    expect(await engine.receipts('all')).toEqual([]);
+    expect((await engine.receipts('all')).filter((value) => value.check !== 'vpn_settings')).toEqual([]);
     expect((await engine.state('all')).pending).toEqual(['external-evidence-generation']);
   });
 
@@ -863,7 +885,7 @@ describe('reviewed workflows, operator and recipient gates', () => {
       }
       return transitions(input);
     });
-    expect((await engine.execute(run.id)).status).toBe('needs-inspection');
+    expect((await executeWithWitnesses(engine, run.id)).status).toBe('needs-inspection');
     expect((await engine.readiness(target)).missing).toContain('execution-inspection');
   });
 
@@ -889,7 +911,7 @@ describe('reviewed workflows, operator and recipient gates', () => {
       }
       return committed;
     });
-    expect(await engine.execute(run.id)).toMatchObject({
+    expect(await executeWithWitnesses(engine, run.id)).toMatchObject({
       status: 'needs-inspection',
       error: 'Native completion receipts are malformed or unavailable; preserve them for inspection',
     });
@@ -921,7 +943,7 @@ describe('reviewed workflows, operator and recipient gates', () => {
       await expect(engine.submit(prepared.plan.id, prepared.reviewSummary, 'Alice')).rejects.toThrow(
         'Project source changed',
       );
-      await expect(engine.execute(run.id)).rejects.toThrow('Project source changed');
+      await expect(executeWithWitnesses(engine, run.id)).rejects.toThrow('Project source changed');
       await expect(engine.executeFleet([run.id], 1)).rejects.toThrow('Project source changed');
       await expect(engine.refreshReview(run.id)).rejects.toThrow('Project source changed');
       expect(port.calls).toEqual([]);

@@ -195,7 +195,16 @@ and 130 means cancellation; do not wrap phone operations in an unattended retry 
 
 ## 6. Complete the named private gates (F05)
 
-Follow the **actual** `pauseReason` and instructions, one checkpoint at a time:
+Follow the **actual** `pauseReason` and instructions, one checkpoint at a time.
+After app setup and before normal credentials, each profile pauses at `vpn_settings`.
+In that exact profile, configure or witness the reviewed package, Always-on VPN and
+Block connections without VPN toggles in Android Settings. Record
+`pxv device attest --project-root "$P" --asset "$ASSET" --check vpn_settings --operator "$OPERATOR"`,
+then resume. Repeat for all profiles, including unchanged and disabled configurations.
+This records `operator-witnessed-settings` evidence; saved secure settings alone do
+not prove live VPN enforcement. Policy-required probe/failure checks remain separate.
+
+For the other private checkpoints:
 
 1. Finish account sign-ins, imports, MFA and Android consent privately in each
    intended profile. Establish required VPN account/configuration before lockdown.

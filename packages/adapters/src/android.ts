@@ -19,7 +19,17 @@ import type {
   SharedApkEffect,
   ReviewedApkEffect,
 } from '@pxv/contracts';
-import { canonicalJson, canonicalLocale, profileLocale, sameAndroidUser } from '@pxv/contracts';
+import {
+  canonicalJson,
+  canonicalLocale,
+  profileLocale,
+  sameAndroidUser,
+  validAndroidUserName,
+  validAndroidSettingKey,
+  validAndroidPermission,
+  validAndroidSettingValue,
+  isManagedVpnSetting,
+} from '@pxv/contracts';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -64,7 +74,7 @@ const HELPERS = new Set(['org.pxv.probe']);
 const signalOptions = (signal?: AbortSignal): CommandOptions => (signal ? { signal } : {});
 
 function settingKey(value: string): string {
-  if (!/^[A-Za-z][A-Za-z0-9_.:-]{0,127}$/.test(value)) throw new AdapterError('Invalid Android setting key');
+  if (!validAndroidSettingKey(value)) throw new AdapterError('Invalid Android setting key');
   return value;
 }
 function assertUser(user: AndroidUserIdentity): void {
@@ -287,7 +297,7 @@ export class AndroidAdapter {
     signal?: AbortSignal,
   ): Promise<PermissionPolicy> {
     packageId(policy.packageId);
-    if (!/^android\.permission\.[A-Z0-9_]+$/.test(policy.permission))
+    if (!validAndroidPermission(policy.permission))
       throw new AdapterError('Invalid Android runtime permission');
     const dump = await this.shell(target, ['dumpsys', 'package', policy.packageId], signalOptions(signal));
     const blocks = [...dump.matchAll(/^\s*User (\d+):[\s\S]*?(?=^\s*User \d+:|$(?![\s\S]))/gm)];
@@ -466,8 +476,7 @@ export class AndroidAdapter {
       if (!owner) throw new AdapterError('Android owner is missing');
       return owner;
     }
-    if (!profile.name || profile.name.length > 80 || /[:\r\n\0}]/.test(profile.name))
-      throw new AdapterError('Invalid Android user name');
+    if (!validAndroidUserName(profile.name)) throw new AdapterError('Invalid Android user name');
     if (users.some((user) => user.name === profile.name))
       throw new AdapterError(
         'An Android user already has the requested name; enroll its stable identity before use',
@@ -595,7 +604,14 @@ export class AndroidAdapter {
     options: OperationOptions,
   ): Promise<void> {
     settingKey(setting.key);
-    if (!['system', 'secure', 'global'].includes(setting.namespace) || setting.value.length > 4096)
+    if (isManagedVpnSetting(setting))
+      throw new AdapterError(
+        `Profile ${user.name}: remove settings.${setting.key} and configure the vpn block; VPN Settings require an operator witness`,
+      );
+    if (
+      !['system', 'secure', 'global'].includes(setting.namespace) ||
+      !validAndroidSettingValue(setting.value)
+    )
       throw new AdapterError('Invalid Android setting');
     await this.guardUser(target, user, options.signal);
     await this.shell(
@@ -613,7 +629,7 @@ export class AndroidAdapter {
     options: OperationOptions,
   ): Promise<void> {
     packageId(permission.packageId);
-    if (!/^android\.permission\.[A-Z0-9_]+$/.test(permission.permission))
+    if (!validAndroidPermission(permission.permission))
       throw new AdapterError('Invalid Android runtime permission');
     await this.guardUser(target, user, options.signal);
     await this.shell(
@@ -631,7 +647,7 @@ export class AndroidAdapter {
     if ((await this.permission(target, user, permission, options.signal)).granted !== permission.granted)
       throw new AdapterError('Android did not retain the runtime permission');
   }
-  async applyVpn(
+  async verifyVpnConfiguration(
     target: SelectedTarget,
     user: AndroidUserIdentity,
     vpn: VpnPolicy,
@@ -640,22 +656,13 @@ export class AndroidAdapter {
     if (vpn.packageId) packageId(vpn.packageId);
     if (vpn.alwaysOn !== (vpn.packageId !== null) || (vpn.lockdown && !vpn.alwaysOn))
       throw new AdapterError('Inconsistent VPN policy');
-    // Configure the selected application privately before enabling its lockdown.
+    await this.guardUser(target, user, options.signal);
     if (vpn.packageId && !(await this.listPackages(target, user, options.signal)).has(vpn.packageId))
-      throw new AdapterError('Install and configure the selected VPN before enabling it');
-    await this.applySetting(
-      target,
-      user,
-      { namespace: 'secure', key: 'always_on_vpn_app', value: vpn.packageId ?? '' },
-      options,
-    );
-    await this.applySetting(
-      target,
-      user,
-      { namespace: 'secure', key: 'always_on_vpn_lockdown', value: vpn.lockdown ? '1' : '0' },
-      options,
-    );
+      throw new AdapterError('Install and configure the selected VPN before verifying it');
+    if (canonicalJson(await this.vpn(target, user, options.signal)) !== canonicalJson(vpn))
+      throw new AdapterError('Configured VPN Settings differ from the witnessed review');
   }
+
   async cleanup(
     target: SelectedTarget,
     obligation: RecoveryObligation,

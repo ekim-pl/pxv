@@ -126,7 +126,7 @@ const { ExtensionManager } = await importModule<typeof TestModule13>('@pxv/exten
 const { resolvePolicy } = await importModule<typeof TestModule1>('@pxv/contracts', import.meta.url);
 // Module exports are called without a receiver.
 
-const { MemoryPort, basePolicy } = await importModule<typeof TestModule14>(
+const { MemoryPort, basePolicy, executeWithWitnesses } = await importModule<typeof TestModule14>(
   '../engine/fixtures.js',
   import.meta.url,
 );
@@ -201,6 +201,21 @@ describe('MCP/CLI backend ports and detached execution', () => {
     expect(await store.get('cancellation', run.id)).toEqual({ requested: true });
     expect(await backend.guide('operator')).toBe('operator instructions');
     expect(await backend.guide('recipient')).toBe('recipient instructions');
+  });
+
+  it('rejects container-hosted MCP extension installation and update before acquiring an archive', async () => {
+    process.env['PXV_DOCKER_MODE'] = 'host-adb';
+    const install = vi.spyOn(ExtensionManager.prototype, 'install');
+    const update = vi.spyOn(ExtensionManager.prototype, 'update');
+    const backend = agentBackend(engine, resourceRoot, 'launcher.js', true);
+    await expect(backend.extensionInstall({ tarball: '/missing.tgz' }, true)).rejects.toThrow(
+      'host execution',
+    );
+    await expect(backend.extensionUpdate('missing', { tarball: '/missing.tgz' }, true)).rejects.toThrow(
+      'host execution',
+    );
+    expect(install).not.toHaveBeenCalled();
+    expect(update).not.toHaveBeenCalled();
   });
 
   it('requires explicit mutation capability', async () => {
@@ -339,7 +354,7 @@ describe('MCP/CLI backend ports and detached execution', () => {
     const backend = live();
     const prepared = await engine.prepare({ device, transport: { kind: 'usb', serial: 'PIXEL1' } });
     const run = await engine.submit(prepared.plan.id, prepared.reviewSummary, 'Alice');
-    await engine.execute(run.id);
+    await executeWithWitnesses(engine, run.id);
     for (const check of ['operator_signoff', 'recipient_acceptance', 'verified_boot'])
       await backend.attestDevice('all', check, 'Alice');
     expect(await backend.finalizeDevice('all', 'Alice', 'pl')).toMatchObject({

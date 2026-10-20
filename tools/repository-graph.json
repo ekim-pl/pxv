@@ -27,7 +27,8 @@
     "tools/test-hooks.mjs",
     "tools/optional/publishing/rebuild.mjs",
     "tools/optional/branding/scaffold.mjs",
-    "tools/check-packaged-runtime.mjs"
+    "tools/check-packaged-runtime.mjs",
+    "tools/check-docker-worker.mjs"
   ],
   "public": [
     "packages/contracts/src/index.ts",

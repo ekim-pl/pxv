@@ -95,6 +95,7 @@ export interface ProfilePolicy {
   packages: ArtifactPolicy[];
   settings: SettingPolicy[];
   permissions: PermissionPolicy[];
+  /** Saved Android VPN configuration; this does not prove live VPN enforcement. */
   vpn: VpnPolicy;
   defaultCredential?: DefaultCredentialPolicy;
   defaultDuress?: DefaultDuressPolicy;
@@ -256,6 +257,7 @@ export interface ProfileObservation {
   packages: { packageId: string; versionCode: number; signerSha256: string }[];
   settings: SettingPolicy[];
   permissions: PermissionPolicy[];
+  /** Configured Settings state only; live enforcement requires separate evidence. */
   vpn: VpnPolicy;
   language?: string;
   backup?: { enabled: boolean; transportPackage: string | null };

@@ -33,6 +33,7 @@ import type {
   ProbeObservation,
   ProbeExecutionResult,
   Operation,
+  VpnSettingsProof,
 } from './workflow-types.js';
 import type { ObservationReader } from './observation-service.js';
 import type { PlanReader } from './plan-repository.js';
@@ -44,6 +45,7 @@ import { canonicalEffects } from './reviewed-plan.js';
 import type { CredentialDefaultHistory, DefaultCredentialAction } from './credential-default-history.js';
 import { runPauseReason, withRunPauseReason } from './run-state.js';
 import { invalidateRegistryBindings } from './phone-registry.js';
+import { pausedVpnAction, checkVpnDelta, vpnProofDigest } from './vpn-evidence.js';
 export class ExecutionService {
   constructor(
     readonly project: ProjectContext,
@@ -303,17 +305,26 @@ export class ExecutionService {
         throw new Error('Credential initialization history changed; prepare a fresh reviewed plan');
   }
   private async checkExecutionBaseline(active: ActiveExecution): Promise<boolean> {
-    const { run, prepared, target, resume, observation } = active;
-    const state = resume ? await this.evidence.state(target.device.assetId) : undefined;
-    if (state && state.planDigest !== prepared.plan.digest)
-      throw new Error('Manual checkpoint belongs to a different reviewed plan');
-    const expected = state ? state.observation : prepared.baseline;
+    const { run, prepared, resume, observation } = active;
+    const expected = await this.executionBaseline(active);
     const paused = resume ? this.cursorAction(prepared, run) : undefined;
+    const vpn = pausedVpnAction(prepared, run);
+    if (vpn) {
+      checkVpnDelta(expected, observation, vpn);
+      return true;
+    }
     if (paused?.kind === 'language' && run.manualGate === `language:${paused.profileId}`)
       return this.observePausedLanguage(active, expected, paused);
     if (observationDigest(observation) !== observationDigest(expected))
       throw new Error('Live state changed since review; prepare again');
     return true;
+  }
+  private async executionBaseline(active: ActiveExecution): Promise<DeviceObservation> {
+    if (!active.resume) return active.prepared.baseline;
+    const state = await this.evidence.state(active.target.device.assetId);
+    if (state.planDigest !== active.prepared.plan.digest)
+      throw new Error('Manual checkpoint belongs to a different reviewed plan');
+    return state.observation;
   }
   private cursorAction(prepared: PreparedOperation, run: RunRecord): Action | undefined {
     return prepared.plan.actions[run.cursor ?? 0];
@@ -429,8 +440,7 @@ export class ExecutionService {
         await this.port.applyPermission(active.target, user, action.permission, active.context);
         break;
       case 'vpn':
-        await this.port.applyVpn(active.target, user, action.vpn, active.context);
-        break;
+        return this.executeVpn(active, action, index, user, live);
       case 'recipe':
         return this.executeRecipe(active, action, index, profile, user, live);
       case 'network-probe':
@@ -443,6 +453,56 @@ export class ExecutionService {
         await this.executeCredentialDefault(active, action, profile, user, live);
         break;
     }
+    return true;
+  }
+  private async executeVpn(
+    active: ActiveExecution,
+    action: Extract<Action, { kind: 'vpn' }>,
+    index: number,
+    user: AndroidUserIdentity,
+    live: DeviceObservation,
+  ): Promise<boolean> {
+    const receipt = await this.currentReceipt(active, 'vpn_settings', live);
+    const used = active.run.completedSetup?.some((value) => value.receiptId === receipt?.id);
+    if (!receipt || used || receipt.profileIds.length !== 1 || receipt.profileIds[0] !== action.profileId)
+      return this.pauseExecution(
+        active,
+        index,
+        'vpn_settings',
+        live,
+        `In profile ${action.profileId} (${user.name}), open Android VPN Settings and privately configure or witness package ${action.vpn.packageId ?? 'none'}, always-on ${action.vpn.alwaysOn}, block connections without VPN ${action.vpn.lockdown}. This is operator-witnessed Settings evidence, not an automated live enforcement measurement. Record vpn_settings for this active profile, then resume.`,
+      );
+    await this.port.verifyVpnConfiguration(active.target, user, action.vpn, active.context);
+    const proof: Omit<VpnSettingsProof, 'proofDigest'> = {
+      assetId: active.target.device.assetId,
+      deviceSerial: active.target.device.canonicalSerial,
+      kind: 'vpn-settings',
+      scope: 'operator-witnessed-settings',
+      status: 'manual-completed',
+      runId: active.run.id,
+      planId: active.prepared.plan.id,
+      planDigest: active.prepared.plan.digest,
+      actionIndex: index,
+      profileId: action.profileId,
+      policyDigest: active.prepared.plan.policyDigest,
+      configurationDigest: digest(action.vpn),
+      user,
+      receipt,
+      observationDigest: observationDigest(live),
+    };
+    const evidenceId = `${active.run.id}:vpn:${index}`;
+    await this.store.set('capability-evidence', evidenceId, { ...proof, proofDigest: vpnProofDigest(proof) });
+    active.run.capabilityEvidence = [
+      ...(active.run.capabilityEvidence ?? []),
+      {
+        kind: 'vpn-settings',
+        profileId: action.profileId,
+        configurationDigest: proof.configurationDigest,
+        evidenceId,
+        status: 'manual-completed',
+      },
+    ];
+    this.consumeSetupReceipt(active.run, receipt, index);
     return true;
   }
   private async executeCredentialDefault(

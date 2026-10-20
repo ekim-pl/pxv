@@ -213,3 +213,17 @@ Dependency checks retain the importing package's ownership: a sibling package's 
 Supervisor execution and cleanup deadlines use a monotonic clock, so host wall-clock adjustments cannot extend commands or prematurely exhaust cleanup.
 
 pxv supports Linux only. The dependency audit detects PE and Mach-O payloads solely to reject foreign native artifacts, even if their hashes appear in the review catalog. Linux native binaries and WASM still require a matching hash and documented review.
+
+## Disposable Docker worker regression
+
+After installing or explicitly pulling a reviewed Node worker image, run
+`pnpm check:docker IMAGE [NODE_PATH]`. The default Node path is `/usr/local/bin/node`.
+For a pxv OCI build, use `pnpm check:docker --build-result BUILD_RESULT.json`.
+This check uses disposable containers and temporary synthetic files, with no phone
+or ADB server. It verifies exact external review input, read-only input mounts,
+persistent output, the `/project` compatibility alias and supplementary-group
+access to a group-owned fixture. The caller needs at least one supplementary group.
+CI runs it against the built OCI image and retains `.quality/docker-worker.json`.
+It also interrupts a signal-ignoring disposable worker, verifies bounded cleanup,
+and checks that unrelated containers and sidecar-labeled containers remain running.
+Process regressions cover daemon loss and uncertain startup without a phone.

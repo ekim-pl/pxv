@@ -89,6 +89,10 @@ interface CommandDefinition {
 }
 const common: readonly Flag[] = ['help', 'json', 'resource-root', 'project-root'];
 const execution: readonly Flag[] = ['execution', 'image', 'docker-mode'];
+export function assertExtensionExecution(positionals: readonly string[], docker: boolean): void {
+  if (docker && positionals[0] === 'extension' && ['install', 'update'].includes(positionals[1] ?? ''))
+    throw new Error('Extension installation and updates require local host execution');
+}
 const selection: readonly Flag[] = ['asset', 'all', 'group', 'transport'];
 function command(
   name: string,
@@ -100,6 +104,7 @@ function command(
   return { name, description, flags: [...common, ...executionFlags(name), ...flags], required, ...options };
 }
 function executionFlags(name: string): readonly Flag[] {
+  if (['extension install', 'extension update'].includes(name)) return ['execution'];
   const section = name.split(' ')[0];
   if (['help', 'version', 'guides', 'host', 'internal-worker', 'mcp'].includes(section ?? '')) return [];
   return ['registry', 'seedvault'].includes(section ?? '') ? ['execution'] : execution;
@@ -292,7 +297,10 @@ function extensionCommand(name: string): CommandDefinition {
   if (['policy', 'guide', 'adapter'].includes(name)) required.push('contribution');
   if (name === 'invoke') required.push('command');
   if (['invoke', 'adapter'].includes(name)) required.push('asset');
-  return command(`extension ${name}`, 'Manage explicitly trusted extensions.', flags[name], required, {
+  const description = ['install', 'update'].includes(name)
+    ? 'Install or update explicitly trusted extensions on the local host only.'
+    : 'Manage explicitly trusted extensions.';
+  return command(`extension ${name}`, description, flags[name], required, {
     ...(!extensionRead.includes(name) ? { feature: 'extensions' } : {}),
     textual: name === 'guide',
   });
@@ -409,4 +417,25 @@ export function commandHelp(product: ProductDescriptor, version: string, positio
 }
 export function textualCommand(positionals: string[], values: Record<string, unknown>): boolean {
   return !positionals.length || values['help'] === true || findCommand(positionals)?.textual === true;
+}
+
+/** Host filesystem arguments only; contribution names and URLs remain product-relative. */
+export function commandPathFlags(
+  positionals: readonly string[],
+): Readonly<Record<string, 'input' | 'output'>> {
+  const inputs: Record<string, string[]> = {
+    'project init': ['policy'],
+    'inventory import': ['file'],
+    'agent execute': ['review-file'],
+    'device attest': ['evidence'],
+    'fleet attest': ['evidence'],
+    'extension invoke': ['input-file'],
+    'extension adapter': ['input-file'],
+  };
+  const name = positionals.slice(0, 2).join(' ');
+  const flags: Record<string, 'input' | 'output'> = {};
+  for (const input of inputs[name] ?? []) flags['--' + input] = 'input';
+  if (name === 'project init') flags['--path'] = 'output';
+  if (name === 'handoff export') flags['--output'] = 'output';
+  return flags;
 }

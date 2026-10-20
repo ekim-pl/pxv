@@ -7,3 +7,5 @@ export * from './seedvault.js';
 export * from './locales.js';
 export * from './policy-document.js';
 export * from './phone-registry.js';
+export * from './network-address.js';
+export * from './android-validation.js';

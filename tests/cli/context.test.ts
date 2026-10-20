@@ -51,7 +51,7 @@ const mocks = vi.hoisted(() => ({
     install: vi.fn(),
     applySetting: vi.fn(),
     applyPermission: vi.fn(),
-    applyVpn: vi.fn(),
+    verifyVpnConfiguration: vi.fn(),
     setupLanguage: vi.fn(),
     flash: vi.fn(),
     finalize: vi.fn(),
@@ -356,13 +356,13 @@ describe('production dependency wiring and evidence boundaries', () => {
     );
     await app.engine.port.applySetting(target, user, setting, execution);
     await app.engine.port.applyPermission(target, user, permission, execution);
-    await app.engine.port.applyVpn(target, user, profile.vpn, execution);
+    await app.engine.port.verifyVpnConfiguration(target, user, profile.vpn, execution);
     await app.engine.port.language(target, user, 'pl-PL', execution);
     await app.engine.port.finalize(target, execution);
     expect(mocks.android.createUser).toHaveBeenCalled();
     expect(mocks.android.applySetting).toHaveBeenCalled();
     expect(mocks.android.applyPermission).toHaveBeenCalled();
-    expect(mocks.android.applyVpn).toHaveBeenCalled();
+    expect(mocks.android.verifyVpnConfiguration).toHaveBeenCalled();
     expect(mocks.android.setupLanguage).toHaveBeenCalled();
     expect(mocks.android.finalize).toHaveBeenCalled();
     expect(await app.engine.port.inspectUser?.(target, user)).toEqual(user);

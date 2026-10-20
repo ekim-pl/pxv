@@ -1,3 +1,4 @@
+import { executeWithWitnesses } from './fixtures.js';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -27,6 +28,9 @@ let store: SqliteStore;
 let port: MemoryPort;
 let engine: WorkflowEngine;
 let target: SelectedTarget;
+let eventCursor = 0;
+const emulatorReceipts = async () =>
+  (await engine.receipts('all')).filter((value) => value.check === 'emulator_image_provenance');
 function measurement(): EmulatorProvenance {
   return {
     schemaVersion: 1,
@@ -64,7 +68,8 @@ beforeEach(async () => {
   });
   const prepared = await engine.prepare(target);
   const run = await engine.submit(prepared.plan.id, prepared.reviewSummary, 'Alice');
-  await engine.execute(run.id);
+  await executeWithWitnesses(engine, run.id);
+  eventCursor = (await store.events('asset:all')).at(-1)?.sequence ?? 0;
   port.verifyEmulatorEvidence = vi.fn(() => Promise.resolve(measurement()));
 });
 afterEach(async () => {
@@ -95,8 +100,8 @@ it.each([0, 60_000])(
       policyDigest: state.policyDigest,
       planDigest: state.planDigest,
     });
-    expect(await engine.receipts('all')).toEqual([receipt]);
-    const events = await store.events<{ type: string; receipt?: unknown }>('asset:all');
+    expect(await emulatorReceipts()).toEqual([receipt]);
+    const events = await store.events<{ type: string; receipt?: unknown }>('asset:all', eventCursor);
     expect(events.filter(({ event }) => event.type === 'attestation')).toEqual([
       expect.objectContaining({ event: { type: 'attestation', receipt } }),
     ]);
@@ -122,7 +127,7 @@ it.each([
     ),
   ).rejects.toThrow('Invalid emulator image pin');
   expect(port.verifyEmulatorEvidence).not.toHaveBeenCalled();
-  expect(await engine.receipts('all')).toEqual([]);
+  expect(await emulatorReceipts()).toEqual([]);
   expect(await store.get('emulator-provenance', 'all')).toBeUndefined();
 });
 
@@ -143,7 +148,7 @@ it.each([
   await expect(engine.attest(target, 'emulator_image_provenance', 'Alice', undefined, pin)).rejects.toThrow(
     'Emulator provenance does not match',
   );
-  expect(await engine.receipts('all')).toEqual([]);
+  expect(await emulatorReceipts()).toEqual([]);
   expect(await store.get('emulator-provenance', 'all')).toBeUndefined();
 });
 
@@ -156,16 +161,18 @@ it('requires both an image pin and a measurement provider; operator notes cannot
   await expect(engine.attest(target, 'emulator_image_provenance', 'Alice', undefined, pin)).rejects.toThrow(
     'Measured emulator image evidence is required',
   );
-  expect(await engine.receipts('all')).toEqual([]);
+  expect(await emulatorReceipts()).toEqual([]);
 });
 
 it('replaces an earlier receipt with one atomically bound to the latest matching measurement', async () => {
   const first = await engine.attest(target, 'emulator_image_provenance', 'Alice', undefined, pin);
   const second = await engine.attest(target, 'emulator_image_provenance', 'Bob', 'Rechecked', pin);
   expect(second.id).not.toBe(first.id);
-  expect(await engine.receipts('all')).toEqual([second]);
+  expect(await emulatorReceipts()).toEqual([second]);
   expect(
-    (await store.events<{ type: string }>('asset:all')).filter(({ event }) => event.type === 'attestation'),
+    (await store.events<{ type: string }>('asset:all', eventCursor)).filter(
+      ({ event }) => event.type === 'attestation',
+    ),
   ).toHaveLength(2);
 });
 
@@ -174,8 +181,8 @@ it('persists neither provenance nor a receipt when the attestation transaction l
   await expect(engine.attest(target, 'emulator_image_provenance', 'Alice', undefined, pin)).rejects.toThrow(
     'Asset evidence changed before attestation',
   );
-  expect(await engine.receipts('all')).toEqual([]);
+  expect(await emulatorReceipts()).toEqual([]);
   expect(await store.get('emulator-provenance', 'all')).toBeUndefined();
-  const events = await store.events<{ type: string }>('asset:all');
+  const events = await store.events<{ type: string }>('asset:all', eventCursor);
   expect(events.filter(({ event }) => event.type === 'attestation')).toEqual([]);
 });

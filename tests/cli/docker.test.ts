@@ -9,7 +9,7 @@ import type { CandidateManifest } from '../../packages/release/src/candidate.js'
 import { product } from '../contracts/fixtures.js';
 import {
   prepareDockerEnvironment,
-  runInDocker,
+  runInDocker as runDocker,
   startDockerAdb,
   stopDockerAdb,
   type DockerEnvironment,
@@ -19,7 +19,7 @@ interface Container {
   Image: string;
   Config: { User: string; Labels: Record<string, string> };
   State: { Running: boolean };
-  HostConfig: { NetworkMode: string };
+  HostConfig: { NetworkMode: string; GroupAdd?: string[] | null };
   Mounts: { Source: string; Destination: string; RW: boolean }[];
 }
 class DockerFixture implements CommandRunner {
@@ -69,10 +69,28 @@ class DockerFixture implements CommandRunner {
         },
       },
       State: { Running: true },
-      HostConfig: { NetworkMode: 'host' },
+      HostConfig: { NetworkMode: 'host', GroupAdd: (process.getgroups?.() ?? []).map(String) },
       Mounts: [{ Source: this.state.adbHome, Destination: '/adb-home', RW: true }],
     };
   }
+}
+function runInDocker(
+  args: string[],
+  project: string,
+  image: string,
+  mode: 'direct' | 'host-adb',
+  extensions: string,
+  runner: DockerFixture,
+) {
+  return runDocker(
+    args,
+    project,
+    image,
+    mode,
+    extensions,
+    runner,
+    async (command) => (await runner.run(command)).code,
+  );
 }
 let root: string;
 let extensions: string;
@@ -163,7 +181,9 @@ describe('explicit Docker execution and independent ADB lifecycle', () => {
     expect(command).not.toContain('/host/resources');
     expect(command).not.toContain('--execution');
     expect(command).not.toContain('--image=ignored');
-    expect(command.slice(-2)).toEqual(['--project-root', '/project']);
+    expect(command.slice(-2)).toEqual(['--project-root', project]);
+    expect(command).toContain(`type=bind,src=${project},dst=${project}`);
+    expect(command).toContain('--workdir');
     expect(runner.calls.some((call) => call.args.includes('start-server'))).toBe(false);
   });
   it('starts an independent persistent direct-USB server and lets workers attach without owning its lifecycle', async () => {
@@ -245,4 +265,42 @@ describe('explicit Docker execution and independent ADB lifecycle', () => {
     await expect(startDockerAdb('pxv/local', extensions, runner)).rejects.toThrow(/did not acknowledge/);
     expect(runner.calls.some((call) => call.args[1] === 'stop')).toBe(false);
   });
+});
+
+it('forwards supplementary USB groups and leaves old owned sidecars stoppable', async () => {
+  vi.spyOn(process, 'getgroups').mockReturnValue([process.getgid!(), 45678, 45678]);
+  const state = await prepareDockerEnvironment(extensions);
+  const runner = new DockerFixture(state);
+  await startDockerAdb('pxv/local', extensions, runner);
+  await runInDocker(['device', 'inspect'], project, 'pxv/local', 'direct', extensions, runner);
+  for (const call of runner.calls.filter((call) => call.args[1] === 'run')) {
+    expect(call.args.filter((arg) => arg === '--group-add')).toHaveLength(1);
+    expect(call.args).toContain('45678');
+  }
+  runner.container!.HostConfig.GroupAdd = [];
+  await expect(startDockerAdb('pxv/local', extensions, runner)).rejects.toThrow('recreate');
+  await expect(runInDocker([], project, 'pxv/local', 'direct', extensions, runner)).rejects.toThrow(
+    'recreate',
+  );
+  expect(await stopDockerAdb(extensions, runner)).toMatchObject({ stopped: true });
+});
+it('uses a TTY only for terminal execution without JSON output', async () => {
+  const streams = [process.stdin, process.stdout, process.stderr];
+  const descriptors = streams.map((stream) => Object.getOwnPropertyDescriptor(stream, 'isTTY'));
+  for (const stream of streams) Object.defineProperty(stream, 'isTTY', { configurable: true, value: true });
+  try {
+    await prepareDockerEnvironment(extensions);
+    const runner = new DockerFixture({ controlRoot: '', adbHome: '', extensionRoot: '' });
+    await runInDocker(['device', 'inspect'], project, 'pxv/local', 'host-adb', extensions, runner);
+    await runInDocker(['device', 'inspect', '--json'], project, 'pxv/local', 'host-adb', extensions, runner);
+    const calls = runner.calls.filter((call) => call.args.includes('--rm'));
+    expect(calls[0]!.args).toContain('--tty');
+    expect(calls[1]!.args).not.toContain('--tty');
+  } finally {
+    streams.forEach((stream, index) => {
+      const descriptor = descriptors[index];
+      if (descriptor) Object.defineProperty(stream, 'isTTY', descriptor);
+      else Reflect.deleteProperty(stream, 'isTTY');
+    });
+  }
 });

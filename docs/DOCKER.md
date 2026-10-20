@@ -26,7 +26,7 @@ docker compose --file compose.yaml --profile direct run --rm direct host doctor
 
 Run this sequence from the checkout root containing `compose.yaml`, with an existing initialized project at the absolute `PXV_PROJECT` path. The Compose doctor uses the existing independent ADB service started above; a worker does not start that service.
 
-Preparation explicitly creates private shared control/ADB-home/extension directories. The independent direct-USB ADB service uses caller UID/GID, persistent keys and loopback port 5038. Workers only connect to that service and mount its home read-only. Stopping/cancelling a worker does not own the ADB server. The service can be stopped explicitly with `host docker-adb-stop --yes`.
+Preparation explicitly creates private shared control/ADB-home/extension directories. The independent direct-USB ADB service uses caller UID/GID and supplementary groups, persistent keys and loopback port 5038. Direct workers receive the same supplementary groups. If an existing owned sidecar lacks required groups, stop it, explicitly remove that container and start it again; the CLI does not silently replace it. Workers only connect to that service and mount its home read-only. Stopping/cancelling a worker does not own the ADB server. The service can be stopped explicitly with `host docker-adb-stop --yes`.
 
 ## Select transport
 
@@ -66,6 +66,44 @@ the phone and shared reservations before resubmitting work.
 
 A raw image defaults to `PXV_DOCKER_MODE=host-adb`, so short-lived execution stays in the foreground and flashing is refused. Direct raw `docker run` use must explicitly set `PXV_DOCKER_MODE=direct` and provide the reviewed USB permissions/mount, shared control directory and existing ADB service. The CLI and Compose direct mode set this marker explicitly.
 
+## Host paths and terminal I/O
+
+The CLI wrapper mounts the project at its canonical host path and retains `/project`
+as an alias for existing saved plans. Recovery accepts that alias only after
+verifying it is the same mounted project; reviewed evidence is never rewritten. New executions use the canonical project path.
+Compose retains its existing `/project` layout. Saved review bytes are never rewritten.
+Explicit file flags (including review files, inventory imports, policy files,
+emulator evidence and extension invocation inputs) resolve from the caller’s working directory.
+External input files are bound read-only at their canonical absolute paths. Explicit
+handoff output and new-project directories are created privately when missing and
+mounted writable, so their results persist on the host. File contents and embedded
+paths are not rewritten. Runtime/control mount collisions, unsafe bind paths and
+symlink leaf inputs/outputs are refused.
+
+Attached workers inherit stdin, stdout and stderr; prompts and progress stream
+immediately. Interactive terminals receive a TTY unless `--json` is selected.
+For JSON automation, supply the command’s required explicit confirmations. Interrupts
+are forwarded to Docker and the wrapper waits for worker shutdown before returning.
+The first interrupt or execution timeout starts a 90-second grace period. Each
+wrapper-created worker has a unique name and worker ownership labels, separate
+from the ADB sidecar. After grace expires, the wrapper verifies ownership and
+force-stops only that container's immutable ID, then terminates a stuck attached
+client process group. Docker control commands have 10-second deadlines and client
+reaping has a further 5-second deadline. Shutdown deadlines use a monotonic clock.
+Normal exit codes are preserved; timeout returns `124`, SIGINT `130`, and SIGTERM
+`143`. Cleanup diagnostics use stderr, including under `--json`.
+
+If the daemon is unavailable, ownership differs or startup cancellation cannot be
+confirmed, the wrapper reports the unique worker name and inspection instructions.
+Returning an interruption status does not certify cleanup. Inspect that worker,
+the run and retained recovery obligations before continuing. The wrapper does not
+clear native fences or stop the separately owned ADB sidecar.
+
+`mcp serve` does not accept `--execution docker`. For persistent container MCP,
+configure raw `docker run -i` with the reviewed image, project/control/extension mounts
+and host-ADB endpoint described above, followed by `mcp serve` (and explicitly
+`--allow-mutations` when authorized). Do not allocate a TTY: stdout is the MCP protocol.
+
 ## Command and container lifetime
 
 `agent execute` in a CLI-created direct or host-ADB worker executes in the foreground until completion, failure or a manual checkpoint. Keep the invoking command and container running while it works. A pending result retains its run and next steps; resume explicitly after completing the checkpoint. Native host `agent execute` uses a detached durable worker instead.
@@ -79,3 +117,10 @@ A persistent MCP server container can launch detached tasks inside that containe
 Compose-managed services and CLI-owned services are distinct ownership records. Do not start two services on port 5038 or pretend an arbitrary existing container is the CLI-owned sidecar. Preserve shared reservations after container/host failure and use explicit recovery.
 
 Release candidates and release provenance use schema 2. They record Node, supervisor JavaScript, Koffi version/platform/Node-API version, loader/addon hashes and artifact hashes. Schema 1 candidates must be regenerated. Portable, Debian, npm, OCI and experimental SEA formats include the supervisor bundle, Koffi loader and selected glibc x64 prebuild with reviewed notices. Existing ownership records, IPC protocol and receipts remain schema/protocol 1; policies are unversioned. Never clear host control state to regenerate a candidate. Engine integrity binds source/build bytes and the selected supervisor, addon and loader.
+
+Extension installation and updates require native host execution, including when
+requested through MCP. Run them outside Docker against the shared extension store;
+then lock/review the changed project before container execution. Docker and raw
+container install/update calls are rejected before archive acquisition. Workers
+retain read-only extension mounts for inspection, invocation and declared
+contributions; explicit removal changes only the project lock.

@@ -1,3 +1,4 @@
+import { executeWithWitnesses } from './fixtures.js';
 import { toPolicyDocument } from '@pxv/contracts';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -37,7 +38,7 @@ describe('workflow service composition', () => {
       const prepared = await engine.prepare(target);
       expect(Date.parse(prepared.plan.createdAt)).toBeLessThanOrEqual(engine.clock().getTime());
       const run = await engine.submit(prepared.plan.id, prepared.reviewSummary, 'Alice');
-      expect((await engine.execute(run.id)).status).toBe('pending');
+      expect((await executeWithWitnesses(engine, run.id)).status).toBe('pending');
       await engine.event(run.id, 'composition-note', { decision: 'reviewed' });
       expect((await store.events<{ type: string }>(run.id)).at(-1)?.event.type).toBe('composition-note');
       expect(close).not.toHaveBeenCalled();

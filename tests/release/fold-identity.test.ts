@@ -88,7 +88,7 @@ it('keeps asset writing fields and full profile identity on every real blank pan
     const owner = validatePolicyDocument(
       JSON.parse(await readFile('policy-packs/single-simple/policy.json', 'utf8')),
     );
-    owner.profiles[0]!.name = 'Właściciel bardzo długiego profilu '.repeat(7).trim();
+    owner.profiles[0]!.name = 'Właściciel bardzo długiego profilu '.repeat(2).trim();
     const five = validatePolicyDocument(
       JSON.parse(await readFile('policy-packs/fleet-nerd/policy.json', 'utf8')),
     );

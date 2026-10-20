@@ -1,3 +1,4 @@
+import { executeWithWitnesses } from './fixtures.js';
 import { toPolicyDocument } from '@pxv/contracts';
 import { DatabaseSync } from 'node:sqlite';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
@@ -112,8 +113,8 @@ it('retires submitted and unsubmitted OS/Seedvault approvals while retaining the
     'lifecycle event',
   );
   await expect(engine.submit(seed.plan.id, seed.reviewSummary, 'Owner')).rejects.toThrow('lifecycle event');
-  await expect(engine.execute(oldRun.id)).rejects.toThrow('lifecycle event');
-  await expect(engine.execute(oldSeedRun.id)).rejects.toThrow('lifecycle event');
+  await expect(executeWithWitnesses(engine, oldRun.id)).rejects.toThrow('lifecycle event');
+  await expect(executeWithWitnesses(engine, oldSeedRun.id)).rejects.toThrow('lifecycle event');
   expect(await store.get('plans', os.plan.id)).toEqual(os);
   expect(await store.get('seedvault-plans', seed.plan.id)).toEqual(seed);
   expect(port.calls).toEqual([]);
@@ -121,7 +122,7 @@ it('retires submitted and unsubmitted OS/Seedvault approvals while retaining the
   expect(fresh.lifecycleGeneration).toBe(event.id);
   expect(fresh.reviewSummary).toContain(event.id);
   const approved = await engine.submit(fresh.plan.id, fresh.reviewSummary, 'Owner');
-  expect((await engine.execute(approved.id)).status).toBe('pending');
+  expect((await executeWithWitnesses(engine, approved.id)).status).toBe('pending');
   expect(port.calls).toEqual(['install-os']);
 });
 
@@ -130,11 +131,11 @@ it('binds fresh Seedvault reviews and refuses expired-checkpoint refresh across 
   const prepared = await engine.prepareSeedvault(wifi, { operation: 'backup' });
   expect(prepared.lifecycleGeneration).toBe(event.id);
   const run = await engine.submit(prepared.plan.id, prepared.reviewSummary, 'Owner');
-  expect((await engine.execute(run.id)).status).toBe('pending');
+  expect((await executeWithWitnesses(engine, run.id)).status).toBe('pending');
   const refreshed = await engine.refreshReview(run.id);
   expect(refreshed.lifecycleGeneration).toBe(event.id);
   const next = await engine.submit(refreshed.plan.id, refreshed.reviewSummary, 'Owner');
-  await engine.execute(next.id);
+  await executeWithWitnesses(engine, next.id);
   await maintenance();
   await expect(engine.refreshReview(next.id)).rejects.toThrow('lifecycle event');
 });
@@ -201,9 +202,9 @@ it('refreshes an intentional normal workflow checkpoint within the current lifec
     { kind: 'manual', capability: 'operator_signoff', instructions: 'Perform the actual owner signoff.' },
   ]);
   const run = await engine.submit(prepared.plan.id, prepared.reviewSummary, 'Owner');
-  expect((await engine.execute(run.id)).manualGate).toBe('operator_signoff');
+  expect((await executeWithWitnesses(engine, run.id)).manualGate).toBe('operator_signoff');
   const refreshed = await engine.refreshReview(run.id);
   expect(refreshed.lifecycleGeneration).toBe(event.id);
   const next = await engine.submit(refreshed.plan.id, refreshed.reviewSummary, 'Owner');
-  expect((await engine.execute(next.id)).manualGate).toBe('operator_signoff');
+  expect((await executeWithWitnesses(engine, next.id)).manualGate).toBe('operator_signoff');
 });

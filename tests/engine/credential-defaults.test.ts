@@ -1,3 +1,4 @@
+import { executeWithWitnesses } from './fixtures.js';
 import { toPolicyDocument } from '@pxv/contracts';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -88,7 +89,7 @@ describe('credential defaults and private recipient checkpoints', () => {
     const run = await approve();
     expect(port.calls).toEqual([]);
     expect(port.credentialDefaultsPreflight).toHaveBeenCalledOnce();
-    const normal = await engine.execute(run.id);
+    const normal = await executeWithWitnesses(engine, run.id);
     expect(normal).toMatchObject({ status: 'pending', manualGate: 'normal_credentials' });
     expect(port.calls.filter((value) => value.startsWith('default-'))).toEqual([
       'default-credential:0',
@@ -100,13 +101,13 @@ describe('credential defaults and private recipient checkpoints', () => {
     expect(normalGeneration.profileEpochs['work']).toBeTruthy();
     await expect(engine.attest(target, 'duress', 'Operator')).rejects.toThrow('Contradictory');
     await engine.attest(target, 'normal_credentials', 'Operator');
-    const duress = await engine.execute(run.id);
+    const duress = await executeWithWitnesses(engine, run.id);
     expect(duress).toMatchObject({ status: 'pending', manualGate: 'duress' });
     expect(port.calls.slice(-3)).toEqual(['language', 'language', 'default-duress:0']);
     expect((await readRegistryGeneration(store, device)).deviceEpoch).not.toBe(normalGeneration.deviceEpoch);
     expect((await engine.readiness(target)).missing).toContain('duress');
     await engine.attest(target, 'duress', 'Operator');
-    await engine.execute(run.id);
+    await executeWithWitnesses(engine, run.id);
     expect(port.setCredentialDefault).toHaveBeenCalledTimes(2);
     expect(port.setDuressDefault).toHaveBeenCalledOnce();
     const state = JSON.stringify(await store.entries('credential-defaults'));
@@ -122,8 +123,8 @@ describe('credential defaults and private recipient checkpoints', () => {
     });
     const first = await approve();
     const second = await approve();
-    await engine.execute(first.id);
-    await engine.execute(second.id);
+    await executeWithWitnesses(engine, first.id);
+    await executeWithWitnesses(engine, second.id);
     expect(port.setCredentialDefault).toHaveBeenCalledTimes(2);
     const next = await engine.prepare(target);
     expect(next.plan.actions.some((action) => action.kind === 'default-credential')).toBe(false);
@@ -203,13 +204,15 @@ describe('credential defaults and private recipient checkpoints', () => {
       },
     ]);
     port.setCredentialDefault.mockRejectedValue(new Error('Credential setup failed; inspect the profile'));
-    const failed = await engine.execute(run.id);
+    const failed = await executeWithWitnesses(engine, run.id);
     expect(failed.status).toBe('needs-inspection');
     expect((await engine.state(device.assetId)).status).toBe('failed');
     expect(await store.get('handoff', device.assetId)).toBeUndefined();
-    expect(await store.get('attestations', device.assetId)).toEqual([]);
+    expect((await engine.receipts(device.assetId)).filter((value) => value.check !== 'vpn_settings')).toEqual(
+      [],
+    );
     expect((await engine.readiness(target)).ready).toBe(false);
-    await engine.execute(run.id);
+    await executeWithWitnesses(engine, run.id);
     expect(port.setCredentialDefault).toHaveBeenCalledOnce();
     expect(port.setDuressDefault).not.toHaveBeenCalled();
     expect((await readRegistryGeneration(store, device)).profileEpochs['admin']).toBeTruthy();
@@ -221,21 +224,21 @@ describe('credential defaults and private recipient checkpoints', () => {
       { kind: 'default-duress', profileId: owner.id, duress: owner.defaultDuress! },
     ]);
     const run = await engine.submit(prepared.plan.id, prepared.reviewSummary, 'Operator');
-    expect((await engine.execute(run.id)).status).toBe('needs-inspection');
+    expect((await executeWithWitnesses(engine, run.id)).status).toBe('needs-inspection');
     expect(port.setDuressDefault).not.toHaveBeenCalled();
   });
 
   it('rejects an old plan that omitted initialization after OS installation clears history', async () => {
     const run = await approve();
-    await engine.execute(run.id);
+    await executeWithWitnesses(engine, run.id);
     await engine.attest(target, 'normal_credentials', 'Operator');
-    await engine.execute(run.id);
+    await executeWithWitnesses(engine, run.id);
     const prepared = await engine.prepare(target);
     expect(prepared.plan.actions.some((action) => action.kind.startsWith('default-'))).toBe(false);
     const stale = await engine.submit(prepared.plan.id, prepared.reviewSummary, 'Operator');
     await store.delete('credential-defaults', device.assetId);
     const calls = port.calls.length;
-    const result = await engine.execute(stale.id);
+    const result = await executeWithWitnesses(engine, stale.id);
     expect(result).toMatchObject({ status: 'needs-inspection' });
     expect(result.error).toContain('history changed');
     expect(port.calls).toHaveLength(calls);

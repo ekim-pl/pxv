@@ -1,6 +1,15 @@
 import { parseDocument as parseYamlDocument } from 'yaml';
 import { z } from 'zod';
 import { canonicalLocale } from './locales.js';
+import { validateEgressCidr } from './network-address.js';
+import {
+  validAndroidUserName,
+  validAndroidSettingKey,
+  validAndroidPermission,
+  validAndroidSettingValue,
+  validProbeEndpoint,
+  isManagedVpnSetting,
+} from './android-validation.js';
 import type {
   Action,
   AndroidUserIdentity,
@@ -180,7 +189,7 @@ export const artifactPolicySchema = z
     if (value.source) return !value.path && !value.url && !value.repositoryId && !value.redirectHosts;
     return Boolean(value.path ?? value.url ?? value.repositoryId);
   }, 'An artifact requires a source; source objects cannot be combined with legacy source fields');
-export const settingPolicySchema = z
+const settingObservationSchema = z
   .object({
     namespace: z.enum(['system', 'secure', 'global']),
     key: nonempty,
@@ -190,9 +199,26 @@ export const settingPolicySchema = z
       .refine((value) => !value.includes('\0'), 'NUL is forbidden'),
   })
   .strict();
-export const permissionPolicySchema = z
+const permissionObservationSchema = z
   .object({ packageId, permission: nonempty, granted: z.boolean() })
   .strict();
+export const settingPolicySchema = settingObservationSchema
+  .extend({
+    key: z.string().refine(validAndroidSettingKey, 'Invalid Android setting key'),
+    value: z
+      .string()
+      .refine(validAndroidSettingValue, 'Setting values allow at most 4096 characters without NUL, CR or LF'),
+  })
+  .refine((value) => !isManagedVpnSetting(value), {
+    path: ['key'],
+    message:
+      'Remove this VPN secure-setting declaration and configure the vpn block; VPN Settings require an operator witness',
+  });
+export const permissionPolicySchema = permissionObservationSchema.extend({
+  permission: z
+    .string()
+    .refine(validAndroidPermission, 'Expected an android.permission runtime permission name'),
+});
 export const vpnPolicySchema = z
   .object({ packageId: packageId.nullable(), alwaysOn: z.boolean(), lockdown: z.boolean() })
   .strict()
@@ -200,6 +226,10 @@ export const vpnPolicySchema = z
   .refine(
     (value) => !(value.alwaysOn || value.lockdown) || value.packageId !== null,
     'VPN enforcement requires a package',
+  )
+  .refine(
+    (value) => value.alwaysOn === (value.packageId !== null),
+    'VPN package must be null when always-on VPN is disabled',
   );
 export const uiSelectorSchema = z
   .object({
@@ -258,9 +288,23 @@ export const networkProbePolicySchema = z
       (value) => value.packageId === 'org.pxv.probe',
       'A network probe requires the pinned probe helper',
     ),
-    endpoint: https,
+    endpoint: z
+      .string()
+      .refine(
+        validProbeEndpoint,
+        'Expected an exact HTTPS probe endpoint without whitespace, user-info or fragments',
+      ),
     expectedEgressCidrs: z
-      .array(nonempty)
+      .array(
+        nonempty.refine((value) => {
+          try {
+            validateEgressCidr(value);
+            return true;
+          } catch {
+            return false;
+          }
+        }, 'Expected an IPv4/IPv6 CIDR with a valid prefix and no host bits'),
+      )
       .min(1)
       .max(100)
       .refine(uniqueStrings, 'Duplicate expected egress CIDR'),
@@ -324,7 +368,9 @@ function profileCredentialReferences(
 const profileBaseSchema = z
   .object({
     id,
-    name: nonempty,
+    name: z
+      .string()
+      .refine(validAndroidUserName, 'Android profile names require 1–80 characters without controls, : or }'),
     kind: z.enum(['owner', 'secondary']),
     packages: z.array(artifactPolicySchema),
     settings: z.array(settingPolicySchema),
@@ -604,13 +650,13 @@ const profileObservationSchema = z
       .array(z.object({ packageId, versionCode: integer, signerSha256: sha256 }).strict())
       .refine((value) => distinct(value, (item) => item.packageId), 'Duplicate observed package'),
     settings: z
-      .array(settingPolicySchema)
+      .array(settingObservationSchema)
       .refine(
         (value) => distinct(value, (item) => `${item.namespace}:${item.key}`),
         'Duplicate observed setting',
       ),
     permissions: z
-      .array(permissionPolicySchema)
+      .array(permissionObservationSchema)
       .refine(
         (value) => distinct(value, (item) => `${item.packageId}:${item.permission}`),
         'Duplicate observed permission',
@@ -645,7 +691,13 @@ export const deviceObservationSchema = z
   });
 
 export const actionSchema = z.discriminatedUnion('kind', [
-  z.object({ kind: z.literal('create-user'), profileId: id, name: nonempty }).strict(),
+  z
+    .object({
+      kind: z.literal('create-user'),
+      profileId: id,
+      name: z.string().refine(validAndroidUserName, 'Invalid Android user name'),
+    })
+    .strict(),
   z.object({ kind: z.literal('install-apk'), profileId: id, artifact: artifactPolicySchema }).strict(),
   z.object({ kind: z.literal('setting'), profileId: id, setting: settingPolicySchema }).strict(),
   z.object({ kind: z.literal('permission'), profileId: id, permission: permissionPolicySchema }).strict(),
@@ -752,8 +804,33 @@ export function parseDocument(source: string): unknown {
   return document.toJS({ maxAliasCount: 0 });
 }
 
+function errorProfile(value: unknown, path: readonly PropertyKey[]): unknown {
+  if (!value || typeof value !== 'object') return undefined;
+  const record = value as Record<PropertyKey, unknown>;
+  if (path[0] === 'profiles' && Array.isArray(record['profiles']))
+    return (record['profiles'][Number(path[1])] as { id?: unknown } | undefined)?.id;
+  if (typeof record['profileId'] === 'string') return record['profileId'];
+  return path.length ? errorProfile(record[path[0]!], path.slice(1)) : undefined;
+}
 function parseContract<T>(schema: z.ZodType, value: unknown): T {
-  const output: unknown = schema.parse(value);
+  let output: unknown;
+  try {
+    output = schema.parse(value);
+  } catch (error) {
+    if (!(error instanceof z.ZodError)) throw error;
+    error.message = JSON.stringify(
+      error.issues.map((issue) => {
+        const profile = errorProfile(value, issue.path);
+        return {
+          ...issue,
+          message: typeof profile === 'string' ? `Profile ${profile}: ${issue.message}` : issue.message,
+        };
+      }),
+      null,
+      2,
+    );
+    throw error;
+  }
   const rejectUndefined = (item: unknown): void => {
     if (item === undefined) throw new Error('Explicit undefined is not valid configuration');
     if (Array.isArray(item)) item.forEach(rejectUndefined);

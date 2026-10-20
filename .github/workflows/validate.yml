@@ -73,6 +73,8 @@ jobs:
           node packages/release/dist/cli.js --formats "$pxv_formats" --output-root "$RUNNER_TEMP/pxv-preview" > "$RUNNER_TEMP/pxv-preview-result.json"
       - name: Execute each packaged runtime on Debian 12 and Ubuntu 24.04
         run: node tools/check-packaged-runtime.mjs "$RUNNER_TEMP/pxv-preview-result.json"
+      - name: Disposable Docker worker paths and supplementary groups
+        run: node tools/check-docker-worker.mjs --build-result "$RUNNER_TEMP/pxv-preview-result.json"
       - name: Whitespace
         run: git diff --check
       - name: Retain component quality evidence
@@ -92,6 +94,7 @@ jobs:
             .quality/tests.json
             .quality/dependencies.json
             .quality/advisories.json
+            .quality/docker-worker.json
             .quality/packaged-runtime.json
             ${{ runner.temp }}/pxv-preview-result.json
             ${{ runner.temp }}/pxv-preview/*/artifacts/provenance.json

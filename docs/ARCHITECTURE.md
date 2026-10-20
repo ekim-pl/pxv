@@ -50,6 +50,20 @@ converts structured results to readable summaries or explicit `--json` output.
 
 Application composition owns storage lifetime; services borrow it. Failed application construction closes the opened worker, and each MCP request closes its own context. Storage startup has a bounded readiness wait, rejects premature exits including exit 0, and retries only idempotent database initialization on lock contention. Worker loss rejects pending requests; reopening does not replay them. Closing storage awaits worker exit, and a failed database close still closes the worker message port so shutdown can settle with the original error.
 
+Readiness and review refresh share an asynchronous VPN proof verifier injected
+with the plan reader and store. It validates source action/run completion, consumed
+receipts, paginated attestation audit snapshots and committed refresh ancestry.
+Plan/run/audit caches last for one verification operation. Retained source plans
+allow expired approval while keeping integrity, policy, target and lifecycle checks.
+The contracts layer supplies per-profile VPN witness requirements to readiness and
+English/Polish guide generation. Generic setting actions cannot write the reserved
+VPN secure keys; observation parsing remains separate from authoring validation.
+
+Docker workers use an attached streaming runner with an explicit container identity
+and independently bounded control operations. Ownership labels isolate worker
+cleanup from ADB sidecars. Failed or uncertain cleanup retains native reservations
+and evidence; see [Docker shutdown behavior](DOCKER.md#command-and-container-lifetime).
+
 Project ownership serializes cooperating configuration writes and operations. Submission, execution, review refresh, attestation, finalization, custody and lifecycle changes recheck the loaded configuration, policy and inventory byte revisions plus executable identity after acquiring it. Stale contexts require reload and review. Configuration/lock writes also compare their expected source revisions. Project ownership precedes physical-device ownership.
 
 Physical serial, transport selector, asset ID and Android user identity are distinct. Android user recovery binds userId, name and serialNo, because user IDs can be reused. The shared per-operator host control directory is independent of product/fork/project and also mounted into containers. Simultaneous ownership from several workstations is unsupported.

@@ -19,6 +19,7 @@ import { mcpCommand } from './mcp-command.js';
 import { initializeProject, policyCommand, projectGuide, staticGuide } from './project-command.js';
 import { agentCommand, internalWorker } from './run-command.js';
 import { selectedContext } from './selection.js';
+import { assertExtensionExecution } from './command-registry.js';
 export type { CliIo } from './arguments.js';
 async function externalCommand(context: CliContext): Promise<number | undefined> {
   const { section, command } = context;
@@ -104,6 +105,10 @@ async function executionMode(context: CliContext): Promise<number | undefined> {
   const { argv, value, projectRoot, extensionRoot } = context;
   const execution = value('execution', 'host');
   validateExecutionMode(context, execution);
+  assertExtensionExecution(
+    [context.section ?? '', context.command ?? ''],
+    execution === 'docker' || context.dockerMode !== undefined,
+  );
   assertLocalCollection(context, execution);
   if (execution === 'docker') {
     const mode = value('docker-mode', 'host-adb');

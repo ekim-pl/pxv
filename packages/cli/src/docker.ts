@@ -2,7 +2,11 @@ import type { CommandRunner as Runner } from '@pxv/adapters';
 import { CommandRunner, hostControlRoot } from '@pxv/runtime';
 import { createHash } from 'node:crypto';
 import { lstat, mkdir, realpath } from 'node:fs/promises';
-import { isAbsolute, join } from 'node:path';
+import { join } from 'node:path';
+import { dockerDestination, dockerPaths, mountPath } from './docker-paths.js';
+import { dockerWorkerIdentity, dockerWorkerFlags } from './docker-worker-control.js';
+import { runDockerWorker, type DockerWorkerRunner } from './docker-worker.js';
+import { assertExtensionExecution } from './command-registry.js';
 import { setTimeout as delay } from 'node:timers/promises';
 
 export interface DockerEnvironment {
@@ -18,13 +22,6 @@ export interface DockerAdbService {
 const CONTROL_LABEL = 'org.pxv.adb-control';
 const PORT_LABEL = 'org.pxv.adb-port';
 const userIdentity = (): string => `${process.getuid?.() ?? 1000}:${process.getgid?.() ?? 1000}`;
-function mountPath(value: string): string {
-  if (!isAbsolute(value) || /[\0\r\n,"]/u.test(value))
-    throw new Error(
-      'Docker bind paths must be absolute and cannot contain CSV delimiters, quotes or newlines',
-    );
-  return value;
-}
 async function directory(path: string, create: boolean, privateMode = true): Promise<string> {
   mountPath(path);
   if (create) await mkdir(path, { recursive: true, mode: 0o700 });
@@ -74,7 +71,7 @@ type Container = {
   Image: string;
   Config: { User: string; Labels: Record<string, string> };
   State: { Running: boolean };
-  HostConfig: { NetworkMode: string };
+  HostConfig: { NetworkMode: string; GroupAdd?: string[] | null };
   Mounts: { Source: string; Destination: string; RW: boolean }[];
 };
 async function inspectService(runner: Runner, state: DockerEnvironment): Promise<Container | undefined> {
@@ -139,6 +136,7 @@ export async function startDockerAdb(
       'host',
       '--user',
       userIdentity(),
+      ...usbGroups(),
       '--label',
       `${CONTROL_LABEL}=${identity.key}`,
       '--label',
@@ -166,6 +164,10 @@ export async function startDockerAdb(
     const started = await runner.run(args, { check: false, timeoutMs: 30_000 });
     if (started.code !== 0)
       throw new Error('Docker ADB sidecar could not start; inspect the selected image and USB access');
+  } else if (!compatibleGroups(existing)) {
+    throw new Error(
+      'ADB sidecar lacks supplementary USB groups; stop and remove this owned container, then recreate it',
+    );
   } else if (!existing.State.Running) {
     const started = await runner.run(['docker', 'start', identity.name], { check: false, timeoutMs: 30_000 });
     if (started.code !== 0) throw new Error('The existing owned Docker ADB sidecar could not restart');
@@ -196,27 +198,24 @@ export async function runInDocker(
   mode: 'direct' | 'host-adb',
   extensionRoot: string,
   runner: Runner = new CommandRunner(),
+  worker: DockerWorkerRunner = runDockerWorker,
 ): Promise<number> {
+  assertExtensionExecution(args, true);
   if (mode !== 'direct' && mode !== 'host-adb') throw new Error('Choose direct or host-adb Docker transport');
   const project = await directory(projectRoot, false, false);
+  dockerDestination(project);
   const state = await environment(extensionRoot, false);
   const resolved = await immutableImage(image, runner);
-  if (mode === 'direct') {
-    const service = await inspectService(runner, state);
-    if (!service?.State.Running)
-      throw new Error('Direct USB needs the independent ADB sidecar; run host docker-adb-start explicitly');
-    if (service.Image !== resolved)
-      throw new Error('Direct USB sidecar and worker must use the same reviewed immutable image');
-  }
-  const filtered = workerFlags(args);
-  const options = workerOptions(state, project, mode);
-  const result = await runner.run(
-    ['docker', ...options, resolved, ...filtered, '--project-root', '/project'],
-    { timeoutMs: 86_400_000, check: false },
+  if (mode === 'direct') await requireDirectService(state, resolved, runner);
+  const mapped = await dockerPaths(workerFlags(args), project);
+  const container = dockerWorkerIdentity(state.controlRoot);
+  const options = [...workerOptions(state, project, mode), ...dockerWorkerFlags(container)];
+  if (process.stdin.isTTY && process.stdout.isTTY && process.stderr.isTTY && !args.includes('--json'))
+    options.push('--tty');
+  return worker(
+    ['docker', ...options, ...mapped.mounts, resolved, ...mapped.args, '--project-root', project],
+    { container, control: runner },
   );
-  process.stdout.write(result.stdout);
-  process.stderr.write(result.stderr);
-  return result.code;
 }
 
 function validContainer(value: Partial<Container>): value is Container {
@@ -263,8 +262,13 @@ function workerOptions(state: DockerEnvironment, project: string, mode: 'direct'
     'host',
     '--user',
     userIdentity(),
+    ...usbGroups(),
     '--mount',
     `type=bind,src=${project},dst=/project`,
+    '--mount',
+    `type=bind,src=${project},dst=${project}`,
+    '--workdir',
+    project,
     '--mount',
     `type=bind,src=${state.controlRoot},dst=/control`,
     '--mount',
@@ -297,4 +301,34 @@ function workerOptions(state: DockerEnvironment, project: string, mode: 'direct'
     );
 
   return options;
+}
+
+function supplementaryGroups(): string[] {
+  const primary = process.getgid?.();
+  return [...new Set(process.getgroups?.() ?? [])]
+    .filter((group) => group !== primary)
+    .sort((a, b) => a - b)
+    .map(String);
+}
+function usbGroups(): string[] {
+  return supplementaryGroups().flatMap((group) => ['--group-add', group]);
+}
+function compatibleGroups(container: Container): boolean {
+  return supplementaryGroups().every((group) => container.HostConfig.GroupAdd?.includes(group));
+}
+
+async function requireDirectService(
+  state: DockerEnvironment,
+  resolved: string,
+  runner: Runner,
+): Promise<void> {
+  const service = await inspectService(runner, state);
+  if (!service?.State.Running)
+    throw new Error('Direct USB needs the independent ADB sidecar; run host docker-adb-start explicitly');
+  if (!compatibleGroups(service))
+    throw new Error(
+      'ADB sidecar lacks supplementary USB groups; stop and remove this owned container, then recreate it',
+    );
+  if (service.Image !== resolved)
+    throw new Error('Direct USB sidecar and worker must use the same reviewed immutable image');
 }

@@ -112,7 +112,14 @@ For automatic duress defaults, `ownerCredentialRef` must resolve to the owner's 
 
 A pending run returns a `pauseReason` and the next gate. Perform only the named work in the correct profile. Configure app accounts, imports, MFA and Android consent privately before attesting.
 
-App configuration precedes VPN enforcement. A changed always-on/lockdown VPN without a matching recipe pauses for `app_setup`: configure that profile's VPN app, grant VPN consent and check its intended connection before resuming. Separate profile gates need separate fresh confirmations.
+App configuration precedes VPN verification. A changed VPN without a matching app recipe may first pause at `app_setup` for private account setup and consent. Every profile then pauses at `vpn_settings`, including already-matching and disabled VPNs. Open Android VPN Settings in the named profile and configure or witness the reviewed app, Always-on VPN and Block connections without VPN toggles. Record `device attest --check vpn_settings --asset "$ASSET" --operator "$OPERATOR"` with the project root, then resume. Each profile needs its own confirmation. PXV labels this `operator-witnessed-settings`; saved configuration is not an automated live-enforcement measurement. Required network probes remain separate.
+
+Declare VPN state only in the policy's `vpn` block. Remove secure-setting entries
+for `always_on_vpn_app` and `always_on_vpn_lockdown`; duplicates are rejected even
+when values match. Completed witnesses require the retained reviewed action, run
+and audited receipt. Review refresh preserves proofs only through validated history.
+If provenance is missing or changed, retain it for inspection and prepare a newly
+reviewed provisioning run instead of editing evidence files.
 
 Recipes are bound to an exact Android build and app version/signer. Unsupported screens or imports remain assisted/manual. If an accepted file-selection adapter is unavailable, complete the entire import through an approved private method; no temporary staged file is left for later selection. Do not paste sensitive settings into public recipe text.
 
@@ -124,7 +131,9 @@ pxv agent resume --project-root "$P" --run RUN_ID
 
 Use the actual named gate instead of `app_setup` when different. A `language:PROFILE` pause is completed on the phone and then resumed; do not invent a language attestation. The private sequence is normal locks verified in every profile, final language, then optional duress setup. Both duress values must differ from every actual ordinary profile credential. Never activate erasure as a test.
 
-If review expires, `agent refresh --run RUN_ID` prepares the remaining work for a new review. Save its new exact summary and submit its new plan with `agent execute`. Refresh does not approve changes or recover an uncertain interrupted mutation.
+If review expires at an intentional manual checkpoint, `agent refresh --run RUN_ID` prepares the remaining work for a new review. Save its new exact summary and submit its new plan with `agent execute`. Refresh does not approve changes or recover an uncertain interrupted mutation.
+
+After provisioning, attestation can use an expired execution plan if measurements are no older than 15 minutes and live state is unchanged. Stale acceptance measurements require a newly reviewed provisioning run. Docker terminal execution streams prompts and progress; JSON execution needs explicit noninteractive confirmation. The wrapper mounts explicitly named external files and outputs, and direct USB retains the caller’s supplementary groups. See the Docker reference for sidecar recreation and raw-container MCP operation.
 
 ## 7. Check, finalize and transfer custody
 

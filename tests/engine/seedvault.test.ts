@@ -1,3 +1,4 @@
+import { executeWithWitnesses } from './fixtures.js';
 import { toPolicyDocument } from '@pxv/contracts';
 import { randomUUID } from 'node:crypto';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
@@ -224,7 +225,7 @@ describe('supervised Seedvault runs', () => {
       'exact reviewed summary',
     );
     expect(await engine.submit(prepared.plan.id, prepared.reviewSummary, 'Owner')).toEqual(run);
-    expect((await engine.execute(run.id)).status).toBe('completed');
+    expect((await executeWithWitnesses(engine, run.id)).status).toBe('completed');
     const report = await engine.seedvaultReport(run.id);
     expect(report.cursor).toBe(2);
     expect(report.profiles.every((profile) => profile.evidence?.apps && profile.evidence.files)).toBe(true);
@@ -239,20 +240,20 @@ describe('supervised Seedvault runs', () => {
   it('pauses for locked profiles and resumes only the unfinished profile without an attestation', async () => {
     port.pending.add('personal');
     const { run } = await prepare();
-    expect(await engine.execute(run.id)).toMatchObject({
+    expect(await executeWithWitnesses(engine, run.id)).toMatchObject({
       status: 'pending',
       cursor: 1,
       manualGate: 'seedvault:personal',
     });
     port.observed.profiles[1]!.unlocked = true;
-    expect((await engine.execute(run.id)).status).toBe('completed');
+    expect((await executeWithWitnesses(engine, run.id)).status).toBe('completed');
     expect(port.calls).toEqual(['admin', 'personal', 'personal']);
     expect((await engine.seedvaultReport(run.id)).profiles[0]!.status).toBe('completed');
   });
 
   it('keeps recovery history readable when experimental recovery is disabled in the core product', async () => {
     const { prepared, run } = await prepare();
-    await engine.execute(run.id);
+    await executeWithWitnesses(engine, run.id);
     const report = await engine.seedvaultReport(run.id);
     const retained = await store.get('runs', run.id);
     const core = new WorkflowEngine({
@@ -290,9 +291,9 @@ describe('supervised Seedvault runs', () => {
   it('refuses reused Android IDs and changed package pins before resuming', async () => {
     port.pending.add('personal');
     const { run } = await prepare();
-    await engine.execute(run.id);
+    await executeWithWitnesses(engine, run.id);
     port.observed.profiles[1]!.user.serialNo++;
-    const stopped = await engine.execute(run.id);
+    const stopped = await executeWithWitnesses(engine, run.id);
     expect(stopped.status).toBe('needs-inspection');
     expect(stopped.error).toContain('identity changed');
     expect(port.calls).toEqual(['admin', 'personal']);
@@ -321,13 +322,13 @@ describe('supervised Seedvault runs', () => {
   it('refreshes an expired intentional checkpoint preserving completed profile evidence', async () => {
     port.pending.add('personal');
     const { run } = await prepare();
-    await engine.execute(run.id);
+    await executeWithWitnesses(engine, run.id);
     now = new Date(now.getTime() + 900001);
-    await expect(engine.execute(run.id)).rejects.toThrow('expired');
+    await expect(executeWithWitnesses(engine, run.id)).rejects.toThrow('expired');
     const fresh = await engine.refreshReview(run.id);
     expect((await store.get<{ status: string }>('runs', run.id))?.status).toBe('superseded');
     const approved = await engine.submit(fresh.plan.id, fresh.reviewSummary, 'Owner');
-    expect((await engine.execute(approved.id)).status).toBe('completed');
+    expect((await executeWithWitnesses(engine, approved.id)).status).toBe('completed');
     expect(port.calls).toEqual(['admin', 'personal', 'personal']);
     expect((await engine.seedvaultReport(approved.id)).profiles[0]!.evidence?.user).toEqual(users[0]!.user);
     await expect(engine.refreshReview(approved.id)).rejects.toThrow('intentional');
@@ -337,10 +338,10 @@ describe('supervised Seedvault runs', () => {
     port.remote = true;
     port.pending.add('admin');
     const { run } = await prepare();
-    expect((await engine.execute(run.id)).status).toBe('pending');
+    expect((await executeWithWitnesses(engine, run.id)).status).toBe('pending');
     expect(await recoveryReservations(engine.controlRoot)).not.toHaveLength(0);
     await expect(engine.refreshReview(run.id)).rejects.toThrow();
-    expect((await engine.execute(run.id)).status).toBe('completed');
+    expect((await executeWithWitnesses(engine, run.id)).status).toBe('completed');
     expect(await recoveryReservations(engine.controlRoot)).toEqual([]);
     expect((await store.get<{ operationId: string }>('recovery-attempts', run.id))?.operationId).toMatch(
       /^recovery-/u,
@@ -350,13 +351,13 @@ describe('supervised Seedvault runs', () => {
   it('retains durable partial progress on failure and handles cancellation without replay', async () => {
     port.fail.add('personal');
     const { run } = await prepare();
-    expect((await engine.execute(run.id)).status).toBe('needs-inspection');
+    expect((await executeWithWitnesses(engine, run.id)).status).toBe('needs-inspection');
     expect((await engine.seedvaultReport(run.id)).cursor).toBe(1);
-    expect((await engine.execute(run.id)).status).toBe('needs-inspection');
+    expect((await executeWithWitnesses(engine, run.id)).status).toBe('needs-inspection');
     expect(port.calls).toEqual(['admin', 'personal']);
     const next = await prepare();
     await engine.cancel(next.run.id);
-    expect((await engine.execute(next.run.id)).status).toBe('cancelled');
+    expect((await executeWithWitnesses(engine, next.run.id)).status).toBe('cancelled');
     expect(port.calls).toEqual(['admin', 'personal']);
   });
 
@@ -368,7 +369,7 @@ describe('supervised Seedvault runs', () => {
       filesSelector: selector,
     }));
     const { run } = await prepare({ operation: 'restore', adapter, sources });
-    expect((await engine.execute(run.id)).status).toBe('completed');
+    expect((await executeWithWitnesses(engine, run.id)).status).toBe('completed');
     expect(
       (await engine.seedvaultReport(run.id)).profiles.map((profile) => profile.evidence?.source),
     ).toEqual(sources);
@@ -382,7 +383,7 @@ describe('supervised Seedvault runs', () => {
     port.observed = inspection();
     const { run } = await prepare();
     port.observed.profiles[1]!.package.signerSha256 = 'b'.repeat(64);
-    expect((await engine.execute(run.id)).status).toBe('needs-inspection');
+    expect((await executeWithWitnesses(engine, run.id)).status).toBe('needs-inspection');
     expect(port.calls).toEqual([]);
   });
 
@@ -413,7 +414,7 @@ describe('supervised Seedvault runs', () => {
             },
           }
         : result;
-    const stopped = await engine.execute(run.id);
+    const stopped = await executeWithWitnesses(engine, run.id);
     expect(stopped.status).toBe('needs-inspection');
     expect(stopped.error).toContain('different backup source');
     expect((await engine.seedvaultReport(run.id)).cursor).toBe(0);
@@ -423,10 +424,10 @@ describe('supervised Seedvault runs', () => {
     port.remote = true;
     port.fail.add('admin');
     const { run } = await prepare();
-    expect((await engine.execute(run.id)).status).toBe('needs-inspection');
+    expect((await executeWithWitnesses(engine, run.id)).status).toBe('needs-inspection');
     expect(await recoveryReservations(engine.controlRoot)).not.toHaveLength(0);
     const next = await prepare();
-    const blocked = await engine.execute(next.run.id);
+    const blocked = await executeWithWitnesses(engine, next.run.id);
     expect(blocked.status).toBe('needs-inspection');
     expect(blocked.error).toMatch(/unresolved|reservation/u);
     expect(port.calls).toEqual(['admin']);
@@ -438,7 +439,7 @@ describe('supervised Seedvault runs', () => {
         ? { ...result, evidence: { ...result.evidence, files: false as true } }
         : result;
     const { run } = await prepare();
-    expect((await engine.execute(run.id)).status).toBe('needs-inspection');
+    expect((await executeWithWitnesses(engine, run.id)).status).toBe('needs-inspection');
     expect((await engine.seedvaultReport(run.id)).profiles[0]!.evidence).toBeUndefined();
   });
 
@@ -461,7 +462,7 @@ describe('supervised Seedvault runs', () => {
       return result;
     };
     const { run } = await prepare();
-    expect((await engine.execute(run.id)).status).toBe('completed');
+    expect((await executeWithWitnesses(engine, run.id)).status).toBe('completed');
     expect(port.calls).toEqual(['admin', 'personal']);
   });
 
@@ -515,11 +516,11 @@ describe('supervised Seedvault runs', () => {
     port.executeProfile = () =>
       Promise.resolve({ status: 'manual-pending', instructions: 'No accepted build; retain private setup.' });
     const { run } = await prepare({ operation: 'backup' });
-    expect((await engine.execute(run.id)).status).toBe('pending');
+    expect((await executeWithWitnesses(engine, run.id)).status).toBe('pending');
     const report = await engine.seedvaultReport(run.id);
     expect(report.profiles[0]!.instructions).toContain('No accepted build');
     expect(report.profiles[0]!.progress).toBeUndefined();
-    expect((await engine.execute(run.id)).status).toBe('pending');
+    expect((await executeWithWitnesses(engine, run.id)).status).toBe('pending');
   });
 
   it.each(['profile', 'operation', 'adapter', 'snapshot', 'phase', 'progress', 'instructions'] as const)(
@@ -539,7 +540,7 @@ describe('supervised Seedvault runs', () => {
         return changed;
       };
       const { run } = await prepare();
-      expect((await engine.execute(run.id)).status).toBe('needs-inspection');
+      expect((await executeWithWitnesses(engine, run.id)).status).toBe('needs-inspection');
       expect((await engine.seedvaultReport(run.id)).cursor).toBe(0);
     },
   );
@@ -560,7 +561,7 @@ describe('supervised Seedvault runs', () => {
   ] as const)('preserves and refuses corrupted durable profile %s records', async (field) => {
     port.pending.add('personal');
     const { run } = await prepare();
-    await engine.execute(run.id);
+    await executeWithWitnesses(engine, run.id);
     const report = await engine.seedvaultReport(run.id);
     const changed = structuredClone(report);
     if (field === 'schema') changed.schemaVersion = 2 as 1;
@@ -583,7 +584,7 @@ describe('supervised Seedvault runs', () => {
   it('requires review lineage to retain its superseded predecessor', async () => {
     port.pending.add('personal');
     const { run } = await prepare();
-    await engine.execute(run.id);
+    await executeWithWitnesses(engine, run.id);
     const fresh = await engine.refreshReview(run.id);
     await store.delete('runs', run.id);
     await expect(engine.submit(fresh.plan.id, fresh.reviewSummary, 'Owner')).rejects.toThrow('not committed');
@@ -592,7 +593,7 @@ describe('supervised Seedvault runs', () => {
   it('refuses refresh while job obligations remain even before a device mutation', async () => {
     port.pending.add('admin');
     const { run } = await prepare();
-    await engine.execute(run.id);
+    await executeWithWitnesses(engine, run.id);
     const writer = new ResourceScope(store, device.canonicalSerial, run.id).writer();
     await writer.record({
       schemaVersion: 1,
@@ -611,7 +612,7 @@ describe('supervised Seedvault runs', () => {
   it('refuses a changed profile at refresh and detects a concurrent checkpoint replacement', async () => {
     port.pending.add('personal');
     const { run } = await prepare();
-    await engine.execute(run.id);
+    await executeWithWitnesses(engine, run.id);
     port.observed.profiles[1]!.user.serialNo++;
     await expect(engine.refreshReview(run.id)).rejects.toThrow('changed at the checkpoint');
     port.observed = inspection();
@@ -627,7 +628,7 @@ describe('supervised Seedvault runs', () => {
     port.remote = true;
     port.retainRemote = true;
     const { run } = await prepare();
-    const stopped = await engine.execute(run.id);
+    const stopped = await executeWithWitnesses(engine, run.id);
     expect(stopped.status).toBe('needs-inspection');
     expect(stopped.error).toContain('outstanding remote resources');
     expect((await engine.seedvaultReport(run.id)).cursor).toBe(0);
@@ -648,7 +649,7 @@ describe('supervised Seedvault runs', () => {
       status: 'pending',
     });
     const { run } = await prepare();
-    const blocked = await engine.execute(run.id);
+    const blocked = await executeWithWitnesses(engine, run.id);
     expect(blocked.status).toBe('needs-inspection');
     expect(blocked.error).toContain('another operation');
     expect(port.calls).toEqual([]);
@@ -663,7 +664,7 @@ describe('supervised Seedvault runs', () => {
       return result;
     };
     const { run } = await prepare();
-    expect((await engine.execute(run.id, controller.signal)).status).toBe('cancelled');
+    expect((await executeWithWitnesses(engine, run.id, controller.signal)).status).toBe('cancelled');
     expect((await engine.seedvaultReport(run.id)).cursor).toBe(0);
     expect(port.calls).toEqual(['admin']);
   });
@@ -671,18 +672,18 @@ describe('supervised Seedvault runs', () => {
   it('retains completed-prefix ordering across refreshed live profile enumeration', async () => {
     port.pending.add('personal');
     const { run } = await prepare();
-    await engine.execute(run.id);
+    await executeWithWitnesses(engine, run.id);
     port.observed.profiles.reverse();
     const fresh = await engine.refreshReview(run.id);
     const next = await engine.submit(fresh.plan.id, fresh.reviewSummary, 'Owner');
-    expect((await engine.execute(next.id)).status).toBe('completed');
+    expect((await executeWithWitnesses(engine, next.id)).status).toBe('completed');
     expect(port.calls).toEqual(['admin', 'personal', 'personal']);
     expect((await engine.seedvaultReport(next.id)).cursor).toBe(2);
   });
 
   it('retains audited completed profile history after maintenance while refusing retired approvals', async () => {
     const { prepared, run } = await prepare();
-    expect((await engine.execute(run.id)).status).toBe('completed');
+    expect((await executeWithWitnesses(engine, run.id)).status).toBe('completed');
     const before = await engine.seedvaultReport(run.id);
     await recordLifecycle(
       engine.project,
@@ -701,13 +702,13 @@ describe('supervised Seedvault runs', () => {
     await expect(engine.submit(prepared.plan.id, prepared.reviewSummary, 'Owner')).rejects.toThrow(
       'lifecycle event',
     );
-    expect((await engine.execute(run.id)).status).toBe('completed');
+    expect((await executeWithWitnesses(engine, run.id)).status).toBe('completed');
     expect(port.calls).toEqual(['admin', 'personal']);
   });
 
   it('reads immutable backup history after endpoint and policy changes without authorizing its old operation', async () => {
     const { prepared, run } = await prepare();
-    await engine.execute(run.id);
+    await executeWithWitnesses(engine, run.id);
     const before = await engine.seedvaultReport(run.id);
     const enrolled = engine.project.inventory.devices[0]!;
     enrolled.transports = [enrolled.transports[0]!, { kind: 'wifi', serial: '192.0.2.44:45678' }];
@@ -745,7 +746,7 @@ describe('supervised Seedvault runs', () => {
     'refuses corrupted immutable historical %s even after lifecycle invalidation',
     async (field) => {
       const { prepared, run } = await prepare();
-      await engine.execute(run.id);
+      await executeWithWitnesses(engine, run.id);
       const changed = structuredClone(prepared);
       if (field === 'schema') changed.schemaVersion = 2 as 1;
       if (field === 'expiry') changed.expiresAt = 'invalid';
@@ -794,7 +795,7 @@ describe('supervised Seedvault runs', () => {
           }
         : result;
     const { run } = await prepare({ operation: 'restore', adapter, sources });
-    const stopped = await engine.execute(run.id);
+    const stopped = await executeWithWitnesses(engine, run.id);
     expect(stopped.status).toBe('needs-inspection');
     expect(stopped.error).toContain('different backup source');
     expect((await engine.seedvaultReport(run.id)).cursor).toBe(0);

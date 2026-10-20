@@ -28,7 +28,8 @@ Structured commands print readable summaries by default. Add `--json` for one JS
 | Guides | `guide operator|recipient --locale en|pl` prints installed Markdown; `guide project --locale en|pl --kind pixel|emulator` renders current policy requirements. |
 | Guide rebuild | `guides rebuild [--policy FILE] [--output-dir DIR] [--chromium PATH] [--html-only] [--no-render]` rebuilds guides from a source checkout before project loading; it runs `pnpm build` and uses the existing Chromium/Poppler pipeline. `--policy` validates a installation policy and adapts the phone-sized quick start and blank profile sheets. Policy builds require a separate output directory and describe intended configuration, not verified device status. Add `--private-insert-output PRIVATE.pdf --project-root DIR --asset ID [--locale en|pl] [--passphrase-file FILE]` for a separate populated registry insert: this requires Chromium and `--output-dir`, uses the project policy, and rejects `--policy` and `--html-only`. Shared outputs remain blank. |
 
-Docker execution adds `--execution docker --image EXPLICIT_IMAGE --docker-mode direct|host-adb`. Direct mode requires the independently started ADB sidecar; host-ADB mode uses a previously running host service. Installed extensions are mounted read-only into workers.
+Docker execution adds `--execution docker --image EXPLICIT_IMAGE --docker-mode direct|host-adb`. Direct mode requires the independently started ADB sidecar; host-ADB mode uses a previously running host service. Installed extensions are mounted read-only into workers. Extension install/update
+require native host execution, including through MCP.
 
 An exact asset called `all` uses `--asset all`. `--all` is the fleet selector and cannot be combined with `--asset` or `--group`. First enrollment uses USB or a dedicated emulator. Seedvault's connection command verifies a TLS wireless endpoint against the enrolled physical identity before saving it alongside USB.
 

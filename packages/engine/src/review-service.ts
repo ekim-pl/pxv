@@ -19,6 +19,8 @@ import type { EvidenceReader } from './evidence-service.js';
 import type { ProjectOwnership, DeviceOwnership } from './ownership.js';
 import type { Journal } from './journal.js';
 import { checkLanguageDelta } from './setup-evidence.js';
+import type { VpnProofVerifier, VpnProofSession } from './vpn-proof-verifier.js';
+import { pausedVpnAction, checkVpnDelta } from './vpn-evidence.js';
 export class ReviewService {
   constructor(
     readonly project: ProjectContext,
@@ -31,6 +33,7 @@ export class ReviewService {
     readonly devices: DeviceOwnership,
     readonly journal: Journal,
     readonly clock: () => Date,
+    readonly vpnProofs: VpnProofVerifier,
   ) {}
   submit(planId: string, reviewSummary: string, operator: string): Promise<RunRecord> {
     return this.projects.run(() => this.submitOwned(planId, reviewSummary, operator));
@@ -134,6 +137,11 @@ export class ReviewService {
     baseline: DeviceObservation,
   ): number {
     const paused = previous.plan.actions[run.cursor];
+    const vpn = pausedVpnAction(previous, run);
+    if (vpn) {
+      checkVpnDelta(expected, baseline, vpn);
+      return run.cursor;
+    }
     if (run.manualGate.startsWith('language:') && paused?.kind === 'language') {
       if (run.manualGate !== `language:${paused.profileId}`)
         throw new Error('Manual language checkpoint is malformed');
@@ -163,15 +171,23 @@ export class ReviewService {
     baseline: DeviceObservation,
   ): Promise<CapabilityEvidenceRef[]> {
     const references = run.capabilityEvidence ?? [];
+    const vpn = this.vpnProofs.session({
+      planId: previous.plan.id,
+      planDigest: previous.plan.digest,
+      policyDigest: previous.plan.policyDigest,
+      observation: baseline,
+    });
     for (const reference of references)
-      await this.checkCapabilityProof(reference, previous.plan.policyDigest, baseline);
+      await this.checkCapabilityProof(reference, previous.plan.policyDigest, baseline, vpn);
     return references;
   }
   private async checkCapabilityProof(
     reference: CapabilityEvidenceRef,
     policyDigest: string,
     baseline: DeviceObservation,
+    vpn: VpnProofSession,
   ): Promise<void> {
+    if (reference.kind === 'vpn-settings') return vpn.assert(reference);
     const proof = await this.store.get<{
       policyDigest: string;
       configurationDigest: string;

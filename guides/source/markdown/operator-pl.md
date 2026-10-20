@@ -112,7 +112,15 @@ Przy automatycznej inicjalizacji przymusu `ownerCredentialRef` musi wskazywać *
 
 Oczekująca operacja zwraca `pauseReason` i nazwę następnego etapu. Wykonaj wskazaną czynność we właściwym profilu. Konta, importy, MFA i zgody Androida konfiguruj prywatnie przed potwierdzeniem.
 
-Konfiguracja aplikacji poprzedza wymuszenie VPN. Zmiana always-on lub blokady ruchu bez VPN, bez pasującej receptury, zatrzymuje się na `app_setup`: skonfiguruj VPN w tym profilu, zatwierdź zgodę Androida i sprawdź zamierzone połączenie przed wznowieniem. Osobne etapy profili wymagają osobnych, nowych potwierdzeń.
+Konfiguracja aplikacji poprzedza weryfikację VPN. Zmieniona konfiguracja bez odpowiedniej recepty może najpierw zatrzymać się na `app_setup`, aby prywatnie skonfigurować konto i zgodę Androida. Następnie każdy profil zatrzymuje się na `vpn_settings`, także gdy zapisane ustawienia są zgodne lub VPN jest wyłączony. W podanym profilu otwórz ustawienia VPN Androida i ustaw lub sprawdź wskazaną aplikację, stale włączony VPN oraz blokowanie połączeń bez VPN. Zapisz `device attest --check vpn_settings --asset "$ASSET" --operator "$OPERATOR"` ze ścieżką projektu i wznów przebieg. Każdy profil wymaga osobnego potwierdzenia. Dowód ma zakres `operator-witnessed-settings`: jest potwierdzeniem operatora, a nie automatycznym pomiarem bieżącego egzekwowania VPN. Wymagane próby sieciowe pozostają oddzielne.
+
+Stan VPN deklaruj wyłącznie w bloku `vpn` polityki. Usuń wpisy secure-setting dla
+`always_on_vpn_app` i `always_on_vpn_lockdown`; duplikaty są odrzucane także przy
+zgodnych wartościach. Zakończone potwierdzenie wymaga zachowanej zatwierdzonej
+czynności, przebiegu i audytowanego potwierdzenia operatora. Odnowienie przeglądu
+zachowuje dowody tylko przez zweryfikowaną historię. Przy brakujących lub zmienionych
+danych zachowaj je do inspekcji i przygotuj nowy zatwierdzony przebieg konfiguracji;
+nie poprawiaj ręcznie plików dowodowych.
 
 Receptury są przypisane do konkretnej kompilacji Androida oraz wersji i podpisującego aplikację. Nieobsługiwane ekrany i importy pozostają ręczne lub wspomagane. Bez zaakceptowanego adaptera wyboru pliku wykonaj cały import zatwierdzoną prywatną metodą; plik tymczasowy nie czeka na późniejsze wskazanie. Nie umieszczaj wrażliwej konfiguracji w publicznym tekście receptury.
 
@@ -124,7 +132,9 @@ pxv agent resume --project-root "$P" --run RUN_ID
 
 Jeśli etap ma inną nazwę, zastąp `app_setup` właściwą. Przy `language:PROFIL` zmień język na telefonie i wznów operację; nie twórz potwierdzenia języka. Kolejność prywatna to sprawdzenie zwykłych blokad wszystkich profili, język docelowy, a następnie opcjonalny przymus. Obie wartości przymusu muszą różnić się od wszystkich rzeczywistych zwykłych danych blokady. Nigdy nie uruchamiaj wymazania w ramach testu.
 
-Po wygaśnięciu przeglądu `agent refresh --run RUN_ID` przygotowuje pozostałe czynności do nowego zatwierdzenia. Zapisz nowe dokładne podsumowanie i przekaż nowy plan do `agent execute`. Odświeżenie nie zatwierdza zmian ani nie odzyskuje niepewnej, przerwanej operacji.
+Po wygaśnięciu przeglądu na celowym ręcznym punkcie kontrolnym `agent refresh --run RUN_ID` przygotowuje pozostałe czynności do nowego zatwierdzenia. Zapisz nowe dokładne podsumowanie i przekaż nowy plan do `agent execute`. Odświeżenie nie zatwierdza zmian ani nie odzyskuje niepewnej, przerwanej operacji.
+
+Po konfiguracji atestacja może korzystać z wygasłego planu wykonania, jeśli pomiary mają najwyżej 15 minut, a stan telefonu nie zmienił się. Nieaktualne pomiary odbioru wymagają nowej konfiguracji po przeglądzie planu. Terminal Dockera przekazuje pytania i postęp na bieżąco; tryb JSON wymaga jawnego potwierdzenia nieinteraktywnego. Nakładka montuje wskazane pliki zewnętrzne i katalogi wynikowe, a bezpośrednie USB zachowuje dodatkowe grupy operatora. Instrukcja Dockera opisuje ponowne utworzenie usługi ADB i MCP uruchamiane bezpośrednio w kontenerze.
 
 ## 7. Sprawdź telefon i przekaż go odbiorcy
 

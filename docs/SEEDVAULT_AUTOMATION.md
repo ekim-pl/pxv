@@ -4,6 +4,7 @@ This is an optional experimental recovery module. Community disables new recover
 operations through `features.seedvault: false`; a reviewed recovery-enabled product
 can opt in. Historical reports, connection listing/disconnection and inspected cleanup
 remain available. Ordinary provisioning does not construct the recovery services.
+The personal tool checks the effective resource-root product before creating projects, copying backups or invoking device commands, including dry-runs. Disabled products refuse early; help remains available.
 
 The [personal recovery tool](#personal-recovery-tool) coordinates one person's phone and all persistent full Android users. Run it from the matching source checkout. It uses reviewed PXV installation/provisioning, temporary TLS wireless ADB while a USB drive occupies the phone's port, and supervised Seedvault UI operations. It supports rebuilding the original phone with its existing project or enrolling a replacement in a fresh project.
 

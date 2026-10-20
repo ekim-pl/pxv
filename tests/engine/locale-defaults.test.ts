@@ -1,3 +1,4 @@
+import { executeWithWitnesses } from './fixtures.js';
 import { toPolicyDocument } from '@pxv/contracts';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -66,10 +67,10 @@ describe('per-user default locales', () => {
   async function ownerCheckpoint() {
     const prepared = await engine.prepare(target);
     const run = await engine.submit(prepared.plan.id, prepared.reviewSummary, 'Operator');
-    expect((await engine.execute(run.id)).manualGate).toBe('normal_credentials');
+    expect((await executeWithWitnesses(engine, run.id)).manualGate).toBe('normal_credentials');
     expect(requests).toEqual([]);
     await engine.attest(target, 'normal_credentials', 'Operator');
-    expect((await engine.execute(run.id)).manualGate).toBe('language:admin');
+    expect((await executeWithWitnesses(engine, run.id)).manualGate).toBe('language:admin');
     return run;
   }
 
@@ -78,7 +79,7 @@ describe('per-user default locales', () => {
     expect(requests).toEqual([{ userId: 0, locale: 'de-DE' }]);
     expect((await engine.state(device.assetId)).languageReady).toBe(false);
     port.observation.profiles[0]!.language = 'de-DE';
-    expect((await engine.execute(run.id)).manualGate).toBe('language:work');
+    expect((await executeWithWitnesses(engine, run.id)).manualGate).toBe('language:work');
     expect(requests).toEqual([
       { userId: 0, locale: 'de-DE' },
       { userId: 10, locale: 'sr-Latn-RS' },
@@ -86,7 +87,7 @@ describe('per-user default locales', () => {
     expect((await engine.state(device.assetId)).languageReady).toBe(false);
     await expect(engine.attest(target, 'duress', 'Operator')).rejects.toThrow('Contradictory');
     port.observation.profiles[1]!.language = 'sr-Cyrl-RS';
-    expect((await engine.execute(run.id)).manualGate).toBe('language:work');
+    expect((await executeWithWitnesses(engine, run.id)).manualGate).toBe('language:work');
     expect(requests).toHaveLength(2);
     now = new Date(now.getTime() + 16 * 60_000);
     port.observation.profiles[1]!.language = 'sr-Latn-RS';
@@ -95,10 +96,10 @@ describe('per-user default locales', () => {
       expect.objectContaining({ kind: 'manual', capability: 'duress' }),
     ]);
     const next = await engine.submit(refreshed.plan.id, refreshed.reviewSummary, 'Operator');
-    expect((await engine.execute(next.id)).manualGate).toBe('duress');
+    expect((await executeWithWitnesses(engine, next.id)).manualGate).toBe('duress');
     expect((await engine.state(device.assetId)).languageReady).toBe(true);
     await engine.attest(target, 'duress', 'Operator');
-    await engine.execute(next.id);
+    await executeWithWitnesses(engine, next.id);
     for (const check of ['verified_boot', 'operator_signoff', 'recipient_acceptance'])
       await engine.attest(target, check, 'Operator');
     expect((await engine.readiness(target)).ready).toBe(true);
@@ -115,7 +116,7 @@ describe('per-user default locales', () => {
       port.observation.profiles[0]!.language = 'de-DE';
       if (drift === 'permission') port.observation.profiles[1]!.permissions[0]!.granted = false;
       else port.observation.profiles[1]!.language = 'fr-FR';
-      const result = await engine.execute(run.id);
+      const result = await executeWithWitnesses(engine, run.id);
       expect(result.status).toBe('needs-inspection');
       expect(result.error).toContain('Other live requirements changed');
       expect(requests).toHaveLength(1);

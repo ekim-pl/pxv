@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { isIP } from 'node:net';
 import {
   parseDocument,
+  validProbeEndpoint,
   type AndroidUserIdentity,
   type RecoveryObligation,
   type SelectedTarget,
@@ -35,8 +36,7 @@ export interface ProbeOptions extends OperationOptions {
 }
 
 function validateRequest(request: NetworkProbeRequest): void {
-  const endpoint = new URL(request.endpoint);
-  if (endpoint.protocol !== 'https:' || endpoint.username || endpoint.password || endpoint.hash)
+  if (!validProbeEndpoint(request.endpoint))
     throw new AdapterError('Network probe requires an approved HTTPS endpoint');
   if (request.expectedEgressCidrs.length === 0)
     throw new AdapterError('Approved expected egress CIDRs are required');

@@ -1,6 +1,7 @@
 import {
   buildReadinessRequirements,
   finalSetupActions,
+  vpnSettingsRequirement,
   profileLocale,
   type DeviceTarget,
   type ExecutionPolicy,
@@ -31,6 +32,10 @@ export function renderProjectGuide(
   const requirements = buildReadinessRequirements(policy, kind)
     .map((requirement) => `- \`${requirement.id}\`: ${requirement.instructions[locale]}`)
     .join('\n');
+  const vpn = policy.profiles
+    .map((profile) => `- ${text(vpnSettingsRequirement(profile).instructions[locale])}`)
+    .join('\n');
+  const vpnSteps = `${product.command} device attest --asset ASSET --check vpn_settings --operator OPERATOR --yes --project-root PROJECT\n${product.command} agent resume --run RUN --yes --project-root PROJECT`;
   const phases = finalSetupActions(policy)
     .map((action) =>
       action.kind === 'language'
@@ -41,7 +46,7 @@ export function renderProjectGuide(
     )
     .map((phase, index) => `${index + 1}. \`${phase}\``)
     .join('\n');
-  return `# ${text(product.name)} — ${text(policy.name)}\n\n${pl ? 'Profile wybranej polityki' : 'Selected policy profiles'}\n\n${profiles}\n\n${pl ? 'Wymagane kontrole' : 'Required checks'} (${kind})\n\n${requirements}\n\n${pl ? 'Kolejność prywatnej konfiguracji' : 'Private setup sequence'}\n\n${phases || (pl ? 'Brak dodatkowych etapów prywatnej konfiguracji.' : 'No additional private setup stages.')}\n\n${pl ? 'Hasła, MFA i dane odzyskiwania wpisuje prywatnie odbiorca. Nigdy nie testuj destrukcyjnego kodu przymusu.' : 'The recipient enters credentials, MFA and recovery material privately. Never test destructive duress activation.'}\n`;
+  return `# ${text(product.name)} — ${text(policy.name)}\n\n${pl ? 'Profile wybranej polityki' : 'Selected policy profiles'}\n\n${profiles}\n\n${pl ? 'Wymagane kontrole' : 'Required checks'} (${kind})\n\n${requirements}\n\n${pl ? 'Potwierdzenia ustawień VPN' : 'VPN Settings checkpoints'}\n\n${vpn}\n\n\`\`\`sh\n${vpnSteps}\n\`\`\`\n\n${pl ? 'Kolejność prywatnej konfiguracji' : 'Private setup sequence'}\n\n${phases || (pl ? 'Po potwierdzeniach VPN przejdź do wymaganych kontroli odbioru.' : 'After the VPN checkpoints, continue with the required acceptance checks.')}\n\n${pl ? 'Hasła, MFA i dane odzyskiwania wpisuje prywatnie odbiorca. Nigdy nie testuj destrukcyjnego kodu przymusu.' : 'The recipient enters credentials, MFA and recovery material privately. Never test destructive duress activation.'}\n`;
 }
 
 export function guidedNextSteps(
