@@ -5,6 +5,7 @@ import { CommandRunner } from '@pxv/runtime';
 import { readFile } from 'node:fs/promises';
 import type { ProjectCliContext } from './arguments.js';
 import { confirmation } from './arguments.js';
+import { exportInventoryLabel } from './inventory-label.js';
 
 async function checkFastboot(
   context: ProjectCliContext,
@@ -88,6 +89,10 @@ export async function inventoryCommand(context: ProjectCliContext): Promise<numb
     return 0;
   }
   if (command === 'enroll') return await enroll(context);
+  if (command === 'print-label') {
+    await exportInventoryLabel(context);
+    return 0;
+  }
   if (command === 'import') {
     await confirmation(io, 'Import reviewed enrollment data?', flag('yes'));
     await saveInventory(project, validateInventory(parseDocument(await readFile(value('file'), 'utf8'))));

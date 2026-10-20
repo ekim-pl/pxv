@@ -183,6 +183,8 @@ export async function writeHandoff(
 }
 
 export { writeCredentialInsert } from './credential-insert.js';
+export { renderDeviceBoxCard, writeDeviceBoxCard } from './device-box-card.js';
+export { renderAssetLabel, writeAssetLabel, assetLabelMonth, type AssetLabelInput } from './asset-label.js';
 export {
   resolveInsertMetadata,
   renderBlankInsertMetadata,

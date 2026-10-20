@@ -5,7 +5,7 @@ import {
   inspectRegistryBinding,
   readRegistryGeneration,
 } from '@pxv/engine';
-import { resolveInsertMetadata, writeCredentialInsert } from '@pxv/guides';
+import { resolveInsertMetadata, writeCredentialInsert, writeDeviceBoxCard } from '@pxv/guides';
 import { readEncryptedRegistry, SqliteStore, type Store } from '@pxv/runtime';
 import type { ProjectCliContext } from './arguments.js';
 import { registryOutputPath } from './registry-output.js';
@@ -31,7 +31,8 @@ async function writeInsert(
     await readRegistryGeneration(store, saved),
     context.project.inventory,
   );
-  await writeCredentialInsert(record, output, {
+  const writer = context.command === 'print-card' ? writeDeviceBoxCard : writeCredentialInsert;
+  await writer(record, output, {
     locale,
     model: device.model,
     exportedAt: new Date().toISOString(),

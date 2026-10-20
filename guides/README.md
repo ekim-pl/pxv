@@ -25,6 +25,13 @@ The shared insert is a manual template; ordinary guide rebuilding does not read 
 
 Use `quickstart-LOCALE-a4-fold.pdf` and `credentials-LOCALE-a4-fold.pdf` (`LOCALE` is `en` or `pl`). Print **landscape A4, single-sided, at 100% / actual size**; disable fit-to-page and booklet mode. Check the marked 50 mm scale before cutting. Each sheet holds four 136 × 100 mm slips. Cut the thin solid lines, fold the dashed center lines with printing inside, and stack slips by their printed numbers. Each folded slip is **68 × 100 mm**. Unused panel positions remain blank. Quickstart, ordinary credentials and destructive credentials start on separate A4 sheets; seal erasure slips separately. Copy entire profile/account sections as needed. Check the QA manifest for the actual panel and sheet counts. A5 packet office/bleed files are obsolete and removed by PDF rebuilds.
 
+For additional packaging formats, see [device box cards and asset stickers](../docs/PHONE_REGISTRY.md#device-box-cards-and-asset-stickers).
+`registry print-card` produces native 68 × 100 mm credential cards, with additional
+cards for overflow. `inventory print-label` produces a native 40 × 15 mm PDF and a
+matching 300 DPI PNG containing asset ID, phone serial and `YYYYMM`. Both support
+English and Polish; print their PDFs at actual size. These exports use separate
+private destinations and do not personalize the shared guide files.
+
 ## Build HTML and PDF
 
 Rebuild from the matching source checkout with the pinned developer dependencies installed:

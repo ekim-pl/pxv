@@ -26,6 +26,9 @@ one-person test with five profiles, use the [five-profile acceptance procedure](
 Attach the phone-sized quick start and accepted handoff report to every device. Complete the
 credential insert privately, or use `pxv registry print-insert` for a prefilled private
 A4 cut-and-fold PDF from the encrypted registry. Match the asset label and seal it for the recipient.
+For exact-size packaging inserts, use `pxv registry print-card` for 68 × 100 mm
+credential cards and `pxv inventory print-label` for a 40 × 15 mm asset sticker in
+PDF and PNG. See [device box inserts](docs/PHONE_REGISTRY.md#device-box-cards-and-asset-stickers).
 Build with `pxv guides rebuild --policy FILE --output-dir DIRECTORY --chromium PATH`
 to adapt the phone-sized booklet and blank credential/recovery sheets to the installation's
 GrapheneOS user profiles. Profile details describe the intended policy; compare

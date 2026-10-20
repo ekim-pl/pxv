@@ -189,6 +189,62 @@ the encrypted database and its entire project state are rolled back together, th
 offline system cannot detect that rollback; compare with separately retained backup
 revision records and reconcile the restored copy before using it.
 
+## Device box cards and asset stickers
+
+Generate an exact-size card from the latest saved record for one enrolled phone:
+
+```sh
+pxv registry print-card --project-root DIRECTORY --asset PHONE \
+  --output PRIVATE_DIRECTORY/card.pdf --locale en --chromium /absolute/path/to/chromium
+```
+
+Each PDF page is **68 × 100 mm**, ready for printing at **100% / actual size**.
+The generator targets one card and adds cards when the contents need more space.
+It includes the canonical hardware serial, device duress PIN/password, device and
+profile phone numbers, every profile's Session ID and Oblivion notification-wipe
+key. Ordinary unlock and Proton VPN credentials are omitted. Profile identity,
+effective credential states, update/confirmation times, destructive-use warnings,
+and missing-value notices remain visible. Identical metadata is shared across
+consecutive fields in the same profile. Continuation cards repeat the phone serial
+and relevant profile/field identity, with card numbering. Long values wrap and
+continue without truncation or shrinking the credential font.
+
+This command uses the same hidden unlock prompt or `--passphrase-file`, read-only
+registry loading, project identity, revision-anchor and effective binding checks as
+`registry print-insert`. It works offline without connecting to the phone.
+
+Generate a small asset sticker directly from inventory, without a registry unlock:
+
+```sh
+pxv inventory print-label --project-root DIRECTORY --asset PHONE \
+  --output PRIVATE_DIRECTORY/label --date 202610 --locale en \
+  --chromium /absolute/path/to/chromium
+```
+
+The extensionless output basename creates **both** `label.pdf` and `label.png`.
+The PDF contains one **40 × 15 mm** page with three lines: asset ID, canonical phone
+serial, and date. The matching PNG is rasterized from that PDF at **300 DPI**
+(473 × 178 pixels, with pixel rounding). `--date` accepts `YYYYMM` with month
+`01`–`12`; omit it to use the machine's local generation month. Supply the original
+month explicitly for a reproducible reprint. Poppler's `pdftoppm` is required on
+PATH, or select it with `--pdftoppm /absolute/path/to/pdftoppm`. Oversized identities
+are rejected instead of clipped, truncated or reduced below the fixed print font.
+
+Both generators support `--locale en|pl` (English by default), require one exact
+enrolled `--asset`, and run only on the local host. No handoff record is required.
+Print the PDF at actual size, without fit-to-page. Output destinations follow the
+private registry export rules: a new file under project `secrets` or outside the
+project and product resources, a `0700` parent directory and `0600` files, with no
+symlinks or overwriting. Sticker outputs are both rendered before publication;
+failure to publish either removes any newly published partner without changing
+existing files. Temporary HTML, PDFs and isolated browser profiles are removed
+after success or failure. Only export metadata reaches the console. A fixed,
+CSP-hashed layout script measures text; supplied values remain escaped text and
+the renderer disables background networking.
+
+These are separate commands; existing A4 cut-and-fold inserts and shared guide
+rebuilds retain their current behavior.
+
 ## Prefilled private phone-sized insert
 
 Export the latest saved record for one enrolled phone as a recipient PDF:

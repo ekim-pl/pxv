@@ -20,7 +20,11 @@ vi.mock('@pxv/runtime', async (original) => {
 });
 vi.mock('@pxv/guides', async (original) => {
   const actual = await original<typeof Guides>();
-  return { ...actual, writeCredentialInsert: vi.fn<typeof actual.writeCredentialInsert>() };
+  return {
+    ...actual,
+    writeCredentialInsert: vi.fn<typeof actual.writeCredentialInsert>(),
+    writeDeviceBoxCard: vi.fn<typeof actual.writeDeviceBoxCard>(),
+  };
 });
 const runtime = await importModule<typeof Runtime>('@pxv/runtime', import.meta.url);
 const guides = await importModule<typeof Guides>('@pxv/guides', import.meta.url);
@@ -290,3 +294,42 @@ for (const locale of ['en', 'pl']) {
     expect(JSON.parse(output[0]!)).toMatchObject({ exported: true, assetId: device.assetId });
   });
 }
+
+for (const locale of ['en', 'pl']) {
+  it(`exports a native card in ${locale} using the authenticated read-only registry path`, async () => {
+    const selected = { ...change({ locale }), command: 'print-card' };
+    await assertReleased(selected);
+    expect(guides.writeDeviceBoxCard).toHaveBeenCalledOnce();
+    expect(guides.writeCredentialInsert).not.toHaveBeenCalled();
+    expect(vi.mocked(guides.writeDeviceBoxCard).mock.calls[0]![0].canonicalSerial).toBe(
+      device.canonicalSerial,
+    );
+    expect(vi.mocked(guides.writeDeviceBoxCard).mock.calls[0]![2]).toMatchObject({
+      locale,
+      chromiumExecutable: '/local/chromium',
+    });
+  });
+}
+
+it('routes registry print-card through the CLI and refuses a missing anchor before card rendering', async () => {
+  await runCli(
+    args(
+      'registry',
+      'print-card',
+      '--asset',
+      device.assetId,
+      '--output',
+      join(project.root, 'secrets/card.pdf'),
+      '--chromium',
+      '/local/chromium',
+    ),
+    io,
+  );
+  expect(guides.writeDeviceBoxCard).toHaveBeenCalledOnce();
+  vi.clearAllMocks();
+  const store = await runtime.SqliteStore.open(join(project.root, 'state/pxv.sqlite3'));
+  await store.delete('registry-anchor', project.config.id);
+  await store.close();
+  await assertReleased({ ...context, command: 'print-card' }, 'retained state');
+  expect(guides.writeDeviceBoxCard).not.toHaveBeenCalled();
+});

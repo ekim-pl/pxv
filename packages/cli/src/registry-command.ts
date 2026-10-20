@@ -266,12 +266,21 @@ async function unlockedCommand(
 
 export async function registryCommand(context: ProjectCliContext): Promise<number> {
   if (
-    !['init', 'list', 'show', 'history', 'update', 'reveal', 'print-insert', 'rekey', 'reconcile'].includes(
-      context.command ?? '',
-    )
+    ![
+      'init',
+      'list',
+      'show',
+      'history',
+      'update',
+      'reveal',
+      'print-insert',
+      'print-card',
+      'rekey',
+      'reconcile',
+    ].includes(context.command ?? '')
   )
     throw new Error('Unknown registry command');
-  if (context.command === 'print-insert') {
+  if (context.command === 'print-insert' || context.command === 'print-card') {
     await exportRegistryInsert(context);
     return 0;
   }

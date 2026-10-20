@@ -50,6 +50,8 @@ export const stringFlags = [
   'new-passphrase-file',
   'record-revision',
   'private-insert-output',
+  'date',
+  'pdftoppm',
 ] as const;
 export const booleanFlags = [
   'help',
@@ -104,6 +106,7 @@ function command(
   return { name, description, flags: [...common, ...executionFlags(name), ...flags], required, ...options };
 }
 function executionFlags(name: string): readonly Flag[] {
+  if (name === 'inventory print-label') return ['execution'];
   if (['extension install', 'extension update'].includes(name)) return ['execution'];
   const section = name.split(' ')[0];
   if (['help', 'version', 'guides', 'host', 'internal-worker', 'mcp'].includes(section ?? '')) return [];
@@ -119,6 +122,12 @@ const commands: readonly CommandDefinition[] = [
   command('policy lock', 'Record the current policy and extension lock.', ['yes']),
   command('inventory list', 'List enrolled targets.'),
   command('inventory import', 'Import explicitly reviewed enrollment.', ['file', 'yes'], ['file']),
+  command(
+    'inventory print-label',
+    'Export an exact 40 x 15 mm asset sticker as a private PDF and 300 DPI PNG (EN/PL); output is an extensionless basename.',
+    ['asset', 'output', 'chromium', 'locale', 'date', 'pdftoppm'],
+    ['asset', 'output', 'chromium'],
+  ),
   command(
     'inventory enroll',
     'Verify and enroll one phone.',
@@ -232,9 +241,18 @@ const commands: readonly CommandDefinition[] = [
     ['asset', 'output', 'locale'],
     ['asset', 'output'],
   ),
-  ...['init', 'list', 'show', 'history', 'update', 'reveal', 'print-insert', 'rekey', 'reconcile'].map(
-    (name) => registryCommand(name),
-  ),
+  ...[
+    'init',
+    'list',
+    'show',
+    'history',
+    'update',
+    'reveal',
+    'print-insert',
+    'print-card',
+    'rekey',
+    'reconcile',
+  ].map((name) => registryCommand(name)),
   ...['install', 'update', 'list', 'inspect', 'remove', 'invoke', 'policy', 'guide', 'adapter'].map((name) =>
     extensionCommand(name),
   ),
@@ -262,6 +280,7 @@ function registryCommand(name: string): CommandDefinition {
     update: ['asset', 'file', 'record-revision', 'yes'],
     reveal: ['asset', 'output', 'record-revision'],
     'print-insert': ['asset', 'output', 'locale', 'chromium'],
+    'print-card': ['asset', 'output', 'locale', 'chromium'],
     rekey: ['new-passphrase-file'],
     reconcile: ['yes'],
   };
@@ -271,12 +290,15 @@ function registryCommand(name: string): CommandDefinition {
     update: ['asset', 'file', 'record-revision'],
     reveal: ['asset', 'output'],
     'print-insert': ['asset', 'output', 'chromium'],
+    'print-card': ['asset', 'output', 'chromium'],
   };
   return command(
     `registry ${name}`,
     name === 'print-insert'
       ? 'Export compact profile-grouped credentials to a private A4 cut-and-fold PDF; typically two sheets, with overflow as needed (EN/PL).'
-      : 'Access the encrypted local phone registry.',
+      : name === 'print-card'
+        ? 'Export destructive credentials, phone numbers and Session IDs to private 68 x 100 mm cards, with overflow as needed (EN/PL).'
+        : 'Access the encrypted local phone registry.',
     ['passphrase-file', ...(flags[name] ?? [])],
     required[name],
   );

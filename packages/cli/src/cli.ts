@@ -120,6 +120,7 @@ async function executionMode(context: CliContext): Promise<number | undefined> {
   return undefined;
 }
 function validateExecutionMode(context: CliContext, execution: string): void {
+  assertLocalLabel(context, execution);
   const { dockerMode } = context;
   if (dockerMode !== undefined && dockerMode !== 'direct' && dockerMode !== 'host-adb')
     throw new Error('Invalid Docker worker mode');
@@ -130,6 +131,12 @@ function validateExecutionMode(context: CliContext, execution: string): void {
   };
   const reason = hostOnly[context.section ?? ''];
   if (reason && (execution === 'docker' || dockerMode)) throw new Error(reason);
+}
+
+function assertLocalLabel(context: CliContext, execution: string): void {
+  if (context.section !== 'inventory' || context.command !== 'print-label') return;
+  if (execution === 'docker' || context.dockerMode)
+    throw new Error('Asset label export requires local host execution');
 }
 
 function assertLocalCollection(context: CliContext, execution: string): void {

@@ -168,6 +168,26 @@
       "mode": "production",
       "finding": "Unused export: tools/lib/personal-workflows.mjs#restoreSources",
       "reason": "Export consumed by isolated unit and integration tests in the development graph; production use is internal to this module."
+    },
+    {
+      "mode": "production",
+      "finding": "Unused export: packages/guides/src/asset-label.ts#renderAssetLabel",
+      "reason": "Requested public pure-rendering API, exercised directly by development tests; production CLI uses the corresponding file writer."
+    },
+    {
+      "mode": "production",
+      "finding": "Unused export: packages/guides/src/device-box-card.ts#renderDeviceBoxCard",
+      "reason": "Requested public pure-rendering API, exercised directly by development tests; production CLI uses the corresponding file writer."
+    },
+    {
+      "mode": "production",
+      "finding": "Unused export: packages/guides/src/index.ts#renderDeviceBoxCard",
+      "reason": "Requested public pure-rendering API, exercised directly by development tests; production CLI uses the corresponding file writer."
+    },
+    {
+      "mode": "production",
+      "finding": "Unused export: packages/guides/src/index.ts#renderAssetLabel",
+      "reason": "Requested public pure-rendering API, exercised directly by development tests; production CLI uses the corresponding file writer."
     }
   ],
   "requireContexts": {
