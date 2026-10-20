@@ -24,7 +24,7 @@ function exactTarget(context: ApplicationCliContext): SelectedTarget {
 async function document(path: string): Promise<Record<string, unknown>> {
   const parsed: unknown = parseDocument((await readBounded(path, 2 * 1024 * 1024)).toString('utf8'));
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed))
-    throw new Error('Expected a Seedvault JSON/YAML object');
+    throw new Error('Expected a Seedvault JSON object');
   return parsed as Record<string, unknown>;
 }
 

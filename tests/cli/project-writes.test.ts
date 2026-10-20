@@ -72,30 +72,30 @@ describe('reviewed project file commits', () => {
       runCli(args(['extension', 'policy', '--extension', lock.id, '--contribution', 'policy.json']), {
         ...io,
         confirm: async () => {
-          await writeFile(join(projectRoot, 'policy.yaml'), changed);
+          await writeFile(join(projectRoot, 'policy.json'), changed);
           return true;
         },
       }),
     ).rejects.toThrow('Project file changed');
-    expect(await readFile(join(projectRoot, 'policy.yaml'), 'utf8')).toBe(changed);
+    expect(await readFile(join(projectRoot, 'policy.json'), 'utf8')).toBe(changed);
   });
   it('rejects a stale policy target when project selection changes during review', async () => {
     const configPath = join(projectRoot, 'pxv.project.json');
     const config = JSON.parse(await readFile(configPath, 'utf8')) as Record<string, unknown>;
     const pinned = { ...config, extensions: [lock] };
     await writeFile(configPath, JSON.stringify(pinned));
-    const before = await readFile(join(projectRoot, 'policy.yaml'), 'utf8');
+    const before = await readFile(join(projectRoot, 'policy.json'), 'utf8');
     vi.spyOn(ExtensionManager.prototype, 'readContribution').mockImplementation(contribution);
     await expect(
       runCli(args(['extension', 'policy', '--extension', lock.id, '--contribution', 'policy.json']), {
         ...io,
         confirm: async () => {
-          await writeFile(configPath, JSON.stringify({ ...pinned, policyFile: 'other.yaml' }));
+          await writeFile(configPath, JSON.stringify({ ...pinned, policyFile: 'other.json' }));
           return true;
         },
       }),
     ).rejects.toThrow('Project source changed');
-    expect(await readFile(join(projectRoot, 'policy.yaml'), 'utf8')).toBe(before);
+    expect(await readFile(join(projectRoot, 'policy.json'), 'utf8')).toBe(before);
   });
 
   it('bounds external extension input before invocation or application initialization', async () => {

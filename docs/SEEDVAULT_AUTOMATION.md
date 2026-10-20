@@ -124,7 +124,7 @@ restore. Without finalization, disable debugging physically and make no custody 
 
 ## Qualified adapter format
 
-The authoritative [contracts](../packages/contracts/src/seedvault.ts) validate JSON/YAML definitions strictly. An adapter contains:
+The authoritative [contracts](../packages/contracts/src/seedvault.ts) validate JSON definitions strictly. An adapter contains:
 
 | Field | Required evidence or behavior |
 | --- | --- |

@@ -385,7 +385,7 @@ describe('production dependency wiring and evidence boundaries', () => {
       pinRef: 'duress-pin',
       passwordRef: 'duress-password',
     };
-    await writeFile(join(projectRoot, 'policy.yaml'), JSON.stringify(toPolicyDocument(policy)));
+    await writeFile(join(projectRoot, 'policy.json'), JSON.stringify(toPolicyDocument(policy)));
     const app = await openApp();
     expect(mocks.credentialConstruct).not.toHaveBeenCalled();
     const signal = new AbortController().signal;
@@ -425,7 +425,7 @@ describe('production dependency wiring and evidence boundaries', () => {
       redirectHosts: [],
     };
     policy.repositories = [repository];
-    await writeFile(join(projectRoot, 'policy.yaml'), JSON.stringify(toPolicyDocument(policy)));
+    await writeFile(join(projectRoot, 'policy.json'), JSON.stringify(toPolicyDocument(policy)));
     const configured = await openApp();
     const approved = { ...artifact, repositoryId: 'trusted', url: 'https://example.org/repo/app.apk' };
     delete approved.path;

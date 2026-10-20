@@ -1,4 +1,3 @@
-import { parseDocument as parseYamlDocument } from 'yaml';
 import { z } from 'zod';
 import { canonicalLocale } from './locales.js';
 import { validateEgressCidr } from './network-address.js';
@@ -792,16 +791,86 @@ export const handoffRecordSchema = z
       });
   });
 
-/** Parse JSON or YAML while rejecting duplicate keys, aliases and multiple documents. */
+function rejectDuplicateJsonKeys(source: string): void {
+  let offset = 0;
+  const whitespace = (): void => {
+    while (offset < source.length && /[\u0009\u000a\u000d\u0020]/u.test(source[offset] ?? '')) offset++;
+  };
+  const string = (): string => {
+    const start = offset++;
+    while (offset < source.length) {
+      const character = source[offset++];
+      if (character === '\\') offset++;
+      else if (character === '"') break;
+    }
+    return JSON.parse(source.slice(start, offset)) as string;
+  };
+  const value = (): void => {
+    whitespace();
+    const character = source[offset];
+    if (character === '"') {
+      string();
+      return;
+    }
+    if (character === '{') {
+      offset++;
+      whitespace();
+      if (source[offset] === '}') {
+        offset++;
+        return;
+      }
+      const keys = new Set<string>();
+      while (true) {
+        whitespace();
+        const key = string();
+        if (keys.has(key)) throw new Error('Invalid configuration: Duplicate JSON object key');
+        keys.add(key);
+        whitespace();
+        offset++; // JSON.parse has already validated the colon.
+        value();
+        whitespace();
+        if (source[offset] === ',') {
+          offset++;
+          continue;
+        }
+        offset++; // JSON.parse has already validated the closing brace.
+        return;
+      }
+    }
+    if (character === '[') {
+      offset++;
+      whitespace();
+      if (source[offset] === ']') {
+        offset++;
+        return;
+      }
+      while (true) {
+        value();
+        whitespace();
+        if (source[offset] === ',') {
+          offset++;
+          continue;
+        }
+        offset++; // JSON.parse has already validated the closing bracket.
+        return;
+      }
+    }
+    while (offset < source.length && !/[\u0009\u000a\u000d\u0020,\]}]/u.test(source[offset] ?? '')) offset++;
+  };
+
+  value();
+}
+
+/** Parse strict JSON configuration and reject duplicate object keys. */
 export function parseDocument(source: string): unknown {
-  const document = parseYamlDocument(source, { uniqueKeys: true, strict: true, stringKeys: true });
-  if (document.errors.length > 0)
-    throw new Error(`Invalid configuration: ${document.errors.map((error) => error.message).join('; ')}`);
-  if (document.warnings.length > 0)
-    throw new Error(
-      `Unsupported configuration: ${document.warnings.map((warning) => warning.message).join('; ')}`,
-    );
-  return document.toJS({ maxAliasCount: 0 });
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(source) as unknown;
+  } catch (error) {
+    throw new Error(`Invalid configuration: ${error instanceof Error ? error.message : 'Malformed JSON'}`);
+  }
+  rejectDuplicateJsonKeys(source);
+  return parsed;
 }
 
 function errorProfile(value: unknown, path: readonly PropertyKey[]): unknown {

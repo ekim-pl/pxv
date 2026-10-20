@@ -21,9 +21,9 @@ import {
 import { device, hashA, hashB, observation, policy, product, project } from './fixtures.js';
 
 describe('strict configuration parser', () => {
-  it('reads JSON and YAML documents', () => {
+  it('reads JSON documents only', () => {
     expect(parseDocument('{"a": [1,true,null]}')).toEqual({ a: [1, true, null] });
-    expect(parseDocument('name: pxv\nprofiles:\n  - owner\n')).toEqual({ name: 'pxv', profiles: ['owner'] });
+    expect(() => parseDocument('name: pxv\nprofiles:\n  - owner\n')).toThrow();
   });
 
   it.each([

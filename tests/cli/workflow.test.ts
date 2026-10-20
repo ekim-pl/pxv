@@ -189,7 +189,7 @@ const credentialValues = {
   'duress-password': 'cli duress password 57w',
 };
 async function configureCredentialDefaults(): Promise<string> {
-  const policyPath = join(project, 'policy.yaml');
+  const policyPath = join(project, 'policy.json');
   const policy = JSON.parse(await readFile(policyPath, 'utf8')) as PolicyDocument;
   const owner = policy.profiles[0]!;
   owner.defaultCredential = { type: 'pin', secretRef: 'owner-lock' };

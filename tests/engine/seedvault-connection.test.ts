@@ -292,7 +292,7 @@ it('never enrolls a mismatched phone or overwrites configuration changed during 
   ).rejects.toThrow('wrong physical phone');
   expect(await readFile(join(project.root, 'inventory.json'), 'utf8')).toBe(before);
   port.connect = vi.fn().mockImplementation(async () => {
-    await writeFile(join(project.root, 'policy.yaml'), '{}');
+    await writeFile(join(project.root, 'policy.json'), '{}');
   });
   await expect(
     connectSeedvaultEndpoint(project, target(), { endpoint }, port, join(root, 'control'), store),

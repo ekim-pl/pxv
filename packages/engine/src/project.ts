@@ -143,6 +143,7 @@ export async function createProject(
   const base = await realpath(root);
   for (const name of [
     'pxv.project.json',
+    'policy.json',
     'policy.yaml',
     'inventory.json',
     'config/manifest.yaml',
@@ -156,11 +157,11 @@ export async function createProject(
     schemaVersion: 1,
     id: randomUUID(),
     productId: product.id,
-    policyFile: 'policy.yaml',
+    policyFile: 'policy.json',
     inventoryFile: 'inventory.json',
     extensions: [],
   };
-  await atomicWritePrivate(resolve(base, 'policy.yaml'), JSON.stringify(policyDocument, null, 2));
+  await atomicWritePrivate(resolve(base, 'policy.json'), JSON.stringify(policyDocument, null, 2));
   await atomicWritePrivate(
     resolve(base, 'inventory.json'),
     JSON.stringify({ schemaVersion: 1, devices: [] }, null, 2),

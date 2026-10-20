@@ -57,10 +57,10 @@ describe('public CLI and project isolation', () => {
     expect(await runCli(args(['inventory', 'list']), io)).toBe(0);
   });
   it('takes an explicit policy and rejects malformed project boundaries', async () => {
-    const custom = join(root, 'custom.yaml');
+    const custom = join(root, 'custom.json');
     await writeFile(custom, JSON.stringify(toPolicyDocument({ ...policy, id: 'custom' })));
     await runCli(args(['project', 'init', '--path', project, '--policy', custom]), io);
-    expect(JSON.parse(await readFile(join(project, 'policy.yaml'), 'utf8'))).toMatchObject({ id: 'custom' });
+    expect(JSON.parse(await readFile(join(project, 'policy.json'), 'utf8'))).toMatchObject({ id: 'custom' });
     await expect(runCli(args(['policy', 'unknown']), io)).rejects.toThrow('Unknown policy');
     await expect(runCli(args(['inventory', 'unknown']), io)).rejects.toThrow('Unknown inventory');
   });

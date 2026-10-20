@@ -136,7 +136,7 @@ pxv guide project --project-root "$P" --kind pixel --locale en
 pxv guide project --project-root "$P" --kind pixel --locale pl
 ```
 
-Initialization copies the policy to `$P/policy.yaml`; `$POLICY` is not a live link.
+Initialization copies the policy to `$P/policy.json`; `$POLICY` is not a live link.
 After initialization, edit the project policy identified by `pxv.project.json`,
 validate/lock again and obtain a new plan. Do not edit configuration during execution.
 
@@ -392,7 +392,7 @@ visit follows maintenance, fresh observations and renewed acceptance as applicab
 From the source checkout, after the private project policy is frozen:
 
 ```sh
-pxv guides rebuild --policy "$P/policy.yaml" \
+pxv guides rebuild --policy "$P/policy.json" \
   --output-dir "$TEST_ROOT/guides" --chromium /usr/bin/google-chrome
 ```
 
