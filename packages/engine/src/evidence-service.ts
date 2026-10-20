@@ -16,6 +16,7 @@ import type { ObservationReader } from './observation-service.js';
 import type { DeviceOwnership } from './ownership.js';
 import type { WorkflowState, CapabilityRequirement, BoundEmulatorEvidence } from './workflow-types.js';
 import { normalReceiptMatches } from './setup-evidence.js';
+import { policyLockStatus } from './policy-lock.js';
 import type { VpnProofVerifier, VpnProofSession } from './vpn-proof-verifier.js';
 export interface EvidenceReader {
   state(assetId: string): Promise<WorkflowState>;
@@ -61,10 +62,12 @@ export class EvidenceService implements EvidenceReader {
     validateObservation(state.observation);
     return state;
   }
-  requireFresh(state: WorkflowState): void {
+  private measurementFresh(state: WorkflowState): boolean {
     const age = this.clock().getTime() - Date.parse(state.observedAt);
-    if (!Number.isFinite(age) || age < 0 || age > 900_000)
-      throw new Error('Refresh provisioning observations within 15 minutes');
+    return Number.isFinite(age) && age >= 0 && age <= 900_000;
+  }
+  requireFresh(state: WorkflowState): void {
+    if (!this.measurementFresh(state)) throw new Error('Refresh provisioning observations within 15 minutes');
   }
   async readiness(
     target: SelectedTarget,
@@ -76,6 +79,8 @@ export class EvidenceService implements EvidenceReader {
     const missing = requiredAttestations(this.project.policy, target.device.kind).filter(
       (check) => !receipts.some((receipt) => this.receiptReady(check, receipt, state)),
     );
+    if (!this.measurementFresh(state)) missing.push('measurement-freshness');
+    if ((await policyLockStatus(this.project)) !== 'current') missing.push('policy-lock');
     if (state.status === 'failed') missing.push('execution-inspection');
     missing.push(
       ...(await this.missingResources(target, ownLease)),

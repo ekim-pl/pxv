@@ -217,6 +217,8 @@ pxv device finalize --project-root "$P" --asset "$ASSET" \
   --transport usb --operator "$OPERATOR" --locale en
 ```
 
+Readiness reports list `measurement-freshness` when measurements are invalid, future-dated or older than 15 minutes, and `policy-lock` when the approved baseline is missing, invalid or stale. A stored report does not inspect the current phone.
+
 Stay within the application’s measurement freshness window. Stale measurements,
 drift, incomplete work, or cleanup obligations block readiness. Physically verify
 USB and Wireless debugging are both off, the bootloader remains locked, and OEM
@@ -228,6 +230,8 @@ pxv handoff accept --project-root "$P" --asset "$ASSET" \
 pxv handoff export --project-root "$P" --asset "$ASSET" \
   --locale en --output /absolute/private/phone-01-handoff
 ```
+
+Custody confirmation also completes the matching provisioning run. Its status and history stop requesting acceptance; historical completion does not expire with the measurement window. Do not repeat provisioning merely because old measurements have expired after handover.
 
 ## Finish the device packet
 

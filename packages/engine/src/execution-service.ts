@@ -62,7 +62,7 @@ export class ExecutionService {
     readonly credentialDefaults: CredentialDefaultHistory,
   ) {}
   execute(runId: string, externalSignal?: AbortSignal): Promise<RunRecord> {
-    return this.projects.run(() => this.executeOwned(runId, externalSignal));
+    return this.projects.run(() => this.executeOwned(runId, externalSignal), { requirePolicyLock: true });
   }
   /** One project lease covers a bounded fleet batch; each phone keeps an independent lease. */
   async executeFleet(runIds: string[], jobs = 2, signal?: AbortSignal): Promise<RunRecord[]> {
@@ -94,22 +94,25 @@ export class ExecutionService {
     jobs: number,
     signal?: AbortSignal,
   ): Promise<RunRecord[]> {
-    return this.projects.run(async () => {
-      const queue = [...groups.values()];
-      const results = new Map<string, RunRecord>();
-      const errors: unknown[] = [];
-      await Promise.all(
-        Array.from({ length: Math.min(jobs, queue.length) }, () =>
-          this.executeFleetWorker(queue, results, errors, signal),
-        ),
-      );
-      if (errors.length) throw new AggregateError(errors, 'Fleet execution failed');
-      return runIds.map((id) => {
-        const result = results.get(id);
-        if (!result) throw new Error('Fleet result missing');
-        return result;
-      });
-    });
+    return this.projects.run(
+      async () => {
+        const queue = [...groups.values()];
+        const results = new Map<string, RunRecord>();
+        const errors: unknown[] = [];
+        await Promise.all(
+          Array.from({ length: Math.min(jobs, queue.length) }, () =>
+            this.executeFleetWorker(queue, results, errors, signal),
+          ),
+        );
+        if (errors.length) throw new AggregateError(errors, 'Fleet execution failed');
+        return runIds.map((id) => {
+          const result = results.get(id);
+          if (!result) throw new Error('Fleet result missing');
+          return result;
+        });
+      },
+      { requirePolicyLock: true },
+    );
   }
   private async executeFleetWorker(
     queue: string[][],

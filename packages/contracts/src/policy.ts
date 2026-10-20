@@ -285,6 +285,8 @@ export function ownedObligations(
 
 function normalCredentialsRequired(policy: ExecutionPolicy): boolean {
   return (
+    duressRequired(policy) ||
+    policy.requiredAttestations.includes('normal_credentials') ||
     policy.capabilities.includes('normal_credentials') ||
     policy.profiles.some(
       (profile) => profileLocale(profile) || profile.defaultCredential || profile.defaultDuress,
@@ -292,7 +294,11 @@ function normalCredentialsRequired(policy: ExecutionPolicy): boolean {
   );
 }
 function duressRequired(policy: ExecutionPolicy): boolean {
-  return policy.capabilities.includes('duress') || policy.profiles.some((profile) => profile.defaultDuress);
+  return (
+    policy.capabilities.includes('duress') ||
+    policy.requiredAttestations.includes('duress') ||
+    policy.profiles.some((profile) => profile.defaultDuress)
+  );
 }
 export function requiredAttestations(
   policy: ExecutionPolicy,

@@ -31,6 +31,7 @@ import type { ObservationReader } from './observation-service.js';
 import type { PlanWriter } from './plan-repository.js';
 import { sameArtifact } from './reviewed-plan.js';
 import type { CredentialDefaultHistory } from './credential-default-history.js';
+import { assertApprovedProject } from './policy-lock.js';
 export interface Preparation {
   prepare(target: SelectedTarget, operation?: Operation, signal?: AbortSignal): Promise<PreparedOperation>;
   prepareExtension(
@@ -161,6 +162,7 @@ export class PreparationService implements Preparation {
     signal?: AbortSignal,
     contributions?: Action[],
   ): Promise<PreparedOperation> {
+    await assertApprovedProject(this.project);
     this.observations.assertTarget(target);
     const lifecycleGeneration = await this.plans.generation(target.device.assetId);
     const baseline = await this.prepareBaseline(target, operation, signal);

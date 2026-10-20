@@ -207,3 +207,57 @@ it('cleans up an interrupted download and removes its signal handlers', async ()
   expect(await readFile(fixture.path, 'utf8')).toBe(before);
   expect(process.listenerCount('SIGINT')).toBe(listeners);
 });
+
+it('rejects service-level device selection without a project and Docker discovery before work starts', async () => {
+  const { parseCli } = await import('../../packages/cli/src/arguments.js');
+  const { appCompatibility, policyInput, updateServices, withAppCommandSignal } =
+    await import('../../packages/cli/src/policy-app-command.js');
+  const { validatePolicyDocument } = await import('@pxv/contracts');
+  const context = await parseCli(
+    [
+      'policy',
+      'update-apps',
+      '--policy',
+      fixture.path,
+      '--sdk',
+      '36',
+      '--abi',
+      'arm64-v8a',
+      '--resource-root',
+      fixture.resources,
+      '--json',
+    ],
+    fixture.io,
+  );
+  const input = await policyInput(context, validatePolicyDocument);
+  const services = await updateServices(context, undefined);
+  await expect(
+    appCompatibility(
+      { ...context, values: { ...context.values, asset: 'phone' } },
+      input,
+      services,
+      new AbortController().signal,
+    ),
+  ).rejects.toThrow('requires a project');
+  let started = false;
+  await expect(
+    withAppCommandSignal({ ...context, dockerMode: 'worker' }, () => {
+      started = true;
+      return Promise.resolve(0);
+    }),
+  ).rejects.toThrow('local host');
+  expect(started).toBe(false);
+  expect(fixture.requireTool).not.toHaveBeenCalled();
+});
+it('rejects oversized policy output before replacing the authored file', async () => {
+  const { writeUpdatedPolicy } = await import('../../packages/cli/src/policy-app-command.js');
+  const before = await readFile(fixture.path, 'utf8');
+  await expect(
+    writeUpdatedPolicy(
+      { path: fixture.path, revision: checksum(before), document: fixture.document },
+      { ...fixture.document, name: 'x'.repeat(4 * 1024 * 1024) },
+      new AbortController().signal,
+    ),
+  ).rejects.toThrow('4 MiB');
+  expect(await readFile(fixture.path, 'utf8')).toBe(before);
+});

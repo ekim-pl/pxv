@@ -1,3 +1,4 @@
+import { approveProject } from './fixtures.js';
 import { executeWithWitnesses } from './fixtures.js';
 import { toPolicyDocument } from '@pxv/contracts';
 import { recordObligation } from './obligations.js';
@@ -30,7 +31,7 @@ describe('reviewed workflows, operator and recipient gates', () => {
       toPolicyDocument(policy),
     );
     await saveInventory(created, { schemaVersion: 1, devices: [port.observation.device] });
-    context = await loadProject(created.root, product);
+    context = await approveProject(await loadProject(created.root, product));
     engine = new WorkflowEngine({
       project: context,
       store,
@@ -964,6 +965,7 @@ describe('reviewed workflows, operator and recipient gates', () => {
     );
     await saveInventory(created, { schemaVersion: 1, devices: [device] });
     const project = await loadProject(created.root, product, codeRoot);
+    await approveProject(project);
     const isolated = new WorkflowEngine({
       project,
       port,

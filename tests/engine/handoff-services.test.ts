@@ -1,3 +1,4 @@
+import { approveProject } from './fixtures.js';
 import { toPolicyDocument } from '@pxv/contracts';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -29,6 +30,7 @@ describe('independently composed attestation and handoff services', () => {
     const created = await createProject(join(root, 'project'), product, toPolicyDocument(basePolicy()));
     await saveInventory(created, { schemaVersion: 1, devices: [device] });
     const project = await loadProject(created.root, product);
+    await approveProject(project);
     store = await SqliteStore.open(join(root, 'state.sqlite'));
     port = new MemoryPort();
     const clock = () => new Date('2026-10-16T09:00:00Z');

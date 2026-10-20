@@ -6,6 +6,7 @@ import type { PreparedOperation, Operation, OsSnapshot, ReviewLineage } from './
 import type { ObservationReader } from './observation-service.js';
 import { preparedDigest, summaryData, canonicalEffects } from './reviewed-plan.js';
 import { planGeneration, assertPlanGeneration } from './plan-generation.js';
+import { assertApprovedProject } from './policy-lock.js';
 export interface PreparedDraft {
   id: string;
   target: SelectedTarget;
@@ -36,6 +37,7 @@ export class PlanRepository implements PlanWriter {
     return planGeneration(this.store, assetId);
   }
   async persist(input: PreparedDraft): Promise<PreparedOperation> {
+    await assertApprovedProject(this.project);
     await assertPlanGeneration(this.store, input.target.device.assetId, input.lifecycleGeneration);
     const body = {
       schemaVersion: 1 as const,

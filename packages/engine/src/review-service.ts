@@ -36,18 +36,23 @@ export class ReviewService {
     readonly vpnProofs: VpnProofVerifier,
   ) {}
   submit(planId: string, reviewSummary: string, operator: string): Promise<RunRecord> {
-    return this.projects.run(() => this.submitOwned(planId, reviewSummary, operator));
+    return this.projects.run(() => this.submitOwned(planId, reviewSummary, operator), {
+      requirePolicyLock: true,
+    });
   }
   async refreshReview(runId: string, signal?: AbortSignal): Promise<PreparedOperation> {
-    return this.projects.run(async () => {
-      const run = await this.manualRun(runId);
-      const previous = await this.plans.read(run.planId, undefined, true);
-      if (previous.operation === 'install-os' || run.cursor >= previous.plan.actions.length)
-        throw new Error('Manual checkpoint action is invalid; preserve it for inspection');
-      return this.devices.run(previous.target, randomUUID() + '-refresh-device', () =>
-        this.refreshLeased(run, previous, signal),
-      );
-    });
+    return this.projects.run(
+      async () => {
+        const run = await this.manualRun(runId);
+        const previous = await this.plans.read(run.planId, undefined, true);
+        if (previous.operation === 'install-os' || run.cursor >= previous.plan.actions.length)
+          throw new Error('Manual checkpoint action is invalid; preserve it for inspection');
+        return this.devices.run(previous.target, randomUUID() + '-refresh-device', () =>
+          this.refreshLeased(run, previous, signal),
+        );
+      },
+      { requirePolicyLock: true },
+    );
   }
   private async submitOwned(planId: string, reviewSummary: string, operator: string): Promise<RunRecord> {
     const prepared = await this.plans.read(planId, reviewSummary);

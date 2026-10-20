@@ -1,3 +1,4 @@
+import { approveProject } from './fixtures.js';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -41,6 +42,7 @@ describe('fleet scheduling and project lifetime', () => {
     });
     await saveInventory(created, { schemaVersion: 1, devices: targets.map((target) => target.device) });
     const project = await loadProject(created.root, product);
+    await approveProject(project);
     store = await SqliteStore.open(join(root, 'state.sqlite'));
     port = new MemoryPort();
     port.inspect = (target, _policy, signal) => {

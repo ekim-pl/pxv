@@ -1,3 +1,4 @@
+import { approveProject } from '../engine/fixtures.js';
 import type * as TestModule0 from '../../packages/cli/src/context.js';
 import type * as TestModule1 from '@pxv/contracts';
 import type * as TestModule2 from 'node:child_process';
@@ -162,7 +163,7 @@ describe('MCP/CLI backend ports and detached execution', () => {
     await saveInventory(project, { schemaVersion: 1, devices: [device] });
     store = await SqliteStore.open(join(root, 'state.sqlite'));
     engine = new WorkflowEngine({
-      project: await loadProject(project.root, product),
+      project: await approveProject(await loadProject(project.root, product)),
       store,
       port: new MemoryPort(),
       artifacts: { snapshot: (artifact) => Promise.resolve(artifact) },
@@ -379,11 +380,59 @@ describe('MCP/CLI backend ports and detached execution', () => {
     await expect(engine.state('all')).rejects.toThrow('Fresh provisioning');
   });
 
+  it('reports future and legacy custody completion consistently through CLI and MCP', async () => {
+    const target = { device, transport: { kind: 'usb' as const, serial: 'PIXEL1' } };
+    const prepared = await engine.prepare(target);
+    const run = await engine.submit(prepared.plan.id, prepared.reviewSummary, 'Reviewer');
+    await executeWithWitnesses(engine, run.id);
+    for (const check of ['operator_signoff', 'recipient_acceptance', 'verified_boot'])
+      await engine.attest(target, check, 'Reviewer');
+    const pending = await store.get('runs', run.id);
+    await engine.finalize(target, 'Reviewer');
+    await engine.acceptCustody(device.assetId, 'Recipient', true);
+    const server = createMcpServer(agentBackend(engine, resourceRoot, 'launcher.js', false));
+    const client = new Client({ name: 'custody-status', version: '1' });
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    await server.connect(serverTransport);
+    await client.connect(clientTransport);
+    try {
+      for (const legacy of [false, true]) {
+        if (legacy) await store.set('runs', run.id, pending);
+        let cli: unknown;
+        const context = {
+          command: 'status',
+          app: { engine },
+          value: (key: string) => (key === 'run' ? run.id : '0'),
+          output: (value: unknown) => {
+            cli = value;
+          },
+        } as unknown as ApplicationCliContext;
+        expect(await agentCommand(context)).toBe(0);
+        expect(cli).toMatchObject({ run: { id: run.id, status: 'completed', nextSteps: [] } });
+        for (const name of ['get_run', 'list_runs']) {
+          const result = await client.callTool({
+            name,
+            arguments: name === 'get_run' ? { runId: run.id } : {},
+          });
+          const content = result.content as { type: string; text: string }[];
+          const data = JSON.parse(content[0]!.text) as { run?: unknown; items?: { value: unknown }[] };
+          const reported = name === 'get_run' ? data.run : data.items![0]!.value;
+          expect(reported).toMatchObject({ id: run.id, status: 'completed', nextSteps: [] });
+          expect(reported).not.toHaveProperty('pauseReason');
+        }
+        expect(await store.get('runs', run.id)).toMatchObject({ status: legacy ? 'pending' : 'completed' });
+      }
+    } finally {
+      await client.close();
+      await server.close();
+    }
+  });
+
   it('prepares fresh reviews through the backend without executing them', async () => {
     const project = await createProject(join(root, 'setup'), product, toPolicyDocument(setupPolicy));
     await saveInventory(project, { schemaVersion: 1, devices: [device] });
     const setup = new WorkflowEngine({
-      project: await loadProject(project.root, product),
+      project: await approveProject(await loadProject(project.root, product)),
       store,
       port: new MemoryPort(),
       artifacts: engine.artifacts,
@@ -499,9 +548,18 @@ describe('MCP/CLI backend ports and detached execution', () => {
       selectedPolicy: 'fixture',
     });
     expect(contribution).toHaveBeenCalledWith(lock, 'policyPacks', 'policy.json');
+    const reviewed = live(
+      new WorkflowEngine({
+        project: await approveProject(await loadProject(project.root, product)),
+        store,
+        port: engine.port,
+        artifacts: engine.artifacts,
+        controlRoot: engine.controlRoot,
+      }),
+    );
     for (const action of [
-      () => backend.extensionAdapter('all', lock.id, 'adapter.js', {}),
-      () => backend.extensionCommand('all', lock.id, 'review', {}),
+      () => reviewed.extensionAdapter('all', lock.id, 'adapter.js', {}),
+      () => reviewed.extensionCommand('all', lock.id, 'review', {}),
     ])
       expect(typeof ((await action()) as { planId: string }).planId).toBe('string');
     expect(detachedSpawn).not.toHaveBeenCalled();
@@ -541,7 +599,7 @@ describe('MCP/CLI backend ports and detached execution', () => {
       JSON.stringify(toPolicyDocument(changed)),
     );
     await expect(live.executePlan(prepared.planId, prepared.reviewSummary, 'Alice')).rejects.toThrow(
-      'Project policy',
+      'Policy lock is stale',
     );
     expect(application).toHaveBeenCalledTimes(2);
     expect(close).toHaveBeenCalledTimes(2);

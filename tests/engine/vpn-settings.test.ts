@@ -1,3 +1,4 @@
+import { approveProject } from './fixtures.js';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -43,7 +44,7 @@ beforeEach(async () => {
   const project = await createProject(join(root, 'project'), product, toPolicyDocument(policy));
   await saveInventory(project, { schemaVersion: 1, devices: [device] });
   engine = new WorkflowEngine({
-    project: await loadProject(project.root, product),
+    project: await approveProject(await loadProject(project.root, product)),
     store,
     port,
     artifacts: { snapshot: (artifact, path) => Promise.resolve({ ...artifact, path }) },

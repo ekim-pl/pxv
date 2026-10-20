@@ -1,3 +1,4 @@
+import { approveProject } from './fixtures.js';
 import { executeWithWitnesses } from './fixtures.js';
 import { toPolicyDocument } from '@pxv/contracts';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
@@ -22,6 +23,7 @@ describe('workflow service composition', () => {
     );
     await saveInventory(created, { schemaVersion: 1, devices: [device] });
     const project = await loadProject(created.root, product, codeRoot);
+    await approveProject(project);
     const store = await SqliteStore.open(join(root, 'state.sqlite'));
     const close = vi.spyOn(store, 'close');
     try {

@@ -113,6 +113,17 @@ their stored evidence does not establish the current physical phone state. A
 policy, enrollment and lifecycle generation and has not expired. It does not
 replace full plan-integrity validation at execution or supply human approval.
 
+Readiness reports include `measurement-freshness` for invalid, future-dated or
+older-than-15-minute measurements, and `policy-lock` for an unapproved baseline.
+They remain stored evidence rather than a live inspection.
+
+After custody confirmation, the matching provisioning run reports `completed`
+without an acceptance pause or acceptance instructions. Older pending runs receive
+the same read-only projection only when exact current or lifecycle-archived custody
+evidence supports it. Their original records/events are preserved. Historical
+completion does not authorize new execution or expire with measurements; do not
+restart provisioning to refresh an already completed handover.
+
 ## Handle tool errors and lost connections
 
 A tool response with `isError: true` is an error even if transport delivery

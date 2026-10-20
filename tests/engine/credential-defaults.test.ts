@@ -1,3 +1,4 @@
+import { approveProject } from './fixtures.js';
 import { executeWithWitnesses } from './fixtures.js';
 import { toPolicyDocument } from '@pxv/contracts';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
@@ -69,7 +70,7 @@ describe('credential defaults and private recipient checkpoints', () => {
     const created = await createProject(join(root, 'project'), product, toPolicyDocument(policy), code);
     await saveInventory(created, { schemaVersion: 1, devices: [device] });
     engine = new WorkflowEngine({
-      project: await loadProject(created.root, product, code),
+      project: await approveProject(await loadProject(created.root, product, code)),
       store,
       port,
       artifacts: { snapshot: (artifact, path) => Promise.resolve({ ...artifact, path }) },

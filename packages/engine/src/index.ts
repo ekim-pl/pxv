@@ -1,4 +1,5 @@
 export * from './project.js';
+export { policyLockStatus } from './policy-lock.js';
 export * from './recovery.js';
 export * from './workflow.js';
 export * from './lifecycle.js';

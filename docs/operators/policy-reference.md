@@ -5,6 +5,15 @@ Use this reference when preparing either a [single-device](single-device.md) or 
 A policy declares the intended device and profile configuration. Validate and lock
 it before preparing and approving provisioning work.
 
+A matching `policy.lock.json` is required before planning and is checked again
+before submission, refresh, execution/resume, attestation and finalization.
+`policy validate` reports `policyLockStatus` as `current`, `missing`, `stale` or
+`invalid`; a valid authored policy still validates successfully before locking.
+Review the baseline and run `policy lock` explicitly when renewal is needed.
+Executable upgrades also require a renewed lock and fresh operational reviews.
+Inspection/history, cancellation, typed recovery, lifecycle recording, offline
+registry/export and custody confirmation remain available without a current lock.
+
 ## Choose the policy command
 
 | Task | Command | Result |

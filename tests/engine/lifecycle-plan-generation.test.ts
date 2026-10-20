@@ -1,3 +1,4 @@
+import { approveProject } from './fixtures.js';
 import { executeWithWitnesses } from './fixtures.js';
 import { toPolicyDocument } from '@pxv/contracts';
 import { DatabaseSync } from 'node:sqlite';
@@ -50,7 +51,7 @@ beforeEach(async () => {
   };
   const created = await createProject(join(root, 'project'), product, toPolicyDocument(policy), codeRoot);
   await saveInventory(created, { schemaVersion: 1, devices: [device, other] });
-  project = await loadProject(created.root, product, codeRoot);
+  project = await approveProject(await loadProject(created.root, product, codeRoot));
   store = await SqliteStore.open(join(root, 'state.sqlite'));
   port = new MemoryPort();
   const seedvault: SeedvaultWorkflowPort = {

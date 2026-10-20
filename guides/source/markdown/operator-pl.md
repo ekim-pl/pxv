@@ -97,6 +97,8 @@ pxv policy lock --project-root "$P"
 pxv guide project --project-root "$P" --kind pixel --locale pl
 ```
 
+Zgodna blokada polityki jest wymagana przed planowaniem i ponownie sprawdzana przed wykonaniem, odświeżeniem przeglądu, poświadczeniem i finalizacją. `policy validate` podaje `policyLockStatus`: `current`, `missing`, `stale` lub `invalid`. Poprawną politykę można zweryfikować przed zablokowaniem. Jawnie odnów blokadę także po aktualizacji programu oraz zmianach polityki, konfiguracji lub rozszerzeń. Inspekcja, anulowanie, odzyskiwanie ze sprzątaniem, zapisy offline i potwierdzanie odbioru pozostają dostępne.
+
 Zmiana polityki wymaga nowej blokady polityki i nowego przeglądu. Wybierz sprawdzoną politykę w `pxv.project.json`, zweryfikuj i zablokuj ją przed przygotowaniem nowych planów.
 
 ## 3. Zarejestruj dokładnie wskazany telefon
@@ -223,6 +225,8 @@ pxv handoff accept --project-root "$P" --asset "$ASSET" \
 pxv handoff export --project-root "$P" --asset "$ASSET" \
   --locale pl --output /bezwzgledna/sciezka/przekazania
 ```
+
+Potwierdzenie odbioru kończy powiązany przebieg przygotowania. Status i historia pokazują `completed` bez instrukcji ponownej akceptacji; dokładne zachowane dowody korygują również starsze raporty. Historyczny odbiór nie wygasa. Przed finalizacją raport gotowości podaje `measurement-freshness` dla niepoprawnych, przyszłych lub starszych niż 15 minut pomiarów oraz `policy-lock` dla niezatwierdzonej polityki. Nie powtarzaj przygotowania wyłącznie w celu odświeżenia pomiarów po zakończonym przekazaniu.
 
 Pakiet przekazania zawiera Markdown/HTML na podstawie zachowanego obrazu polityki. Sprawdź go przed udostępnieniem. Ogólne przewodniki PDF są instrukcją, a nie dowodem akceptacji telefonu.
 

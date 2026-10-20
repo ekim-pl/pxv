@@ -122,7 +122,7 @@ const commands: readonly CommandDefinition[] = [
   command('help', 'Show command help.', [], [], { textual: true }),
   command('version', 'Print the installed version.', [], [], { textual: true }),
   command('project init', 'Create a new isolated project.', ['path', 'policy'], ['path']),
-  command('policy validate', 'Validate the authored policy and lock.'),
+  command('policy validate', 'Validate the authored policy and report policy lock status.'),
   command('policy lock', 'Record the current policy and extension lock.', ['yes']),
   command('policy update-apps', 'Update app pins to verified compatible stable F-Droid versions.', [
     'policy',

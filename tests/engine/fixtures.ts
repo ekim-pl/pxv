@@ -8,7 +8,14 @@ import type {
   SharedApkEffect,
 } from '@pxv/contracts';
 import type { ExecutionContext, WorkflowPort, WorkflowEngine } from '@pxv/engine';
+import { writePolicyLock, type ProjectContext } from '@pxv/engine';
 import { observation, policy } from '../contracts/fixtures.js';
+
+/** Explicitly approve a synthetic fixture's baseline before reviewed device work. */
+export async function approveProject(project: ProjectContext): Promise<ProjectContext> {
+  await writePolicyLock(project);
+  return project;
+}
 
 export function basePolicy(): ExecutionPolicy {
   const result = structuredClone(policy);

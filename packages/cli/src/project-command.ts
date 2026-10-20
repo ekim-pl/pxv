@@ -1,5 +1,5 @@
 import { parseDocument, validatePolicyDocument } from '@pxv/contracts';
-import { createProject, writePolicyLock } from '@pxv/engine';
+import { createProject, policyLockStatus, writePolicyLock } from '@pxv/engine';
 import { SqliteStore } from '@pxv/runtime';
 import { readFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
@@ -66,7 +66,11 @@ export async function policyCommand(context: ProjectCliContext): Promise<number 
       await confirmation(io, 'Record the current policy and extension lock?', flag('yes'));
       await writePolicyLock(project);
     } else if (command !== 'validate') throw new Error('Unknown policy command');
-    output({ valid: true, policyDigest: project.resolved.digest });
+    output({
+      valid: true,
+      policyDigest: project.resolved.digest,
+      policyLockStatus: await policyLockStatus(project),
+    });
     return 0;
   }
   return undefined;

@@ -1,7 +1,8 @@
+import type * as InventoryLabel from '../../packages/cli/src/inventory-label.js';
 import type * as Guides from '@pxv/guides';
 import type * as Runtime from '@pxv/runtime';
 import type * as Cli from '@pxv/cli';
-import { createProject, saveInventory } from '@pxv/engine';
+import { createProject, saveInventory, loadProject } from '@pxv/engine';
 import { toPolicyDocument } from '@pxv/contracts';
 import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -139,4 +140,24 @@ it('documents exact dimensions and requires asset/output/Chromium in both comman
     );
     expect(() => parseCommandArguments(command)).toThrow('--asset is required');
   }
+});
+
+it('enforces host execution and exact asset selection at the label service boundary', async () => {
+  const { parseCli } = await import('../../packages/cli/src/arguments.js');
+  const { exportInventoryLabel } = await importModule<typeof InventoryLabel>(
+    '../../packages/cli/src/inventory-label.js',
+    import.meta.url,
+  );
+  const context = {
+    ...(await parseCli(args(), io)),
+    project: await loadProject(projectRoot, product, resources),
+    targets: () => [],
+  };
+  await expect(exportInventoryLabel({ ...context, dockerMode: 'worker' })).rejects.toThrow('host execution');
+  await expect(exportInventoryLabel({ ...context, value: () => 'docker' })).rejects.toThrow('host execution');
+  await expect(exportInventoryLabel({ ...context, flag: () => true })).rejects.toThrow('one exact');
+  await expect(
+    exportInventoryLabel({ ...context, values: { ...context.values, group: 'fleet' } }),
+  ).rejects.toThrow('one exact');
+  expect(guides.writeAssetLabel).not.toHaveBeenCalled();
 });

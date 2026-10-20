@@ -94,7 +94,9 @@ pxv policy lock --project-root "$P"
 pxv guide project --project-root "$P" --kind pixel --locale en
 ```
 
-A policy change needs a new lock and fresh review. Select the reviewed policy in `pxv.project.json`, validate and lock it before preparing new plans.
+Planning, submission, execution/resume, refresh, attestation and finalization require a matching policy lock. `policy validate` reports `policyLockStatus`: `current`, `missing`, `stale` or `invalid`. Explicitly renew after policy, configuration, extension or executable changes. Inspection, cancellation, typed recovery, offline records and custody remain accessible.
+
+Select the reviewed policy in `pxv.project.json` before validating and locking it.
 
 ## 3. Enroll one exact physical device
 
@@ -220,6 +222,8 @@ pxv handoff export --project-root "$P" --asset "$ASSET" \
   --locale en --output /absolute/path/to/handoff
 ```
 
+Custody completes the matching run; status/history then show `completed` without acceptance instructions. Exact retained evidence also corrects older reports. Before finalization, `measurement-freshness` flags invalid, future or expired measurements (15 minutes); `policy-lock` flags an unapproved baseline. Historical custody does not expire: do not repeat provisioning merely to refresh old measurements.
+
 The handoff packet is Markdown/HTML from its retained policy snapshot. Review it before sharing. Generic guide PDFs are instructions, not device acceptance evidence.
 
 Attach the [phone-sized quick start](quickstart-en.md) to every phone, together with its accepted handoff report and a sealed [private credential insert](credentials-en.md). Match all asset labels. Complete the insert privately outside guide sources and release assets, copying the profile/account pages as needed. Verify ordinary locks privately; mark unused fields and initial or last-confirmed values clearly. Keep optional destructive credentials on the separately sealed erasure page. Fill real support and recovery routes and agree any support retention. Ask the recipient to store the completed insert apart from the phone after receipt. See [packing and printing](../../../guides/README.md#pack-every-device).
@@ -264,7 +268,7 @@ Use revision zero only for the first record; subsequent updates require the revi
 
 Unlock uses a hidden local prompt. Private inputs/outputs need an owned `0600` file in a `0700` directory. `list`, `show` and `history` omit values; `reveal --asset ID --output NEW_PRIVATE_FILE` deliberately writes plaintext. `rekey` rotates the unlock passphrase. `reconcile` explicitly accepts a restored/interrupted copy by appending stale revisions; reconfirm current values afterward. Read [registry storage, history and recovery](../../../docs/operators/registry.md) before use.
 
-For a prefilled private insert, use `pxv registry print-insert` with an asset, new private PDF output and local Chromium. The compact export groups ordinary values by profile and starts destructive credentials on a separate A4 cut-and-fold sheet. Typical records target two sheets; longer records use more without truncation or smaller values. The asset appears once per sheet, and blank recovery worksheets are omitted. See the [registry export instructions](../../../docs/operators/guides-and-inserts.md#prefilled-private-phone-sized-insert).
+`pxv registry print-insert` requires an asset, a new private PDF path and local Chromium. It groups ordinary credentials by profile, with destructive credentials on a separate cut-and-fold A4 sheet. Longer records add sheets without shrinking values. Assets appear once per sheet; blank recovery worksheets are omitted. See the [registry export instructions](../../../docs/operators/guides-and-inserts.md#prefilled-private-phone-sized-insert).
 
 Guide rebuilding can also create the same private PDF with `--private-insert-output FILE --project-root DIRECTORY --asset ID --output-dir DIRECTORY --chromium PATH`. It uses the project policy; keep the private output outside the shared guide directory. Shared guide artifacts remain blank.
 
@@ -315,6 +319,6 @@ pxv policy validate --project-root /private/path/offline-rehearsal
 pxv guide project --project-root /private/path/offline-rehearsal --kind pixel --locale en
 ```
 
-Initialization records a lock. Source maintainers can also run the fake-port registry/workflow tests. This checks the host-side workflow only; it cannot qualify flashing, UI recipes, VPN behavior, restoration or physical custody. Never substitute a primary phone for an unavailable disposable canary.
+Initialization records a lock. Synthetic registry/workflow tests verify host behavior only; they cannot qualify flashing, UI recipes, VPN behavior, restoration or physical custody. Rehearse phone operations only on a disposable canary.
 
-Use the [command reference](../../../docs/operators/command-reference.md), [automation/MCP](../../../docs/ai-agents/workflow-and-recovery.md), [Docker operation](../../../docs/operators/host-setup.md), [security boundaries](../../../SECURITY.md) and [verification status](../../../docs/operators/acceptance.md). Community disables optional extensions and experimental Seedvault automation; supported manual backup/restore remains a separately checked phone procedure. Historical physical records qualify only their recorded candidate, not the current build.
+See the [command reference](../../../docs/operators/command-reference.md), [automation/MCP](../../../docs/ai-agents/workflow-and-recovery.md), [Docker operation](../../../docs/operators/host-setup.md), [security boundaries](../../../SECURITY.md) and [verification status](../../../docs/operators/acceptance.md). Community disables extensions and experimental Seedvault automation. Manual backup/restore requires a separate phone procedure. Historical physical records qualify their recorded candidate.

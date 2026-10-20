@@ -36,27 +36,30 @@ export class SeedvaultService {
   }
   prepare(target: SelectedTarget, request: SeedvaultRequest, signal?: AbortSignal) {
     this.assertEnabled();
-    return this.projects.run(() => this.plans.prepare(target, request, signal));
+    return this.projects.run(() => this.plans.prepare(target, request, signal), { requirePolicyLock: true });
   }
   submit(planId: string, summary: string, operator: string): Promise<RunRecord> {
     this.assertEnabled();
-    return this.projects.run(async () => {
-      const prepared = await this.plans.read(planId, summary);
-      if (!operator.trim() || operator.length > 200) throw new Error('Operator identity is required');
-      await this.validateLineage(prepared);
-      const id = digest({ project: this.project.config.id, seedvaultPlan: prepared.plan.digest });
-      const existing = await this.store.get<RunRecord>('runs', id);
-      if (existing) return existing;
-      const run: RunRecord = {
-        id,
-        planId,
-        operator,
-        status: 'queued',
-        createdAt: this.clock().toISOString(),
-        cursor: prepared.refreshedFrom?.progress.cursor ?? 0,
-      };
-      return (await this.store.submitAndSet(`seedvault-plan:${planId}`, run, 'runs', id)).value;
-    });
+    return this.projects.run(
+      async () => {
+        const prepared = await this.plans.read(planId, summary);
+        if (!operator.trim() || operator.length > 200) throw new Error('Operator identity is required');
+        await this.validateLineage(prepared);
+        const id = digest({ project: this.project.config.id, seedvaultPlan: prepared.plan.digest });
+        const existing = await this.store.get<RunRecord>('runs', id);
+        if (existing) return existing;
+        const run: RunRecord = {
+          id,
+          planId,
+          operator,
+          status: 'queued',
+          createdAt: this.clock().toISOString(),
+          cursor: prepared.refreshedFrom?.progress.cursor ?? 0,
+        };
+        return (await this.store.submitAndSet(`seedvault-plan:${planId}`, run, 'runs', id)).value;
+      },
+      { requirePolicyLock: true },
+    );
   }
   private async validateLineage(prepared: PreparedSeedvaultOperation): Promise<void> {
     if (!prepared.refreshedFrom) return;
@@ -66,7 +69,7 @@ export class SeedvaultService {
   }
   execute(runId: string, signal?: AbortSignal): Promise<RunRecord> {
     this.assertEnabled();
-    return this.projects.run(() => this.execution.execute(runId, signal));
+    return this.projects.run(() => this.execution.execute(runId, signal), { requirePolicyLock: true });
   }
   async report(runId: string): Promise<SeedvaultReport> {
     const run = await this.store.get<RunRecord>('runs', runId);
@@ -77,15 +80,18 @@ export class SeedvaultService {
   }
   refresh(runId: string, signal?: AbortSignal): Promise<PreparedSeedvaultOperation> {
     this.assertEnabled();
-    return this.projects.run(async () => {
-      const run = await this.store.get<RunRecord>('runs', runId);
-      if (run?.status !== 'pending' || !run.manualGate?.startsWith('seedvault:'))
-        throw new Error('Only an intentional Seedvault manual checkpoint can receive a fresh review');
-      const previous = await this.plans.read(run.planId, undefined, true);
-      return this.devices.run(previous.target, `${randomUUID()}-seedvault-refresh`, () =>
-        this.refreshLeased(run, previous, signal),
-      );
-    });
+    return this.projects.run(
+      async () => {
+        const run = await this.store.get<RunRecord>('runs', runId);
+        if (run?.status !== 'pending' || !run.manualGate?.startsWith('seedvault:'))
+          throw new Error('Only an intentional Seedvault manual checkpoint can receive a fresh review');
+        const previous = await this.plans.read(run.planId, undefined, true);
+        return this.devices.run(previous.target, `${randomUUID()}-seedvault-refresh`, () =>
+          this.refreshLeased(run, previous, signal),
+        );
+      },
+      { requirePolicyLock: true },
+    );
   }
   private async refreshLeased(
     run: RunRecord,

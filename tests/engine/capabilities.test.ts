@@ -1,3 +1,4 @@
+import { approveProject } from './fixtures.js';
 import { executeWithWitnesses } from './fixtures.js';
 import { toPolicyDocument } from '@pxv/contracts';
 import { recordObligation } from './obligations.js';
@@ -51,7 +52,7 @@ describe('scoped recipe, network and recovery evidence', () => {
     );
     await saveInventory(created, { schemaVersion: 1, devices: [device] });
     return new WorkflowEngine({
-      project: await loadProject(created.root, product),
+      project: await approveProject(await loadProject(created.root, product)),
       store,
       port,
       artifacts: { snapshot: (artifact, path) => Promise.resolve({ ...artifact, path }) },

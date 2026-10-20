@@ -25,6 +25,13 @@ Run initialization only for a new project. A policy lock is recorded during
 initialization; subsequent policy/metadata/extension changes require renewed
 validation, locking, and review.
 
+Before planning, require a current baseline lock. `policy validate --json` includes
+`policyLockStatus` (`current`, `missing`, `stale`, `invalid`) while retaining a
+successful result for a valid authored policy. Renew the lock explicitly after
+reviewing policy/configuration, extension or executable changes. This does not
+approve a device plan. Inspection/history, cancellation, typed recovery and offline
+records remain accessible when the lock needs renewal.
+
 ## Output and exit handling
 
 Structured commands are readable by default. Add `--json` to obtain one JSON

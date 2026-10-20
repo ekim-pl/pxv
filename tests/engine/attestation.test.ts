@@ -1,3 +1,4 @@
+import { approveProject } from './fixtures.js';
 import { executeWithWitnesses } from './fixtures.js';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -58,6 +59,7 @@ beforeEach(async () => {
   const created = await createProject(join(root, 'project'), product, toPolicyDocument(basePolicy()));
   await saveInventory(created, { schemaVersion: 1, devices: [target.device] });
   const project = await loadProject(created.root, product);
+  await approveProject(project);
   engine = new WorkflowEngine({
     project,
     store,

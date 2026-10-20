@@ -32,6 +32,31 @@ describe('policy projects', () => {
   ];
   const invalidPolicy = () => ({ ...toPolicyDocument(policy), unexpected: true });
 
+  it('reports lock status without failing valid policy validation or renewing approval implicitly', async () => {
+    const project = await createProject(projectRoot, product, toPolicyDocument(policy), resources);
+    const statuses: string[] = [];
+    const output = {
+      ...io,
+      out: (text: string) => {
+        const value = JSON.parse(text) as { valid: boolean; policyLockStatus: string };
+        expect(value.valid).toBe(true);
+        statuses.push(value.policyLockStatus);
+      },
+    };
+    expect(await runCli(args(['policy', 'validate']), output)).toBe(0);
+    await expect(access(join(projectRoot, 'policy.lock.json'))).rejects.toThrow();
+    await writePolicyLock(project);
+    expect(await runCli(args(['policy', 'validate']), output)).toBe(0);
+    await writeFile(
+      join(projectRoot, project.config.policyFile),
+      JSON.stringify(toPolicyDocument({ ...policy, name: 'New baseline' })),
+    );
+    expect(await runCli(args(['policy', 'validate']), output)).toBe(0);
+    await writeFile(join(projectRoot, 'policy.lock.json'), 'invalid');
+    expect(await runCli(args(['policy', 'validate']), output)).toBe(0);
+    expect(statuses).toEqual(['missing', 'current', 'stale', 'invalid']);
+  });
+
   it('rejects invalid project initialization before creating project files', async () => {
     const source = join(root, 'invalid.json');
     const contents = JSON.stringify(invalidPolicy());

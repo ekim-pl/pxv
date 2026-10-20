@@ -47,10 +47,12 @@ export class AttestationService {
     note?: string,
     evidence?: EmulatorImagePin,
   ): Promise<OperatorAttestation> {
-    return this.projects.run(() =>
-      this.ownership.run(target, randomUUID(), () =>
-        this.attestOwned(target, check, operator, note, evidence),
-      ),
+    return this.projects.run(
+      () =>
+        this.ownership.run(target, randomUUID(), () =>
+          this.attestOwned(target, check, operator, note, evidence),
+        ),
+      { requirePolicyLock: true },
     );
   }
 

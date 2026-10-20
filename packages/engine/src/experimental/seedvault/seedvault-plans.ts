@@ -13,6 +13,7 @@ import type { Store } from '@pxv/runtime';
 import type { ObservationReader } from '../../observation-service.js';
 import type { ProjectContext } from '../../project.js';
 import { planGeneration, assertPlanGeneration } from '../../plan-generation.js';
+import { assertApprovedProject } from '../../policy-lock.js';
 import type { PreparedSeedvaultOperation, SeedvaultWorkflowPort } from './seedvault-types.js';
 
 type Draft = Omit<PreparedSeedvaultOperation, 'reviewSummary'>;
@@ -88,6 +89,7 @@ export class SeedvaultPlans {
     signal?: AbortSignal,
     refreshedFrom?: PreparedSeedvaultOperation['refreshedFrom'],
   ): Promise<PreparedSeedvaultOperation> {
+    await assertApprovedProject(this.project);
     if (target.device.kind !== 'pixel' || target.transport.kind !== 'wifi')
       throw new Error('Seedvault requires an enrolled Pixel wireless ADB endpoint');
     const lifecycleGeneration = await planGeneration(this.store, target.device.assetId);
@@ -122,6 +124,7 @@ export class SeedvaultPlans {
     draft.plan.digest = planDigest(draft);
     const prepared = { ...draft, reviewSummary: exactSummary(draft) };
     await assertPlanGeneration(this.store, target.device.assetId, lifecycleGeneration);
+    await assertApprovedProject(this.project);
     await this.store.set('seedvault-plans', draft.plan.id, prepared);
     return prepared;
   }

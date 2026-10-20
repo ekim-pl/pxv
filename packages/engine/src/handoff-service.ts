@@ -15,6 +15,7 @@ import type { ObservationReader } from './observation-service.js';
 import type { EvidenceReader } from './evidence-service.js';
 import type { DeviceOwnership, ProjectOwnership } from './ownership.js';
 import type { WorkflowPort, WorkflowState } from './workflow-types.js';
+import { custodyRun, custodyCompletionEvent } from './custody-completion.js';
 
 export class HandoffService {
   constructor(
@@ -32,7 +33,9 @@ export class HandoffService {
     operator: string,
     locale: 'en' | 'pl' = 'en',
   ): Promise<HandoffRecord> {
-    return this.projects.run(() => this.finalizeAuthorized(target, operator, locale));
+    return this.projects.run(() => this.finalizeAuthorized(target, operator, locale), {
+      requirePolicyLock: true,
+    });
   }
   private async finalizeAuthorized(
     target: SelectedTarget,
@@ -59,8 +62,8 @@ export class HandoffService {
     const attestations = await this.store.get('attestations', assetId);
     const handoff = await this.store.get('handoff', assetId);
     const { ready, missing, state } = await this.evidence.readiness(target, lease);
-    if (!ready) throw new Error(`Handoff checks remain: ${missing.join(', ')}`);
     this.evidence.requireFresh(state);
+    if (!ready) throw new Error(`Handoff checks remain: ${missing.join(', ')}`);
     const live = await this.observations.observe(target);
     if (
       !evaluateObservation(this.project.resolved, live).passed ||
@@ -196,14 +199,17 @@ export class HandoffService {
       acceptedBy: recipient,
       acceptedAt: this.clock().toISOString(),
     });
+    const run = await custodyRun(this.store, state, record);
     if (
       !(await this.store.transition({
         expected: [
           { collection: 'handoff', key: assetId, value: record },
           { collection: 'workflow', key: assetId, value: state },
+          { collection: 'runs', key: run.previous.id, value: run.previous },
         ],
         changes: [
           { kind: 'set', collection: 'handoff', key: assetId, value: accepted },
+          { kind: 'set', collection: 'runs', key: run.previous.id, value: run.next },
           {
             kind: 'set',
             collection: 'workflow',
@@ -211,7 +217,13 @@ export class HandoffService {
             value: { ...state, status: 'completed-custody', pending: [] },
           },
         ],
-        events: [{ runId: `asset:${assetId}`, value: { type: 'custody-accepted', record: accepted } }],
+        events: [
+          { runId: `asset:${assetId}`, value: { type: 'custody-accepted', record: accepted } },
+          {
+            runId: run.previous.id,
+            value: custodyCompletionEvent(run.previous.id, accepted),
+          },
+        ],
       }))
     )
       throw new Error('Asset evidence changed before custody; inspect before retrying');

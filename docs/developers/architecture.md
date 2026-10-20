@@ -68,6 +68,27 @@ and evidence; see [Docker shutdown behavior](../operators/host-setup.md#command-
 
 Project ownership serializes cooperating configuration writes and operations. Submission, execution, review refresh, attestation, finalization, custody and lifecycle changes recheck the loaded configuration, policy and inventory byte revisions plus executable identity after acquiring it. Stale contexts require reload and review. Configuration/lock writes also compare their expected source revisions. Project ownership precedes physical-device ownership.
 
+The shared policy-lock verifier authenticates the retained resolved snapshot and
+compares its digest with current normalized policy/configuration, product,
+extensions and executable identity. Preparation checks it before observation and
+again with source freshness before storing a plan. Reviewed transitions recheck it
+under project ownership. Loading a project does not require approval, preserving
+inspection, policy editing/locking, cancellation, typed recovery, lifecycle,
+registry/export and custody operations. Lock renewal is explicit, including after
+an executable upgrade; it never approves a device plan.
+
+Readiness and finalization share the same bounded measurement-age predicate.
+Reports add `measurement-freshness` and `policy-lock` blockers while continuing to
+identify their evidence as stored. Custody commits its matching workflow run's
+completion, workflow state, handoff and both audit events in one expected-state
+transition. Query-scoped compatibility projection also recognizes exact completed
+custody from current or lifecycle-archived records, verifying the handoff snapshot,
+plan, observation and run identity. It does not rewrite historical records or
+promote ambiguous evidence. Archive traversal is paginated and lookups are shared
+within a query. Completed custody remains historical evidence after policy changes
+or measurement expiry and supplies no acceptance/resume instructions.
+
+
 Physical serial, transport selector, asset ID and Android user identity are distinct. Android user recovery binds userId, name and serialNo, because user IDs can be reused. The shared per-operator host control directory is independent of product/fork/project and also mounted into containers. Simultaneous ownership from several workstations is unsupported.
 
 ## Provisioned-phone registry

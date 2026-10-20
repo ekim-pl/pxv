@@ -10,6 +10,7 @@ import type { ProjectContext } from './project.js';
 import { withRunPauseReason } from './run-state.js';
 import type { Operation, RunRecord } from './workflow-types.js';
 import type { ObservationReader } from './observation-service.js';
+import { CustodyCompletionSession } from './custody-completion.js';
 
 export type RunListOptions = EntryPageOptions;
 interface RunNextStep {
@@ -151,12 +152,17 @@ export class RunQueryService {
   describe(run: RunRecord): Promise<RunStatus> {
     return this.describeRecord(run);
   }
-  private async describeRecord(run: RunRecord, replacements?: Map<string, RunRecord>): Promise<RunStatus> {
+  private async describeRecord(
+    run: RunRecord,
+    replacements?: Map<string, RunRecord>,
+    completion = new CustodyCompletionSession(this.store, this.project.config.id),
+  ): Promise<RunStatus> {
     const plan = await this.retainedPlan(run.planId);
+    const effective = await completion.complete(run, plan);
     const details = planDetails(plan);
     const reviewStatus = await this.reviewStatus(plan, details.assetId, run.planId);
     const status: RunStatus = {
-      ...withRunPauseReason(run, plan?.operation),
+      ...withRunPauseReason(effective, plan?.operation),
       evidenceSource: 'stored',
       ...details,
       reviewStatus,
@@ -241,11 +247,12 @@ export class RunQueryService {
       ),
     );
     const replacements = await this.replacementRuns(supersededPlans);
+    const completion = new CustodyCompletionSession(this.store, this.project.config.id);
     return {
       items: await Promise.all(
         page.items.map(async ({ key, value }) => ({
           key,
-          value: await this.describeRecord(value, replacements),
+          value: await this.describeRecord(value, replacements, completion),
         })),
       ),
       nextCursor: page.nextCursor,

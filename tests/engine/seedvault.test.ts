@@ -1,3 +1,4 @@
+import { approveProject } from './fixtures.js';
 import { executeWithWitnesses } from './fixtures.js';
 import { toPolicyDocument } from '@pxv/contracts';
 import { randomUUID } from 'node:crypto';
@@ -194,6 +195,7 @@ describe('supervised Seedvault runs', () => {
     const created = await createProject(join(root, 'project'), product, toPolicyDocument(policy), codeRoot);
     await saveInventory(created, { schemaVersion: 1, devices: [selectedDevice] });
     const project = await loadProject(created.root, product, codeRoot);
+    await approveProject(project);
     store = await SqliteStore.open(join(root, 'state.sqlite'));
     port = new SeedvaultMemory();
     now = new Date('2026-10-16T10:00:00Z');
@@ -726,7 +728,7 @@ describe('supervised Seedvault runs', () => {
     });
     expect(await changed.seedvaultReport(run.id)).toEqual(before);
     await expect(changed.submit(prepared.plan.id, prepared.reviewSummary, 'Owner')).rejects.toThrow(
-      'policy or executable',
+      'Policy lock is stale',
     );
   });
 
