@@ -16,6 +16,11 @@ Install a reviewed Linux x86_64 distribution and follow [host setup](host-setup.
 Use the ordinary operator account with the required USB permissions. Host doctor
 inspects prerequisites; starting ADB is a separate explicit action.
 
+`project init` requires complete app pins. If your source policy omits them, first
+follow [standalone source resolution](policy-reference.md#resolve-a-source-draft-before-project-initialization)
+with the intended SDK/ABIs, then pass the resulting pinned file to initialization.
+A source-only draft cannot be enrolled or provisioned as a normal project policy.
+
 ```sh
 pxv version
 pxv host doctor
@@ -61,6 +66,38 @@ For enrollment while already in Fastboot Mode, add `--mode fastboot`; defer the
 ADB inspection until Android boots and debugging is authorized. First enrollment
 uses USB, not an assumed Wi-Fi endpoint. Enrollment verifies identity and records
 inventory; it does not authorize erasure. See [host transports](host-setup.md).
+
+## Resolve or update app pins before planning
+
+Use `policy resolve-apps` to fill missing pins and verify supplied ones. Use
+`policy update-apps` to upgrade complete pins from already trusted F-Droid
+repositories. For an existing enrolled phone running the intended Android release:
+
+```sh
+pxv policy resolve-apps --project-root "$P" --asset "$ASSET" --transport usb --dry-run
+pxv policy resolve-apps --project-root "$P" --asset "$ASSET" --transport usb
+```
+
+For a planned repository upgrade, use this pair instead:
+
+```sh
+pxv policy update-apps --project-root "$P" --asset "$ASSET" --transport usb --dry-run
+pxv policy update-apps --project-root "$P" --asset "$ASSET" --transport usb
+pxv policy validate --project-root "$P"
+pxv policy lock --project-root "$P"
+```
+
+Each write invocation presents a fresh review before confirmation. Both commands
+leave the existing lock unchanged; run validation and locking after any policy
+write, including resolution. With no connected phone or when targeting a different
+Android release, replace `--asset`/`--transport` with the intended `--sdk N --abi ABI`
+pair. Discovery still needs network access for remote sources.
+
+Read all skipped update reasons and any verification errors. A direct source's
+first observed signer needs review; supplied pins are never overwritten by
+resolution. Check recipes bound to exact app versions, qualify changes on a canary,
+and prepare a fresh device plan after locking. See the
+[policy command choices](policy-reference.md#choose-the-policy-command).
 
 ## Install the OS only when required
 

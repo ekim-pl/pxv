@@ -6,7 +6,7 @@ Prepare one enrolled Google Pixel or an explicitly selected fleet with GrapheneO
 
 Examples use the installed `pxv` command. Replace placeholders before use. `--yes` confirms a real review or physical check; it does not perform that check.
 
-Commands display readable summaries by default. Add `--json` when capturing structured output for a script, and use `pxv COMMAND --help` for supported flags. `--dry-run` is accepted only where it prepares a plan; finalization, attestation and recovery reject it. Run history is paginated: `agent runs --json` returns `items` and `nextCursor`; follow a non-null cursor with `--cursor` until it is null.
+Commands display readable summaries by default. Add `--json` when capturing structured output for a script, and use `pxv COMMAND --help` for supported flags. `--dry-run` is accepted on commands with a preview mode. Device workflows prepare plans; policy app commands download and verify artifacts without writing the policy or creating a device plan. Finalization, attestation and recovery reject it. Run history is paginated: `agent runs --json` returns `items` and `nextCursor`; follow a non-null cursor with `--cursor` until it is null.
 
 ## 1. Prepare the workstation and project
 
@@ -19,6 +19,10 @@ pxv host adb-start --yes
 ```
 
 Doctor does not start ADB. Resolve missing tools, permissions and native-runtime failures before connecting a production phone. A source checkout uses the pinned toolchain and `pnpm pxv` after building; follow [host dependencies](../../../docs/operators/host-setup.md) for the exact setup and checks.
+
+Project initialization requires complete app pins. If your policy only declares app
+sources, first [resolve it into a pinned file](../../../docs/operators/policy-reference.md#resolve-a-source-draft-before-project-initialization)
+using explicit SDK/ABIs, then use that file below.
 
 Create a new project outside the source/resource checkout. Keep one operator control domain for every phone reachable from this workstation.
 
@@ -36,6 +40,49 @@ Back up private project state and inventory consistently. Keep unlock material s
 Review the authored policy before enrollment or execution. The bundled five-profile pack is a structural starter: it does not supply approved apps, working VPN accounts or a qualified deployment.
 
 Define an `apps` catalog once and reference its IDs in each profile's `apps` list. Pin package ID, version code, APK SHA-256, signer SHA-256 and an approved source. Android package versions are shared across users; profiles cannot independently install conflicting versions.
+
+### Resolve and update app pins
+
+`policy resolve-apps` fills missing app version, content-hash and signer pins from
+`direct`, official F-Droid (`fdroid`/`fdroidcl`), custom `fdroid-repository`, legacy
+repository/URL, or local APK sources. Supplied pins remain constraints. Before
+initializing a project from a source-only draft, preview and write a separate file:
+
+```sh
+pxv policy resolve-apps --policy /absolute/private/policy.sources.json \
+  --sdk 36 --abi arm64-v8a --output /absolute/private/policy.pinned.json --dry-run
+pxv policy resolve-apps --policy /absolute/private/policy.sources.json \
+  --sdk 36 --abi arm64-v8a --output /absolute/private/policy.pinned.json
+```
+
+Use the intended Android SDK and ABIs instead of assuming these example values.
+Review any newly observed APK signer; a direct download's first observed certificate
+does not independently authenticate its publisher. Custom repository certificates
+must already be trusted. Pass the pinned output to `project init`. An existing
+project can resolve its configured policy with `--project-root` instead of `--policy`.
+
+To upgrade existing pins from trusted F-Droid repositories, use `policy update-apps`.
+After enrolling the phone in section 3 and starting its owned ADB service:
+
+```sh
+pxv policy update-apps --project-root "$P" --asset "$ASSET" --transport usb --dry-run
+pxv policy update-apps --project-root "$P" --asset "$ASSET" --transport usb
+```
+
+The write invocation presents a fresh review. It retains the APK signer and prevents
+downgrades. Inspect every skipped source; publisher/local downloads without a trusted
+repository mapping need separate release review. A source resolution fails if any
+app cannot be verified, including unused catalog entries.
+
+Both commands run on the host. All APK inspection needs `aapt` and `apksigner`;
+repository discovery also needs `fdroidcl` and Java. Without a connected phone,
+replace `--asset`/`--transport` with `--sdk N --abi ABI[,ABI...]`; remote sources
+still require network access. These commands write policy files, not phone state,
+and leave the existing policy lock untouched. After a policy write, validate and
+lock it using the commands below, check exact-version recipes, and review a fresh
+device plan. See [the policy command choices](../../../docs/operators/policy-reference.md#choose-the-policy-command).
+
+### Review the rest of the policy
 
 Place device-wide Android `global` settings in `deviceSettings`. Profile `settings` contain `secure` or `system` entries. Define profile names, permissions, VPN and language deliberately; the owner name must match the observed owner. Keep secrets out of policy values and recipe text.
 

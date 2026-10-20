@@ -5,6 +5,28 @@ Use this reference when preparing either a [single-device](single-device.md) or 
 A policy declares the intended device and profile configuration. Validate and lock
 it before preparing and approving provisioning work.
 
+## Choose the policy command
+
+| Task | Command | Result |
+| --- | --- | --- |
+| Fill missing version/hash/signer pins in a source draft | `policy resolve-apps` | Verifies all catalog apps and writes a complete pinned policy; existing pins remain constraints. |
+| Upgrade existing pins from already trusted F-Droid repositories | `policy update-apps` | Selects compatible stable releases, retains the APK signer and never downgrades; reports unsupported sources as skipped. |
+| Validate a complete authored policy | `policy validate` | Reports validation and the resolved policy digest; does not acquire missing pins or write a lock. |
+| Accept the reviewed policy as the project baseline | `policy lock` | Writes a fresh policy lock after confirmation; does not provision a phone or approve a device plan. |
+
+Both app commands inspect every authored catalog entry, including unused ones.
+They edit files after confirmation and never install apps. Review the proposed
+pins, source and signer; then validate, lock, and review a new device plan. Their
+`--dry-run` downloads and verifies artifacts without writing a policy or creating a
+device execution plan. `--yes` accepts the current write, and `--json` returns the
+structured discovery result.
+
+Choose either the project policy or standalone `--policy FILE`; do not combine
+`--policy` with `--project-root`. Compatibility comes from one enrolled `--asset`
+(with optional `--transport`) or an explicit `--sdk N --abi ABI[,ABI...]` pair.
+Standalone files require the pair. Use the intended Android release's SDK and ABI
+values; one phone's selection does not establish compatibility across a mixed fleet.
+
 Define an `apps` catalog once, reference catalog IDs from
 each profile's `apps` list, and place all `global` Android settings in the top-level
 `deviceSettings` list. Profile `settings` accept only `secure` and `system` entries.
@@ -108,6 +130,26 @@ may be omitted independently. For example, the `apps` catalog may contain:
 }
 ```
 
+### Resolve a source draft before project initialization
+
+`project init` requires a fully pinned policy. If a new policy omits app pins,
+resolve it as a standalone document first. This example uses SDK 36 and arm64;
+substitute the intended phone's actual compatibility values and private file paths.
+
+```sh
+pxv policy resolve-apps --policy /absolute/private/policy.sources.json \
+  --sdk 36 --abi arm64-v8a --output /absolute/private/policy.pinned.json --dry-run
+pxv policy resolve-apps --policy /absolute/private/policy.sources.json \
+  --sdk 36 --abi arm64-v8a --output /absolute/private/policy.pinned.json
+pxv project init --path "$P" --policy /absolute/private/policy.pinned.json
+pxv policy validate --project-root "$P"
+```
+
+The second command discovers again and presents its own review before confirmation.
+It preserves the draft file. Initialization copies the complete policy and records
+its initial lock; later edits require another explicit `policy lock`. A project
+whose policy was subsequently edited to omit pins can use `resolve-apps` directly.
+
 The resolver accepts `fdroid` as an authoring alias and writes canonical `fdroidcl`.
 Inline `fdroid-repository` sources require an already trusted repository certificate
 `fingerprint`. Existing `repositoryId`, legacy `url` and local `path` inputs also
@@ -187,7 +229,8 @@ pxv policy validate --project-root "$P"
 pxv policy lock --project-root "$P"
 ```
 
-For an offline update, supply the intended Android SDK level and CPU ABIs. Use the
+For discovery without a connected phone, supply the intended Android SDK level
+and CPU ABIs. Remote sources still require network access. Use the
 same pair with `--project-root` when a phone is unavailable. Standalone files require
 the pair and cannot be combined with `--project-root` or `--asset`:
 
@@ -241,7 +284,10 @@ profile references and unrelated policy configuration are preserved. No-op runs
 leave the original file bytes intact. Revision checks preserve concurrent edits
 while a download or confirmation is pending. The result lists `updates` with
 `before`/`after` pins, `unchanged` IDs, `skipped` reasons, `written` and
-`policyLockRequired`. Project writes leave the previous lock in place for explicit
+`policyLockRequired`. Inspect every `skipped` reason; a successful command does
+not mean every app was upgraded. Publisher APK updates require separate release
+and signer review; `resolve-apps` will reject changed bytes against existing pins.
+Project writes leave the previous lock in place for explicit
 replacement; validate and lock the policy and review a fresh plan before execution.
 
 ## Profiles, apps and configuration

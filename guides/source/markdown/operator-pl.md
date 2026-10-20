@@ -6,7 +6,7 @@ Przygotuj jeden zarejestrowany telefon Google Pixel albo jawnie wybraną flotę:
 
 Przykłady używają zainstalowanego polecenia `pxv`. Zastąp wszystkie symbole zastępcze. `--yes` potwierdza rzeczywisty przegląd lub kontrolę fizyczną; nie wykonuje tej kontroli.
 
-Polecenia domyślnie pokazują czytelne podsumowania. Przy zapisywaniu danych dla skryptu dodaj `--json`; obsługiwane opcje pokazuje `pxv POLECENIE --help`. `--dry-run` jest przyjmowane tylko tam, gdzie przygotowuje plan; finalizacja, potwierdzenia i odzyskiwanie odrzucają tę opcję. Historia operacji jest stronicowana: `agent runs --json` zwraca `items` oraz `nextCursor`; niepusty kursor przekaż przez `--cursor` i powtarzaj do otrzymania wartości `null`.
+Polecenia domyślnie pokazują czytelne podsumowania. Przy zapisywaniu danych dla skryptu dodaj `--json`; obsługiwane opcje pokazuje `pxv POLECENIE --help`. `--dry-run` jest przyjmowane przez polecenia z trybem podglądu. Operacje urządzenia przygotowują plan; polecenia aplikacji polityki pobierają i weryfikują pliki bez zapisu polityki i bez tworzenia planu urządzenia. Finalizacja, potwierdzenia i odzyskiwanie odrzucają tę opcję. Historia operacji jest stronicowana: `agent runs --json` zwraca `items` oraz `nextCursor`; niepusty kursor przekaż przez `--cursor` i powtarzaj do otrzymania wartości `null`.
 
 ## 1. Przygotuj komputer i projekt
 
@@ -19,6 +19,10 @@ pxv host adb-start --yes
 ```
 
 Diagnostyka nie uruchamia ADB. Usuń problemy z narzędziami, uprawnieniami i natywnym środowiskiem przed podłączeniem telefonu użytkownika. W repozytorium po zbudowaniu używa się `pnpm pxv`; dokładne wersje i kontrole opisują [zależności komputera](../../../docs/operators/host-setup.md).
+
+Inicjalizacja projektu wymaga kompletu przypięć aplikacji. Jeśli polityka zawiera
+tylko deklaracje źródeł, najpierw [uzupełnij przypięcia w osobnym pliku](../../../docs/operators/policy-reference.md#resolve-a-source-draft-before-project-initialization)
+z jawnymi wartościami SDK/ABI, a następnie użyj tego pliku poniżej.
 
 Utwórz nowy projekt poza repozytorium kodu i zasobów. Wszystkie telefony dostępne z tego komputera powinny korzystać ze wspólnego obszaru kontroli operatora.
 
@@ -36,6 +40,52 @@ Wykonuj spójne kopie prywatnego stanu projektu i ewidencji urządzeń. Dane do 
 Sprawdź politykę przed rejestracją i wykonaniem operacji. Dołączony zestaw pięciu profili jest szkieletem: nie zapewnia zatwierdzonych aplikacji, działających kont VPN ani kwalifikacji wdrożenia.
 
 Zdefiniuj katalog `apps` raz, a w listach `apps` profili wskazuj jego identyfikatory. Przypnij identyfikator pakietu, kod wersji, SHA-256 pliku APK, SHA-256 podpisującego i zatwierdzone źródło. Wersje pakietów Androida są wspólne dla użytkowników; profile nie mogą instalować sprzecznych wersji niezależnie.
+
+### Uzupełnij i aktualizuj przypięcia aplikacji
+
+`policy resolve-apps` uzupełnia brakujące kody wersji, skróty APK i odciski
+certyfikatów podpisujących. Obsługuje `direct`, oficjalne F-Droid
+(`fdroid`/`fdroidcl`), własne `fdroid-repository`, starsze odwołania do repozytoriów
+lub URL oraz lokalne APK. Podane przypięcia pozostają wymaganiami. Przed inicjalizacją
+projektu z polityki zawierającej tylko źródła sprawdź wynik i zapisz osobny plik:
+
+```sh
+pxv policy resolve-apps --policy /prywatna/sciezka/polityka.zrodla.json \
+  --sdk 36 --abi arm64-v8a --output /prywatna/sciezka/polityka.przypieta.json --dry-run
+pxv policy resolve-apps --policy /prywatna/sciezka/polityka.zrodla.json \
+  --sdk 36 --abi arm64-v8a --output /prywatna/sciezka/polityka.przypieta.json
+```
+
+Podaj SDK i ABI docelowego Androida zamiast zakładać wartości z przykładu.
+Sprawdź nowo odczytany certyfikat APK: pierwszy certyfikat z bezpośredniego pobrania
+nie potwierdza niezależnie tożsamości wydawcy. Certyfikat własnego repozytorium musi
+być już zaufany. Przypięty wynik przekaż do `project init`. W istniejącym projekcie
+użyj `--project-root` zamiast `--policy`, aby uzupełnić skonfigurowaną politykę.
+
+Do aktualizacji istniejących przypięć z zaufanych repozytoriów F-Droid służy
+`policy update-apps`. Po rejestracji telefonu z rozdziału 3 i uruchomieniu jego
+własnej usługi ADB:
+
+```sh
+pxv policy update-apps --project-root "$P" --asset "$ASSET" --transport usb --dry-run
+pxv policy update-apps --project-root "$P" --asset "$ASSET" --transport usb
+```
+
+Polecenie zapisujące pokazuje nowy przegląd do potwierdzenia. Zachowuje certyfikat
+podpisującego i nie obniża wersji. Sprawdź każdy pominięty wpis: pobrania wydawcy i
+lokalne APK bez zaufanego powiązania z repozytorium wymagają osobnego przeglądu
+wydania. Uzupełnianie przypięć kończy się błędem, jeśli dowolna aplikacja, także
+nieużywana w profilach, nie przejdzie weryfikacji.
+
+Oba polecenia działają na komputerze operatora. Inspekcja APK wymaga `aapt` i
+`apksigner`; repozytoria dodatkowo wymagają `fdroidcl` i Javy. Bez podłączonego
+telefonu zastąp `--asset`/`--transport` parą `--sdk N --abi ABI[,ABI...]`;
+źródła zdalne nadal wymagają sieci. Polecenia zapisują pliki polityki, nie zmieniają
+telefonu i pozostawiają dotychczasową blokadę polityki. Po zapisie wykonaj poniższe
+polecenia walidacji i blokady, sprawdź receptury przypisane do dokładnych wersji i
+przejrzyj świeży plan urządzenia. Zobacz [dobór poleceń polityki](../../../docs/operators/policy-reference.md#choose-the-policy-command).
+
+### Sprawdź pozostałe elementy polityki
 
 Ustawienia Androida `global`, wspólne dla telefonu, umieść w `deviceSettings`. W `settings` profilu stosuj wpisy `secure` lub `system`. Świadomie ustal nazwy profili, uprawnienia, VPN i języki; nazwa właściciela musi odpowiadać zmierzonej nazwie. Wartości tajne nie należą do polityki ani tekstu receptur.
 

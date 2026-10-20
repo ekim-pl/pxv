@@ -10,16 +10,24 @@ The supervisor is a separate TypeScript process compiled by `pnpm build` in `@px
 
 ## Operator tools
 
-Host diagnosis validates executable paths and reported versions/capabilities for ADB, fastboot, aapt, apksigner, Java and OpenSSH signing tools. `fdroidcl` is an optional host tool and is required for apps whose policy selects that source mode and for `policy update-apps`. Follow the [`fdroidcl` installation instructions](https://github.com/Hoverth/fdroidcl#quickstart) when needed. Install current reviewed official Android tools rather than assuming a distribution package is sufficient. USB device permissions must permit the caller; avoid running provisioning as root.
+Host diagnosis validates executable paths and reported versions/capabilities for ADB, fastboot, aapt, apksigner, Java and OpenSSH signing tools. `fdroidcl` is an optional host tool and is required for apps whose policy selects that source mode and for repository discovery in `policy resolve-apps` or `policy update-apps`. Follow the [`fdroidcl` installation instructions](https://github.com/Hoverth/fdroidcl#quickstart) when needed. Install current reviewed official Android tools rather than assuming a distribution package is sufficient. USB device permissions must permit the caller; avoid running provisioning as root.
 
-`pxv policy update-apps` also requires `fdroidcl` and Java for trusted repository
-discovery, and `aapt` plus `apksigner` to verify proposed updates. ADB is required
-when using `--asset`; discovery without a connected phone uses explicit `--sdk`
-and `--abi` values and still needs network access. The updater runs fdroidcl with
-isolated configuration and cache directories and blocks its incidental ADB
-subprocesses. Repositories must publish `index-v1.jar`, and its signed
-`suggestedVersionCode` determines stable releases. See
-[updating app pins](policy-reference.md#updating-app-pins).
+Policy app discovery runs locally on the host, even if later provisioning uses
+Docker. Install `aapt` and `apksigner` to inspect APK identities, signatures and
+compatibility. Repository sources in `policy resolve-apps`, and trusted repository
+updates in `policy update-apps`, additionally require `fdroidcl` and Java. Direct
+URLs and local APKs do not require fdroidcl; keep the Java runtime required by your
+`apksigner` installation available. Use the discovery paths and overrides below,
+including `PXV_TOOL_FDROIDCL` when the executable is outside `PATH`.
+
+ADB is required only when selecting an enrolled `--asset`; start the owned ADB
+service first. Explicit `--sdk` and `--abi` values allow discovery without a
+connected phone, with network access still needed for remote sources. The commands
+isolate fdroidcl configuration/cache and block its incidental ADB subprocesses.
+Repositories must publish `index-v1.jar`; signed `suggestedVersionCode` determines
+stable selection when no exact version is being resolved. See
+[source resolution](policy-reference.md#resolving-app-sources-into-pins) and
+[app updates](policy-reference.md#updating-app-pins).
 
 The reviewed container toolchain includes Platform Tools 37.0.1, Android platform 35 and Build Tools 35.0.0. The repository records exact archive SHA-256 values. Containers use a digest-pinned Debian base and immutable signed Debian snapshot packages for Java/OpenSSH and support libraries. Public archive notices remain with the tools.
 

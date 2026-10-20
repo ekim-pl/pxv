@@ -18,7 +18,7 @@ exit nor a batch summary establishes a phone’s readiness.
 
 ## References by task
 
-- [Policy reference](policy-reference.md): apps, profiles, OS pins, credentials, language, recipes, VPN, and policy locking.
+- [Policy reference](policy-reference.md#choose-the-policy-command): resolve app sources into pins, update trusted F-Droid releases, validate and lock policies; also profiles, OS pins, credentials, language, recipes and VPN.
 - [Command reference](command-reference.md): command families, selectors, flags, structured output, and exit outcomes.
 - [Encrypted registry](registry.md): authorized retention, private collection, record updates, history, and restore reconciliation.
 - [Acceptance](acceptance.md): canary checks, per-phone qualification, and the five-profile self-service procedure.

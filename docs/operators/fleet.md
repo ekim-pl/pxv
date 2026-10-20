@@ -9,6 +9,7 @@ it does not provide remote MDM or cross-workstation locking.
 
 Use one private project when the phones share the intended policy. A policy may
 describe multiple profiles and map several Pixel codenames to exact OS pins.
+Resolve any missing app pins [before initialization](policy-reference.md#resolve-a-source-draft-before-project-initialization).
 Create separate projects when the intended app/profile configuration, policy
 ownership, product identity, or support boundaries require distinct policies.
 Do not clone another project’s UUID, database, approvals, credentials, or evidence.
@@ -40,6 +41,29 @@ pxv inventory list --project-root "$P"
 
 Use fastboot enrollment only for a phone already in that mode. Do not enroll an
 unverified Wi-Fi endpoint or interpret a matching display name as physical identity.
+
+## Prepare shared app pins
+
+Resolve source declarations with `policy resolve-apps`; upgrade complete trusted
+repository pins with `policy update-apps`. These commands write the shared policy,
+so choose one enrolled canary or explicit SDK/ABIs rather than a fleet selector.
+For example, after the enrollment above:
+
+```sh
+pxv policy update-apps --project-root "$P" --asset batch-01 --transport usb --dry-run
+pxv policy update-apps --project-root "$P" --asset batch-01 --transport usb
+pxv policy resolve-apps --project-root "$P" --asset batch-02 --transport usb --dry-run
+pxv policy validate --project-root "$P"
+pxv policy lock --project-root "$P"
+```
+
+The resolution dry run verifies the same complete pins for the second target;
+it does not upgrade them. Repeat compatibility and canary review for every relevant
+model, SDK and ABI combination. Neither `--asset batch-01` nor a comma-separated
+ABI list proves compatibility with every fleet member. Inspect skipped sources,
+review exact-version recipes, and use a separate policy/project if the phones
+cannot share the verified pins. Qualify the final locked baseline before preparing
+new batch plans. See [policy app commands](policy-reference.md#choose-the-policy-command).
 
 ## Qualify the canary
 

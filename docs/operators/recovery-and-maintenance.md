@@ -223,6 +223,41 @@ The `--inspected` assertion is an operator confirmation, not a bypass. Recovery 
 
 Never remove a database, lock, reservation or receipt, change control roots, invent an inventory identity or restore an older database to make a blocked device appear available. A host reboot does not automatically resolve device obligations. Recovery does not replay provisioning, undo accounts/APK effects or restore phone data. After successful cleanup of a failed/interrupted run, inspect again and prepare a fresh review for the remaining work.
 
+## Review policy app changes during maintenance
+
+Preserve the accepted policy, project evidence and agreed phone-data backups before
+a planned change. Choose the command by the intended operation:
+
+- `policy resolve-apps` fills missing pins and verifies all supplied pins against
+  declared direct/local APKs or authenticated repositories.
+- `policy update-apps` upgrades eligible apps from repositories already trusted by
+  the policy, preserving the existing APK signer and preventing downgrades.
+
+After identifying the enrolled maintenance target and starting its owned ADB
+service, preview and review the repository update:
+
+```sh
+pxv policy update-apps --project-root "$P" --asset "$ASSET" --transport usb --dry-run
+pxv policy update-apps --project-root "$P" --asset "$ASSET" --transport usb
+pxv policy validate --project-root "$P"
+pxv policy lock --project-root "$P"
+```
+
+Discovery refreshes repositories and verifies downloads; it does not update the
+phone. Use explicit `--sdk`/`--abi` for the intended Android release when no phone
+is connected. Review every `skipped` result. Publisher/local apps without a trusted
+repository mapping require their own release review. If a mutable direct URL now
+serves different bytes, resolution fails against the existing pins; retain the
+accepted baseline and review the new release and signer before preparing a revised
+draft. Do not discard a pin merely to make a verification error disappear.
+
+Both commands preserve catalog IDs and references, leave the current lock untouched,
+and protect concurrent file edits. Inspect the reported `policyLockRequired`,
+review recipe/build bindings, qualify the change on a canary, then prepare a fresh
+plan for each affected phone. Repeat required app, VPN, backup and acceptance
+checks after actual deployment; the host discovery report is not device evidence.
+See [source resolution and app updates](policy-reference.md#choose-the-policy-command).
+
 ## Back up operator projects and host evidence
 
 Phone backups and pxv project backups protect different data. A policy file alone cannot recover a project journal, and a project backup contains no general copy of the phone's app data.
