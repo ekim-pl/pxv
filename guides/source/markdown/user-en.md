@@ -87,7 +87,7 @@ The record can contain:
 
 Flashing, profile creation, certain initial credential writes and maintenance/lifecycle changes can mark affected records stale. Previous revisions remain encrypted history. Do not use an old retrieved value as evidence that it still unlocks the phone.
 
-Ordinary reports and handoff exports omit registry values. A private retrieval deliberately creates a plaintext file that needs protection and cleanup. Registry backups and unlock material need separate protection; the operator can rotate the encryption passphrase. See [registry details](../../../docs/PHONE_REGISTRY.md) and [security boundaries](../../../SECURITY.md).
+Ordinary reports and handoff exports omit registry values. A private retrieval deliberately creates a plaintext file that needs protection and cleanup. Registry backups and unlock material need separate protection; the operator can rotate the encryption passphrase. See [registry details](../../../docs/operators/registry.md) and [security boundaries](../../../SECURITY.md).
 
 Your preparer can supply a private registry-backed insert with ordinary credentials grouped by profile and destructive credentials on a separate foldable A4 sheet. It normally uses two sheets, with more for longer records. The asset label appears once per sheet. Omitted fields mean not recorded, not necessarily unconfigured; keep destructive sheets sealed separately.
 
@@ -109,6 +109,6 @@ During maintenance, temporary debugging may be needed under supervision. At the 
 
 ## Further instructions and qualification
 
-The [operator guide](operator-en.md) covers commands and acceptance. Technical references include [host dependencies](../../../docs/HOST_DEPENDENCIES.md), [policy format](../../../docs/POLICY_FORMAT.md), [command reference](../../../docs/COMMAND_REFERENCE.md), [backup and recovery](../../../docs/CANARY_BACKUP_RECOVERY.md), [automation](../../../docs/AUTOMATION.md) and [Docker](../../../docs/DOCKER.md).
+The [operator guide](operator-en.md) covers commands and acceptance. Technical references include [host dependencies](../../../docs/operators/host-setup.md), [policy format](../../../docs/operators/policy-reference.md), [command reference](../../../docs/operators/command-reference.md), [backup and recovery](../../../docs/operators/recovery-and-maintenance.md), [automation](../../../docs/ai-agents/workflow-and-recovery.md) and [Docker](../../../docs/operators/host-setup.md).
 
-Read the [verification status](../../../docs/VERIFICATION.md) for the limits of retained evidence. An offline rehearsal or historical phone result does not qualify the current configuration. Without a physical canary, live flashing, app/VPN behavior and recovery remain unqualified until actually checked on an authorized target.
+Read the [verification status](../../../docs/operators/acceptance.md) for the limits of retained evidence. An offline rehearsal or historical phone result does not qualify the current configuration. Without a physical canary, live flashing, app/VPN behavior and recovery remain unqualified until actually checked on an authorized target.

@@ -9,12 +9,23 @@ state and inspected recovery. It does not provide remote MDM or cross-workstatio
 locking. OS installation is a separate destructive phase; private app setup and
 physical confirmations remain explicit checkpoints.
 
-## Guides
+## Documentation
+
+| Audience | Start here |
+| --- | --- |
+| Operators | [Single device](docs/operators/single-device.md) or [fleet](docs/operators/fleet.md), through [per-device guides and inserts](docs/operators/guides-and-inserts.md) |
+| End users | [Security, privacy, ordinary credentials, and duress](docs/endusers/README.md) |
+| Developers | [Build pxv and create extensions](docs/developers/README.md) |
+| AI integrations | [Run MCP and use supported operations](docs/ai-agents/README.md) |
+
+The [documentation index](docs/README.md) links the complete audience sections.
+
+## Printable guides
 
 Preparing and using your own phone? Follow the English
-[self-managed phone guide](docs/SELF_MANAGED_PHONE.md) for one person acting as both
+[self-managed phone guide](docs/operators/single-device.md) for one person acting as both
 operator and end user, with Owner-only or multiple Android profiles. For a complete
-one-person test with five profiles, use the [five-profile acceptance procedure](docs/SELF_SERVICE_FIVE_PROFILE_TEST.md).
+one-person test with five profiles, use the [five-profile acceptance procedure](docs/operators/acceptance.md#five-profile-self-service-acceptance).
 
 | Audience | English | Polski |
 | --- | --- | --- |
@@ -28,12 +39,12 @@ credential insert privately, or use `pxv registry print-insert` for a prefilled 
 A4 cut-and-fold PDF from the encrypted registry. Match the asset label and seal it for the recipient.
 For exact-size packaging inserts, use `pxv registry print-card` for 68 × 100 mm
 credential cards and `pxv inventory print-label` for a 40 × 15 mm asset sticker in
-PDF and PNG. See [device box inserts](docs/PHONE_REGISTRY.md#device-box-cards-and-asset-stickers).
+PDF and PNG. See [device box inserts](docs/operators/guides-and-inserts.md#device-box-cards-and-asset-stickers).
 Build with `pxv guides rebuild --policy FILE --output-dir DIRECTORY --chromium PATH`
 to adapt the phone-sized booklet and blank credential/recovery sheets to the installation's
 GrapheneOS user profiles. Profile details describe the intended policy; compare
 them with the actual phone and accepted report before packing.
-See [packing and printing](guides/README.md#pack-every-device) for the handoff process.
+See [packing and printing](docs/operators/guides-and-inserts.md) for the complete handoff process.
 
 Start with the operator guide and a disposable canary. Starter packs describe
 profile layouts; they need deployment-specific OS pins, app trust and configuration.
@@ -44,7 +55,7 @@ links the focused references, recovery procedures and verification boundaries.
 
 Use **Node 24.22.0**, **pnpm 12.11.2**. Android helper
 and cryptographic checks need Java 17+, Android platform 35, Build Tools 35.0.0 and
-OpenSSH. See [host dependencies](docs/HOST_DEPENDENCIES.md).
+OpenSSH. See [host dependencies](docs/operators/host-setup.md).
 
 The official Node binary is the explicit upstream Rust exception: it includes a Rust-derived TypeScript parser. Tests use esbuild through synchronous module hooks instead. Project-managed Rust payloads are prohibited, including optional and transitive development dependencies.
 
@@ -58,7 +69,7 @@ pnpm pxv host doctor
 
 Setup downloads checksum-pinned analysis tools explicitly. The strict quality gate
 retains evidence for the exact source identity; it does not qualify a physical phone
-or production policy. See [testing](docs/TESTING.md) and [verification](docs/VERIFICATION.md).
+or production policy. See [testing](docs/developers/testing.md) and [verification](docs/operators/acceptance.md).
 
 ## Prepare a project
 
@@ -73,12 +84,12 @@ pnpm pxv policy validate --project-root /absolute/private/fleet
 
 Policies define each app once, share app IDs across profiles, separate global
 device settings and map exact GrapheneOS releases by Pixel codename. Follow the
-[policy reference](docs/POLICY_FORMAT.md) and operator guide to enroll observed
+[policy reference](docs/operators/policy-reference.md) and operator guide to enroll observed
 physical identities, pin artifacts, lock the policy, review OS installation and
 provision profiles/apps. Plans identify automated and assisted steps, complete app
 configuration before VPN lockdown and retain per-phone pause/recovery state.
 
-The [encrypted phone registry](docs/PHONE_REGISTRY.md) records operator-confirmed
+The [encrypted phone registry](docs/operators/registry.md) records operator-confirmed
 phone/profile credentials, Session messenger IDs, Oblivion keys, Proton VPN accounts
 and phone numbers. It retains encrypted history, exposes presence/state metadata in
 ordinary views and reveals values only to a chosen private file. Registry commands
@@ -90,9 +101,9 @@ reuse saved values for a separate private PDF; see the registry documentation.
 
 ## Automation and distributions
 
-[CLI jobs and MCP](docs/AUTOMATION.md) use the same engine, exact review text,
+[CLI jobs and MCP](docs/ai-agents/workflow-and-recovery.md) use the same engine, exact review text,
 physical-device ownership and durable recovery checks. Fleet selectors are explicit;
-attestation, finalization and recovery require one exact asset. [Docker](docs/DOCKER.md)
+attestation, finalization and recovery require one exact asset. [Docker](docs/operators/host-setup.md)
 supports direct USB and an existing host ADB server; host-ADB mode cannot flash.
 
 CLI commands show readable summaries by default. Use `--json` for structured
@@ -108,12 +119,12 @@ pnpm build:preview --formats portable,oci
 Portable is the supported default. OCI is explicit; Debian/npm and experimental SEA
 are optional compatibility formats. Formats derive from a frozen candidate with
 checksums, provenance and notices. Ordinary builds do not publish or install globally.
-See [publication](docs/PUBLICATION_CHECKLIST.md).
+See [publication](docs/developers/distribution.md).
 
 Community disables trusted extensions and experimental Seedvault recovery in its
 product descriptor. Explicitly enabled products retain those optional workflows;
 retained records remain available for inspection and recovery. [Optional source
 tooling](tools/optional/README.md) covers branding and guide publishing.
 
-The [architecture](docs/ARCHITECTURE.md), [security boundaries](SECURITY.md) and
+The [architecture](docs/developers/architecture.md), [security boundaries](SECURITY.md) and
 [contribution guide](CONTRIBUTING.md) describe the controls that changes must preserve.

@@ -18,7 +18,7 @@ pxv host doctor
 pxv host adb-start --yes
 ```
 
-Diagnostyka nie uruchamia ADB. Usuń problemy z narzędziami, uprawnieniami i natywnym środowiskiem przed podłączeniem telefonu użytkownika. W repozytorium po zbudowaniu używa się `pnpm pxv`; dokładne wersje i kontrole opisują [zależności komputera](../../../docs/HOST_DEPENDENCIES.md).
+Diagnostyka nie uruchamia ADB. Usuń problemy z narzędziami, uprawnieniami i natywnym środowiskiem przed podłączeniem telefonu użytkownika. W repozytorium po zbudowaniu używa się `pnpm pxv`; dokładne wersje i kontrole opisują [zależności komputera](../../../docs/operators/host-setup.md).
 
 Utwórz nowy projekt poza repozytorium kodu i zasobów. Wszystkie telefony dostępne z tego komputera powinny korzystać ze wspólnego obszaru kontroli operatora.
 
@@ -39,7 +39,7 @@ Zdefiniuj katalog `apps` raz, a w listach `apps` profili wskazuj jego identyfika
 
 Ustawienia Androida `global`, wspólne dla telefonu, umieść w `deviceSettings`. W `settings` profilu stosuj wpisy `secure` lub `system`. Świadomie ustal nazwy profili, uprawnienia, VPN i języki; nazwa właściciela musi odpowiadać zmierzonej nazwie. Wartości tajne nie należą do polityki ani tekstu receptur.
 
-Dla różnych modeli mapa `os` wiąże dokładny codename Pixela z kompletem danych uwierzytelnionego obrazu GrapheneOS. Każdy model przeznaczony do instalacji wymaga własnego wpisu. Nie ma zgadywania ani obrazu zastępczego. Schemat opisuje [format polityki](../../../docs/POLICY_FORMAT.md).
+Dla różnych modeli mapa `os` wiąże dokładny codename Pixela z kompletem danych uwierzytelnionego obrazu GrapheneOS. Każdy model przeznaczony do instalacji wymaga własnego wpisu. Nie ma zgadywania ani obrazu zastępczego. Schemat opisuje [format polityki](../../../docs/operators/policy-reference.md).
 
 ```sh
 pxv policy validate --project-root "$P"
@@ -66,7 +66,7 @@ Jeden telefon wybieraj przez `--asset ID`. Flota wymaga jawnego `--group GRUPA` 
 
 ## 4. Zainstaluj GrapheneOS w osobnym etapie destrukcyjnym
 
-Pomiń ten etap, jeżeli właściwy system jest już zainstalowany i zweryfikowany. Przed instalacją uzgodnij zakres usunięcia danych, zachowaj obsługiwane kopie danych telefonu i potwierdź zgodę na wymazanie wskazanego urządzenia. Przeczytaj [procedury testów, kopii i odzyskiwania](../../../docs/CANARY_BACKUP_RECOVERY.md).
+Pomiń ten etap, jeżeli właściwy system jest już zainstalowany i zweryfikowany. Przed instalacją uzgodnij zakres usunięcia danych, zachowaj obsługiwane kopie danych telefonu i potwierdź zgodę na wymazanie wskazanego urządzenia. Przeczytaj [procedury testów, kopii i odzyskiwania](../../../docs/operators/recovery-and-maintenance.md).
 
 Wykonaj [oficjalne przygotowanie GrapheneOS](https://grapheneos.org/install/cli#enabling-oem-unlocking), w tym włączenie odblokowania OEM w działającym systemie, gdy jest wymagane. Ręcznie przejdź do **Fastboot Mode** bootloadera, porównaj tożsamość fizycznego telefonu i pozostaw go w tym trybie. PXV sprawdza dokładny cel fastboot; nie przełącza sam telefonu z ADB. Polecenia odblokowania i ponownego zablokowania pozostaw sprawdzonej operacji PXV.
 
@@ -102,7 +102,7 @@ pxv device provision --project-root "$P" --asset "$ASSET" \
 pxv agent status --project-root "$P" --run RUN_ID --after 0
 ```
 
-Zachowaj identyfikator operacji i sprawdź jej stan oraz `pauseReason`. Ręczny etap oznacza, że praca nie jest zakończona. Przy kolejnych odczytach podawaj ostatni kursor zdarzeń. Zatwierdzanie zachowanego planu w tle opisuje [automatyzacja](../../../docs/AUTOMATION.md), wraz z dokładnym zapisem pliku przeglądu. `device guided` pokazuje instrukcje z polityki i wykonuje zadanie po potwierdzeniu; `--dry-run` służy do wcześniejszego przeglądu.
+Zachowaj identyfikator operacji i sprawdź jej stan oraz `pauseReason`. Ręczny etap oznacza, że praca nie jest zakończona. Przy kolejnych odczytach podawaj ostatni kursor zdarzeń. Zatwierdzanie zachowanego planu w tle opisuje [automatyzacja](../../../docs/ai-agents/workflow-and-recovery.md), wraz z dokładnym zapisem pliku przeglądu. `device guided` pokazuje instrukcje z polityki i wykonuje zadanie po potwierdzeniu; `--dry-run` służy do wcześniejszego przeglądu.
 
 Opcjonalne początkowe dane blokady pochodzą z `secrets/credentials/ASSET.json`: dokumentu `schemaVersion: 1`, którego mapa `values` rozwiązuje odwołania do sekretów z polityki. Użyj własnego pliku `0600` i prywatnych katalogów; nie wpisuj wartości do poleceń ani notatek. Usuń deklaracje domyślne, jeżeli konfiguracja ma być ręczna. Wartości te inicjalizują profil bez istniejącej blokady; nie służą do zmiany hasła. Przyjęta inicjalizacja jest pomijana w kolejnych operacjach dla tej samej trwałej tożsamości użytkownika.
 
@@ -203,7 +203,7 @@ Nieczytelne wartości można wpisać w ukrytym monicie lub jawnie pominąć. Prz
 wyniki i potwierdź zapis; `--yes` nie omija potwierdzeń. Zapis SIM zastępuje całą
 listę numerów urządzenia. Polecenia nie tworzą zrzutów ekranu ani wiadomości.
 Zmiana tożsamości lub błąd przywracania profilu blokuje zapis; zobacz
-[odczyt i odzyskiwanie](../../../docs/PHONE_REGISTRY.md#opt-in-pre-handoff-collection).
+[odczyt i odzyskiwanie](../../../docs/operators/registry.md#opt-in-pre-handoff-collection).
 Finalizacja nie wymaga tych opcjonalnych poleceń.
 
 Lokalny szyfrowany rejestr łączy identyfikator zasobu, numer seryjny sprzętu i codename z trwałymi tożsamościami profili Androida. Może przechowywać numer telefonu i parę PIN/hasło przymusu urządzenia oraz PIN/hasło, klucz Oblivion, identyfikator komunikatora Session, login/hasło Proton VPN i opcjonalny numer telefonu każdego profilu. Współdzielone konta zapisuj jawnie; identyfikator Session nie jest identyfikatorem użytkownika Androida.
@@ -217,9 +217,9 @@ pxv registry show --project-root "$P" --asset "$ASSET"
 
 Rewizja zero służy wyłącznie do pierwszego wpisu; przy zmianie podaj rewizję z `show`. Aktualizacja zastępuje cały bieżący rekord telefonu i zachowuje wszystkie wcześniejsze rewizje w szyfrowanej historii. Stany to `initial`, `current`, `unknown` i `stale`; `current` oznacza ostatnie jawne potwierdzenie operatora, a nie automatyczny odczyt z telefonu. Po prywatnej zmianie danych uzgodnij aktualizację rejestru.
 
-Odblokowanie odbywa się w ukrytym lokalnym monicie. Prywatne wejścia i wyniki wymagają własnego pliku `0600` w katalogu `0700`. `list`, `show` i `history` pomijają wartości; `reveal --asset ID --output NOWY_PRYWATNY_PLIK` celowo zapisuje tekst jawny. `rekey` zmienia hasło szyfrowania. `reconcile` jawnie przyjmuje przywróconą kopię lub przerwany zapis, dodając nieaktualne rewizje; następnie ponownie potwierdź aktualne dane. Najpierw przeczytaj [zasady rejestru, historii i odzyskiwania](../../../docs/PHONE_REGISTRY.md).
+Odblokowanie odbywa się w ukrytym lokalnym monicie. Prywatne wejścia i wyniki wymagają własnego pliku `0600` w katalogu `0700`. `list`, `show` i `history` pomijają wartości; `reveal --asset ID --output NOWY_PRYWATNY_PLIK` celowo zapisuje tekst jawny. `rekey` zmienia hasło szyfrowania. `reconcile` jawnie przyjmuje przywróconą kopię lub przerwany zapis, dodając nieaktualne rewizje; następnie ponownie potwierdź aktualne dane. Najpierw przeczytaj [zasady rejestru, historii i odzyskiwania](../../../docs/operators/registry.md).
 
-Prywatną wkładkę z zapisanymi danymi utworzysz poleceniem `pxv registry print-insert`, podając zasób, nowy prywatny plik PDF i lokalny Chromium. Zwarty eksport grupuje zwykłe dane według profilu, a dane destrukcyjne zaczyna na osobnym arkuszu A4 do wycięcia i złożenia. Typowy wpis mieści się na dwóch arkuszach; dłuższy zajmuje więcej bez skracania wartości ani zmniejszania ich pisma. Identyfikator pojawia się raz na arkuszu; puste formularze odzyskiwania są pomijane. Zobacz [instrukcję eksportu rejestru](../../../docs/PHONE_REGISTRY.md#prefilled-private-phone-sized-insert).
+Prywatną wkładkę z zapisanymi danymi utworzysz poleceniem `pxv registry print-insert`, podając zasób, nowy prywatny plik PDF i lokalny Chromium. Zwarty eksport grupuje zwykłe dane według profilu, a dane destrukcyjne zaczyna na osobnym arkuszu A4 do wycięcia i złożenia. Typowy wpis mieści się na dwóch arkuszach; dłuższy zajmuje więcej bez skracania wartości ani zmniejszania ich pisma. Identyfikator pojawia się raz na arkuszu; puste formularze odzyskiwania są pomijane. Zobacz [instrukcję eksportu rejestru](../../../docs/operators/guides-and-inserts.md#prefilled-private-phone-sized-insert).
 
 Przebudowa poradników może utworzyć ten sam prywatny PDF przez `--private-insert-output PLIK --project-root KATALOG --asset ID --output-dir KATALOG --chromium ŚCIEŻKA`. Używa polityki projektu; prywatny wynik musi być poza wspólnym katalogiem poradników. Wspólne pliki zachowują puste formularze.
 
@@ -273,4 +273,4 @@ pxv guide project --project-root /prywatna/sciezka/proba-offline --kind pixel --
 
 Inicjalizacja zapisuje blokadę wersji. Programiści mogą też uruchomić testy rejestru i przebiegu z atrapą portu urządzenia. Sprawdza to stronę hosta; nie kwalifikuje flashowania, receptur UI, VPN, odtwarzania ani fizycznego przekazania. Nie zastępuj niedostępnego telefonu testowego podstawowym telefonem użytkownika.
 
-Korzystaj z [listy poleceń](../../../docs/COMMAND_REFERENCE.md), [automatyzacji i MCP](../../../docs/AUTOMATION.md), [obsługi Dockera](../../../docs/DOCKER.md), [zasad bezpieczeństwa](../../../SECURITY.md) i [stanu weryfikacji](../../../docs/VERIFICATION.md). Community wyłącza opcjonalne rozszerzenia i eksperymentalną automatyzację Seedvault; ręczna kopia i odtworzenie pozostają osobną, sprawdzaną procedurą telefonu. Historyczne wyniki fizyczne dotyczą wyłącznie zapisanej wersji, a nie bieżącej kompilacji.
+Korzystaj z [listy poleceń](../../../docs/operators/command-reference.md), [automatyzacji i MCP](../../../docs/ai-agents/workflow-and-recovery.md), [obsługi Dockera](../../../docs/operators/host-setup.md), [zasad bezpieczeństwa](../../../SECURITY.md) i [stanu weryfikacji](../../../docs/operators/acceptance.md). Community wyłącza opcjonalne rozszerzenia i eksperymentalną automatyzację Seedvault; ręczna kopia i odtworzenie pozostają osobną, sprawdzaną procedurą telefonu. Historyczne wyniki fizyczne dotyczą wyłącznie zapisanej wersji, a nie bieżącej kompilacji.

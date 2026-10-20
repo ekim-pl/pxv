@@ -1,51 +1,36 @@
-# Documentation
+# pxv documentation
 
-If you prepare and use your own phone, start with the English
-[self-managed phone guide](SELF_MANAGED_PHONE.md). It combines operator and user
-duties for one phone with Owner-only or multiple Android profiles.
+pxv is a local CLI and MCP toolkit for preparing Google Pixels with GrapheneOS,
+reviewed apps, Android user profiles, and a recorded handoff. Choose your audience:
 
-The canonical workflows are the English and Polish guides:
-
-| Audience | English | Polski |
+| Audience | Start here | Main tasks |
 | --- | --- | --- |
-| Operator: one Pixel or a local fleet | [Operator guide](../guides/source/markdown/operator-en.md) | [Instrukcja operatora](../guides/source/markdown/operator-pl.md) |
-| Recipient: setup, acceptance and daily use | [User guide](../guides/source/markdown/user-en.md) | [Instrukcja użytkownika](../guides/source/markdown/user-pl.md) |
-| Phone-sized device quick start and configuration | [Quick start](../guides/source/markdown/quickstart-en.md) | [Szybki start](../guides/source/markdown/quickstart-pl.md) |
-| Private phone-sized credential insert template | [Credential insert](../guides/source/markdown/credentials-en.md) | [Wkładka z danymi dostępu](../guides/source/markdown/credentials-pl.md) |
+| Operators | [Operator documentation](operators/README.md) | Prepare a single device or fleet, generate each device’s guides and inserts, and transfer custody. |
+| End users | [End-user documentation](endusers/README.md) | Receive and use the phone, protect privacy, understand ordinary and duress credentials, and recover access. |
+| Developers | [Developer documentation](developers/README.md) | Build pxv, create extensions, test changes, and package distributions. |
+| AI integrations | [AI agent integration](ai-agents/README.md) | Run the MCP server, discover supported operations, and coordinate reviewed work. |
 
-Use `pxv guide operator|recipient --locale en|pl` to read the installed guide.
-`pxv guide project` renders requirements from the selected project's policy.
-See [guide sources and rebuilding](../guides/README.md) for generated editions.
-Use `pxv guides rebuild --policy FILE --output-dir DIRECTORY --chromium PATH`
-to generate variable phone-sized editions for an installation's GrapheneOS user profiles.
-They include paired blank ordinary credential and recovery sheets per profile; the accepted
-handoff report remains the record of the actual device.
+Preparing and using your own phone? Follow the operator’s
+[single-device path](operators/single-device.md), then the
+[end-user receiving checklist](endusers/receiving-your-phone.md). Perform both roles’
+checks even when you are the same person.
 
-## Operation and configuration
+## Printable guides and private packets
 
-- [Host dependencies](HOST_DEPENDENCIES.md): supported tools, explicit ADB services and native runtime.
-- [Command reference](COMMAND_REFERENCE.md): command families and exact selectors.
-- [Policy format](POLICY_FORMAT.md): authoring, shared apps and per-model OS pins.
-- [Encrypted phone registry](PHONE_REGISTRY.md): private credentials, history, retrieval and restore reconciliation.
-- [Network policies](NETWORK_POLICIES.md): VPN ordering and the limits of measured network evidence.
-- [Automation and MCP](AUTOMATION.md): exact reviews, durable runs, pauses and local automation.
-- [Docker](DOCKER.md): direct USB, host ADB and container/service ownership.
-- [Canary, backup and recovery](CANARY_BACKUP_RECOVERY.md): live acceptance, protected phones, restore drills and interrupted operations.
-- [Security](../SECURITY.md): trust, privacy and vulnerability reporting.
+The existing [English and Polish guide sources](../guides/README.md) provide the
+operator/user editions, phone-sized quick start, and blank credential inserts.
+[Generate and pack a packet for every device](operators/guides-and-inserts.md)
+using the installation’s policy, accepted report, and separately protected private
+inserts. General guides describe intended configuration; the accepted handoff and
+dated checks describe the actual device.
 
-## Development and distribution
+## Evidence and support
 
-- [Architecture](ARCHITECTURE.md): contracts, services, storage and safety boundaries.
-- [Testing](TESTING.md): development loop, strict quality gates and retained evidence.
-- [Verification](VERIFICATION.md): evidence boundaries and deployment qualification.
-- [Publication checklist](PUBLICATION_CHECKLIST.md): immutable candidates, signatures and explicit promotion.
+Start with a disposable canary. Starter policies require deployment-specific trust
+and configuration. Passing source checks does not qualify a phone, network route,
+or restore method; read [acceptance and evidence](operators/acceptance.md).
 
-## Optional systems
-
-The Community descriptor disables extensions and experimental Seedvault recovery.
-These pages describe explicitly enabled products; they do not imply those features
-are active or qualified in Community:
-
-- [Trusted extensions and SDK](EXTENSIONS.md).
-- [Seedvault recovery](SEEDVAULT_AUTOMATION.md) and [personal recovery tooling](SEEDVAULT_AUTOMATION.md#personal-recovery-tool).
-- [White-label forks](WHITE_LABEL.md) and [optional source tooling](../tools/optional/README.md).
+Community disables extension installation/invocation and experimental Seedvault
+automation. Their references explain explicitly enabled products and retained
+inspection/recovery behavior. See [security boundaries](../SECURITY.md) and use the
+actual support contact supplied with your phone or product.

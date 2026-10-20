@@ -1,12 +1,75 @@
-# Five-profile self-service acceptance test
+# Device acceptance and evidence
+
+Use this procedure with [single-device preparation](single-device.md) or the [fleet canary](fleet.md#qualify-the-canary). A phone is ready only when its own required checks, fresh signoff, finalization, and custody are complete. Use [recovery and maintenance](recovery-and-maintenance.md) for backup methods and interrupted operations.
+
+## Evidence and qualification
+
+Verification belongs to an exact source/candidate, policy, artifact set and test
+environment. This page defines what evidence means. It does not certify the current
+checkout, a starter policy, an application or a phone.
+
+## Separate evidence layers
+
+| Layer | Evidence | What it establishes |
+| --- | --- | --- |
+| Policy | Validated input, resolved lock, exact OS/app pins and reviewed actions | The declared configuration is structurally accepted and bound to a review. |
+| Offline implementation | Fresh source-bound quality report, real cryptographic checks, process faults and synthetic fixtures | The tested code passed those checks for that source identity. |
+| Distribution | Exact artifact hashes/signatures and actual extracted/installed/container execution | The tested package and runtime work in the recorded environment. |
+| Live deployment | Exact-build device observations, scoped network/restore tests and witnessed recipient checks | Only the tested physical/emulator capabilities and data scope passed. |
+
+A pass in one layer does not imply a pass in another. A stock Android emulator
+cannot establish GrapheneOS provenance. A GrapheneOS emulator remains emulator
+evidence. A helper's scoped HTTPS probe does not establish every app's routing;
+copy integrity does not establish backup restorability.
+
+## Current work
+
+Use the latest complete `.quality/report.json` and `.quality/report.md` whose source
+identity matches the checkout. Run [the strict quality workflow](../developers/testing.md) again
+after edits; do not copy earlier test counts or coverage totals into a new claim.
+Source-bound reports retain the actual tools, component results, coverage and
+function metrics. Distribution verification belongs in the separate
+`.quality/packaged-runtime.json` record so evidence does not become an input to its own
+candidate digest.
+
+Physical-device and exact-build GrapheneOS emulator acceptance require a recorded
+canary for the tested configuration. The registry's synthetic encryption and CLI
+tests establish local storage behavior; credential validity requires checks on the
+phone. Deployment claims need matching live evidence.
+
+Before qualifying a deployment, retain the candidate/product/policy identities,
+artifact hashes, OS fingerprint, app versions/signers, host/transport, stable Android
+user identities and a result for every promised capability. Include reboot
+persistence, isolation, required settings/permissions, actual-app network and
+failure behavior, supported restore scope, localized manual steps, helper cleanup,
+debugging shutdown and separate recipient custody where applicable. Keep missing
+items pending. Use the [canary and recovery runbook](recovery-and-maintenance.md).
+
+Follow the [publication checklist](../developers/distribution.md) before promoting any
+artifact. Ordinary builds do not publish or establish live acceptance.
+
+Release candidates and release provenance use schema 2. They record Node, supervisor JavaScript, Koffi version/platform/Node-API version, loader/addon hashes and artifact hashes. Schema 1 candidates must be regenerated. Portable, Debian, npm, OCI and experimental SEA formats include the supervisor bundle, Koffi loader and selected glibc x64 prebuild with reviewed notices. Existing ownership records, IPC protocol and receipts remain schema/protocol 1; policies are unversioned. Never clear host control state to regenerate a candidate. Engine integrity binds source/build bytes and the selected supervisor, addon and loader.
+
+## Single-device acceptance checklist
+
+1. Bind the result to the exact candidate, policy lock, physical phone and stable Android users.
+2. Walk every configured profile, ordinary unlock, language, app account and permission. Record unsupported or failed requirements.
+3. Check each witnessed VPN configuration and the actual applications’ required connectivity/failure behavior; retain helper probe scope separately.
+4. Reboot and check persistence, profile separation, supported backups and a representative restore on an authorized target.
+5. Complete recipient acceptance, then fresh operator signoff and finalization. Physically check both debugging switches, bootloader state and recipient custody.
+6. Export the accepted report and complete [the per-device packet](guides-and-inserts.md#packing-checklist-for-every-device).
+
+Never activate destructive duress or notification-wipe keys during acceptance. Missing physical checks remain pending even when offline checks pass.
+
+## Five-profile self-service acceptance
 
 This is a complete test procedure for **one person acting as operator and recipient**,
 with one exact physical Pixel and five Android profiles. It prepares a test; it does
 not record a pass. Use your own name for both roles and complete their confirmations
-separately. Follow the [self-managed guide](SELF_MANAGED_PHONE.md) for background and
-[verification boundaries](VERIFICATION.md) when interpreting evidence.
+separately. Follow the [self-managed guide](single-device.md) for background and
+[verification boundaries]() when interpreting evidence.
 
-The starter is [single-nerd](../policy-packs/single-nerd/policy.json).
+The starter is [single-nerd](../../policy-packs/single-nerd/policy.json).
 It contains no app pins, OS pins, VPN configuration, credentials or destructive
 duress defaults. Schema validity alone is insufficient for the full test. Complete
 the private configuration gate below before phone-changing commands.
@@ -16,7 +79,7 @@ the private configuration gate below before phone-changing commands.
 Use a disposable owned canary and synthetic data first. Preserve primary-phone data,
 account access and independent recovery material. Creating profiles changes the
 phone; OS installation erases data. Flash only an exact separately authorized target
-through the [installation procedure](SELF_MANAGED_PHONE.md#3-install-grapheneos-only-when-needed).
+through the [installation procedure](single-device.md#install-the-os-only-when-required).
 Do not deliberately interrupt flashing or erase a primary phone to test restoration.
 
 A single person can operate several test devices. A full backup/restore result needs
@@ -33,7 +96,7 @@ does not activate duress or notification-triggered wiping.
 ## 2. Freeze the executable and open a private test record (F01)
 
 Use Linux x86_64 on supported Debian 12 or Ubuntu 24.04 with Node 24.22.0, pnpm
-12.11.2 and the [host prerequisites](HOST_DEPENDENCIES.md). These examples use a
+12.11.2 and the [host prerequisites](host-setup.md). These examples use a
 **source checkout**, including its test templates and guide renderer. Run from that
 checkout in Bash; keep the same shell and its variables throughout:
 
@@ -100,8 +163,8 @@ Before the full run, fill the private results matrix with:
 
 - The exact Pixel model/codename, approved GrapheneOS release and authenticated OS
   pin. Even when skipping installation, pinned OS verification must pass. Follow
-  [policy format](POLICY_FORMAT.md); do not invent hashes, keys or signatures.
-- Review the starter's [pinned app catalog and assignments](../policy-packs/README.md#five-profile-apps),
+  [policy format](policy-reference.md); do not invent hashes, keys or signatures.
+- Review the starter's [pinned app catalog and assignments](../../policy-packs/README.md#five-profile-apps),
   including Rethink DNS in all five profiles, Oblivion in owner, Session/Telegram/Signal
   in contacts, Aurora Store in google and Orbot in onion. Confirm the exact versions,
   content and signer digests and trusted sources, and record any private changes or
@@ -112,7 +175,7 @@ Before the full run, fill the private results matrix with:
   expectations. Pin supported recipes where available; the standard CLI otherwise
   uses assisted checkpoints. Explain every permission and shared-package effect.
 - VPN package/configuration, always-on and lockdown settings where required, plus
-  actual-app route/failure tests. See [network evidence](NETWORK_POLICIES.md). An
+  actual-app route/failure tests. See [network evidence](policy-reference.md). An
   onion name or a helper's egress result cannot establish all-app Tor routing.
 - Each profile/app's backup method, supported categories, exclusions, independent
   recovery access, restore target and expected synthetic data. Keep the required
@@ -160,7 +223,7 @@ bootloader/verified-boot state and the selected USB endpoint. Resolve discrepanc
 before planning. Enrollment does not authorize erasure.
 
 If OS installation is required, perform the separately reviewed phase from the
-[self-managed installation guide](SELF_MANAGED_PHONE.md#3-install-grapheneos-only-when-needed).
+[single-device installation guide](single-device.md#install-the-os-only-when-required).
 Record its own plan/run IDs, attend unlock/relock prompts, complete the setup pause
 and reconfirm identity with inspection. Do not flash again to advance a pause.
 If already on the intended verified build, record installation as not needed;
@@ -188,7 +251,7 @@ pxv agent status --project-root "$P" --run "$RUN" --after 0
 
 The dry-run plan is not automatically the executed plan. Save both IDs and the
 review actually approved. For exact saved-plan submission use the private
-`reviewSummary`/`--review-file` procedure in [automation](AUTOMATION.md#prepare-review-and-execute).
+`reviewSummary`/`--review-file` procedure in [CLI automation](../ai-agents/cli-automation.md#save-an-exact-review-and-execute).
 Native-host workers are detached: terminal exit does not prove completion. Read
 status and new event cursors. Exit 4 means pending work, 3 means failure/inspection,
 and 130 means cancellation; do not wrap phone operations in an unattended retry loop.
@@ -268,7 +331,7 @@ policy merely to hide a failure; that requires a new reviewed visit.
 
 ## 8. Demonstrate backup and restore (F09)
 
-Follow the [representative restore drill](CANARY_BACKUP_RECOVERY.md#perform-a-representative-restore-drill)
+Follow the [representative restore drill](recovery-and-maintenance.md#perform-a-representative-restore-drill)
 with the same methods/builds intended for this phone. Back up each declared profile
 scope; Owner's backup does not imply coverage for other profiles. Use known file
 bytes/counts and actual synthetic app records, attachments and settings.
@@ -287,7 +350,7 @@ restore pass. Keep operator project/control backups separate from phone-data bac
 ## 9. Optional encrypted record and private insert (F10)
 
 If using retention, follow the strict input formats and revision rules in
-[phone registry](PHONE_REGISTRY.md). Enter values in an owned `0600` file inside
+[phone registry](registry.md). Enter values in an owned `0600` file inside
 an owned `0700` directory outside the checkout. Do not put values in this results
 sheet. Start a new registry only in this new test project:
 
@@ -305,7 +368,7 @@ and history is retained. `current` means last operator-confirmed, not live proof
 
 Before final signoff/debugging shutdown, optionally run `device collect-oblivion`,
 `device collect-sessionid` and `device collect-simcards` with the same project/asset.
-Follow [the collector procedure](PHONE_REGISTRY.md#opt-in-pre-handoff-collection):
+Follow [the collector procedure](registry.md#opt-in-pre-handoff-collection):
 check mixed app presence, private fallback entry, SIM numbers at device level,
 explicit retention despite `--yes`, and foreground restoration. Absent/skipped
 values retain their previous fields; collection with no values preserves ciphertext.
@@ -314,7 +377,7 @@ Each successful invocation merges captured fields while retaining encrypted hist
 An explicit private `registry reveal` must create a new protected output file;
 compare privately and handle the plaintext under your retention policy. If testing
 printed retention, `registry print-insert` exports saved secret values to a private
-phone-sized PDF. Follow [the private insert procedure](PHONE_REGISTRY.md#prefilled-private-phone-sized-insert),
+phone-sized PDF. Follow [the private insert procedure](guides-and-inserts.md#prefilled-private-phone-sized-insert),
 check both languages privately, and never upload that PDF or its page images.
 Blank policy-generated inserts can instead be completed privately by hand.
 
@@ -329,7 +392,7 @@ owned helper/resources, native receipts and retained reservations. Do not assume
 cancellation undid a package/account change or that closing a terminal killed a worker.
 
 For any unexpected failure, stop further mutations. Use the original transport and
-endpoint, retained operation ID and the [typed recovery procedure](CANARY_BACKUP_RECOVERY.md#recover-an-interrupted-pxv-operation).
+endpoint, retained operation ID and the [typed recovery procedure](recovery-and-maintenance.md#recover-an-interrupted-pxv-operation).
 Inspection-only `device recover` intentionally exits 4. Acknowledge `--inspected`
 only after actual inspection/cleanup; unresolved obligations must remain fenced.
 Never delete SQLite state, locks or receipts, restore historical control state or
@@ -404,7 +467,7 @@ font/glyph checks, every page and profile names/order. These are intended settin
 not device acceptance; populated registry inserts are separate private exports.
 
 Complete every result and record remaining limitations. Preserve a consistent private
-project backup and current host evidence using the [cold-backup procedure](CANARY_BACKUP_RECOVERY.md#back-up-operator-projects-and-host-evidence).
+project backup and current host evidence using the [cold-backup procedure](recovery-and-maintenance.md#back-up-operator-projects-and-host-evidence).
 Do not overwrite current host control state from a backup. Only a separately reviewed,
 sanitized summary may be shared publicly; omit serials, account IDs, credentials,
 raw logs, private policies, populated inserts and identifiable screenshots.

@@ -48,7 +48,7 @@ Reviews contain references and action types, without values, hashes or secret
 snapshots. Values are read only during execution and can change privately before
 resume. Defaults remain initial-only and require recipient verification/replacement.
 
-Authorized support retention uses the separate [encrypted phone registry](docs/PHONE_REGISTRY.md).
+Authorized support retention uses the separate [encrypted phone registry](docs/operators/registry.md).
 Its current states describe the last operator confirmation. Values and
 history stay encrypted at rest; ordinary outputs project only presence/state
 metadata, and explicit retrieval writes a new private file. Secrets never enter
@@ -88,8 +88,8 @@ in Community.
 Offline tests, a successful command and copied backup bytes do not establish
 production acceptance. Retain exact-build GrapheneOS provenance, authorized physical
 and localized workflow evidence, representative network/failure checks and witnessed
-restores for advertised capabilities. See [verification](docs/VERIFICATION.md) and
-[recovery](docs/CANARY_BACKUP_RECOVERY.md).
+restores for advertised capabilities. See [verification](docs/operators/acceptance.md) and
+[recovery](docs/operators/recovery-and-maintenance.md).
 
 ## Report a vulnerability
 

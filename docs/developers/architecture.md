@@ -1,4 +1,6 @@
-# Architecture
+# Architecture and extension points
+
+Start with [building pxv](build.md) or [creating an extension](creating-extensions.md). This reference explains the boundaries a core change or integration must preserve.
 
 The workspace separates contracts/policy, runtime/storage, Android/artifact adapters, workflow services, extension management/SDK, guides, CLI, MCP and release tooling. User interfaces call application services; services consume injected ports and shared contracts. Domain contracts cannot depend on subprocesses, SQLite or device implementations. `tools/check-boundaries.mjs` checks workspace edges and cycles.
 
@@ -10,7 +12,7 @@ The façade's retained public port, plan, run/state and emulator-evidence type e
 
 The engine expands the authored policy's shared app catalog, owner-scoped device
 settings and per-codename OS pins into an execution model consumed by the action
-contracts. See [policy format](POLICY_FORMAT.md).
+contracts. See [policy format](../operators/policy-reference.md).
 
 `PolicyDocument` names authored input, while `ExecutionPolicy` names the expanded
 engine model. `validatePolicyDocument` validates authored input, `validatePolicy`
@@ -62,7 +64,7 @@ VPN secure keys; observation parsing remains separate from authoring validation.
 Docker workers use an attached streaming runner with an explicit container identity
 and independently bounded control operations. Ownership labels isolate worker
 cleanup from ADB sidecars. Failed or uncertain cleanup retains native reservations
-and evidence; see [Docker shutdown behavior](DOCKER.md#command-and-container-lifetime).
+and evidence; see [Docker shutdown behavior](../operators/host-setup.md#command-and-container-lifetime).
 
 Project ownership serializes cooperating configuration writes and operations. Submission, execution, review refresh, attestation, finalization, custody and lifecycle changes recheck the loaded configuration, policy and inventory byte revisions plus executable identity after acquiring it. Stale contexts require reload and review. Configuration/lock writes also compare their expected source revisions. Project ownership precedes physical-device ownership.
 
@@ -70,7 +72,7 @@ Physical serial, transport selector, asset ID and Android user identity are dist
 
 ## Provisioned-phone registry
 
-The [local registry](PHONE_REGISTRY.md) joins inventory by asset ID, canonical
+The [local registry](../operators/registry.md) joins inventory by asset ID, canonical
 hardware serial and codename with a separate encrypted JSON database at
 `secrets/phone-registry.pxv`. Device fields hold duress credentials/phone number;
 profile fields hold normal credentials, the Oblivion notification wipe key,
@@ -142,7 +144,7 @@ acceptance. Trusted extensions and authoring APIs are compatibility components;
 device-changing contributions still use typed actions, review, leases and recovery.
 Extension worker isolation is fault isolation, not a sandbox.
 
-Brand scaffolding and guide publishing are [optional source tooling](../tools/optional/README.md),
+Brand scaffolding and guide publishing are [optional source tooling](../../tools/optional/README.md),
 with compatibility entry points. They do not run during device provisioning.
 
 Public action contracts and the extension SDK use API version 1. Schema/engine
@@ -151,11 +153,22 @@ default output; optional formats derive from the same frozen candidate. Previews
 have isolated identities and projects. Release tooling cannot publish through an
 ordinary build.
 
-
 Release candidates and release provenance use schema 2. They record Node, supervisor JavaScript, Koffi version/platform/Node-API version, loader/addon hashes and artifact hashes. Schema 1 candidates must be regenerated. Portable, Debian, npm, OCI and experimental SEA formats include the supervisor bundle, Koffi loader and selected glibc x64 prebuild with reviewed notices. Existing ownership records, IPC protocol and receipts remain schema/protocol 1; policies are unversioned. Never clear host control state to regenerate a candidate. Engine integrity binds source/build bytes and the selected supervisor, addon and loader.
-
 
 Build tooling that imports a workspace `dist/*.js` entrypoint is checked against
 its corresponding `src/*.ts` exports by the repository graph. This keeps compiled
 integration entrypoints explicit without hiding unused source exports. Public SDK
 entries and documented test-only exports remain separately configured.
+
+## Finding the right extension point
+
+| Change | Entry point |
+| --- | --- |
+| Policy or action contract | `packages/contracts/src/types.ts` and policy validators |
+| Workflow orchestration | Engine services and `packages/engine/src/composition.ts` |
+| Android execution | Injected engine ports and Android adapters |
+| CLI or MCP operation | CLI command registry, backend, and MCP registration |
+| Persistence | Runtime Store and atomic storage transitions |
+| External contribution | Public extension SDK and contracts |
+
+Keep subprocess and storage implementation details out of contracts. Expose new behavior through application services so CLI and MCP retain the same review and recovery rules.

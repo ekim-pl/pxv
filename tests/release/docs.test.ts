@@ -186,7 +186,7 @@ describe('public documentation generation', () => {
         '[top](#)',
         '[missing fragment](guide.pl.md#missing)',
         '[missing asset fragment](../../assets/logo.svg#missing)',
-        '[outside](../../../docs/POLICY_FORMAT.md)',
+        '[outside](../../../docs/operators/policy-reference.md)',
         '[missing](missing.html)',
         '[stale](stale.html)',
         '[absolute](/etc/passwd)',

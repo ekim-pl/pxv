@@ -18,7 +18,7 @@ pxv host doctor
 pxv host adb-start --yes
 ```
 
-Doctor does not start ADB. Resolve missing tools, permissions and native-runtime failures before connecting a production phone. A source checkout uses the pinned toolchain and `pnpm pxv` after building; follow [host dependencies](../../../docs/HOST_DEPENDENCIES.md) for the exact setup and checks.
+Doctor does not start ADB. Resolve missing tools, permissions and native-runtime failures before connecting a production phone. A source checkout uses the pinned toolchain and `pnpm pxv` after building; follow [host dependencies](../../../docs/operators/host-setup.md) for the exact setup and checks.
 
 Create a new project outside the source/resource checkout. Keep one operator control domain for every phone reachable from this workstation.
 
@@ -39,7 +39,7 @@ Define an `apps` catalog once and reference its IDs in each profile's `apps` lis
 
 Place device-wide Android `global` settings in `deviceSettings`. Profile `settings` contain `secure` or `system` entries. Define profile names, permissions, VPN and language deliberately; the owner name must match the observed owner. Keep secrets out of policy values and recipe text.
 
-For mixed models, `os` maps each exact Pixel codename to a complete authenticated GrapheneOS image pin. Every model to be flashed needs its own entry. No image is selected by a guessed model or fallback. See [policy format](../../../docs/POLICY_FORMAT.md) for the schema.
+For mixed models, `os` maps each exact Pixel codename to a complete authenticated GrapheneOS image pin. Every model to be flashed needs its own entry. No image is selected by a guessed model or fallback. See [policy format](../../../docs/operators/policy-reference.md) for the schema.
 
 ```sh
 pxv policy validate --project-root "$P"
@@ -66,7 +66,7 @@ Use `--asset ID` for one phone. Fleet selection requires `--group GROUP` or `--a
 
 ## 4. Install GrapheneOS as a separate destructive phase
 
-Skip this phase when the intended OS is already installed and verified. Before installation, agree erasure scope, preserve supported phone-data backups and confirm that the selected phone may be wiped. Read [canary, backup and recovery](../../../docs/CANARY_BACKUP_RECOVERY.md).
+Skip this phase when the intended OS is already installed and verified. Before installation, agree erasure scope, preserve supported phone-data backups and confirm that the selected phone may be wiped. Read [canary, backup and recovery](../../../docs/operators/recovery-and-maintenance.md).
 
 Follow the [official GrapheneOS preparation instructions](https://grapheneos.org/install/cli#enabling-oem-unlocking), including enabling OEM unlocking in the running OS when required. Manually enter the bootloader's **Fastboot Mode**, compare its physical identity and keep it in that mode. PXV checks the exact fastboot target; it does not reboot from ADB into fastboot for you. Leave unlock/relock commands to the reviewed PXV operation.
 
@@ -102,7 +102,7 @@ pxv device provision --project-root "$P" --asset "$ASSET" \
 pxv agent status --project-root "$P" --run RUN_ID --after 0
 ```
 
-Keep the returned run ID and read its status and `pauseReason`. A manual pause leaves work unfinished. Poll with the last event cursor to read new events. For background submission of a retained exact plan, use the byte-exact review-file procedure in [automation](../../../docs/AUTOMATION.md). `device guided` presents policy-derived instructions and executes after confirmation; use `--dry-run` to review first.
+Keep the returned run ID and read its status and `pauseReason`. A manual pause leaves work unfinished. Poll with the last event cursor to read new events. For background submission of a retained exact plan, use the byte-exact review-file procedure in [automation](../../../docs/ai-agents/workflow-and-recovery.md). `device guided` presents policy-derived instructions and executes after confirmation; use `--dry-run` to review first.
 
 Private initial credential defaults, if selected, come from `secrets/credentials/ASSET.json`: a `schemaVersion: 1` document whose `values` map resolves policy secret references. Use an owned `0600` file and private directories; never put values in commands or notes. Omit default declarations for private manual setup. Defaults initialize a profile with no existing screen lock and are not a password-change mechanism; accepted defaults are skipped on repeat runs for the same stable user.
 
@@ -201,7 +201,7 @@ Unreadable values offer hidden manual entry or an explicit skip. Review outcomes
 and confirm retention; `--yes` bypasses neither unlocking nor retention. SIM retention
 replaces the complete saved device number list. No screenshots or messages are
 created. Changed identities or failed foreground restoration prevent saving; use
-[collection and recovery](../../../docs/PHONE_REGISTRY.md#opt-in-pre-handoff-collection).
+[collection and recovery](../../../docs/operators/registry.md#opt-in-pre-handoff-collection).
 Finalization does not require these optional commands.
 
 The local encrypted registry joins asset ID, hardware serial and codename with per-profile stable Android identities. It can retain phone number and device duress PIN/password, plus each profile's PIN/password, Oblivion key, Session messenger ID, Proton VPN username/password and optional phone number. Reused service accounts are recorded explicitly; a Session ID is not an Android user ID.
@@ -215,9 +215,9 @@ pxv registry show --project-root "$P" --asset "$ASSET"
 
 Use revision zero only for the first record; subsequent updates require the revision shown by `show`. Each update replaces the complete current phone record and preserves all previous revisions encrypted. States are `initial`, `current`, `unknown` and `stale`; `current` means last explicitly confirmed by the operator, not automatically read from the phone. Coordinate private credential changes with a registry update.
 
-Unlock uses a hidden local prompt. Private inputs/outputs need an owned `0600` file in a `0700` directory. `list`, `show` and `history` omit values; `reveal --asset ID --output NEW_PRIVATE_FILE` deliberately writes plaintext. `rekey` rotates the unlock passphrase. `reconcile` explicitly accepts a restored/interrupted copy by appending stale revisions; reconfirm current values afterward. Read [registry storage, history and recovery](../../../docs/PHONE_REGISTRY.md) before use.
+Unlock uses a hidden local prompt. Private inputs/outputs need an owned `0600` file in a `0700` directory. `list`, `show` and `history` omit values; `reveal --asset ID --output NEW_PRIVATE_FILE` deliberately writes plaintext. `rekey` rotates the unlock passphrase. `reconcile` explicitly accepts a restored/interrupted copy by appending stale revisions; reconfirm current values afterward. Read [registry storage, history and recovery](../../../docs/operators/registry.md) before use.
 
-For a prefilled private insert, use `pxv registry print-insert` with an asset, new private PDF output and local Chromium. The compact export groups ordinary values by profile and starts destructive credentials on a separate A4 cut-and-fold sheet. Typical records target two sheets; longer records use more without truncation or smaller values. The asset appears once per sheet, and blank recovery worksheets are omitted. See the [registry export instructions](../../../docs/PHONE_REGISTRY.md#prefilled-private-phone-sized-insert).
+For a prefilled private insert, use `pxv registry print-insert` with an asset, new private PDF output and local Chromium. The compact export groups ordinary values by profile and starts destructive credentials on a separate A4 cut-and-fold sheet. Typical records target two sheets; longer records use more without truncation or smaller values. The asset appears once per sheet, and blank recovery worksheets are omitted. See the [registry export instructions](../../../docs/operators/guides-and-inserts.md#prefilled-private-phone-sized-insert).
 
 Guide rebuilding can also create the same private PDF with `--private-insert-output FILE --project-root DIRECTORY --asset ID --output-dir DIRECTORY --chromium PATH`. It uses the project policy; keep the private output outside the shared guide directory. Shared guide artifacts remain blank.
 
@@ -270,4 +270,4 @@ pxv guide project --project-root /private/path/offline-rehearsal --kind pixel --
 
 Initialization records a lock. Source maintainers can also run the fake-port registry/workflow tests. This checks the host-side workflow only; it cannot qualify flashing, UI recipes, VPN behavior, restoration or physical custody. Never substitute a primary phone for an unavailable disposable canary.
 
-Use the [command reference](../../../docs/COMMAND_REFERENCE.md), [automation/MCP](../../../docs/AUTOMATION.md), [Docker operation](../../../docs/DOCKER.md), [security boundaries](../../../SECURITY.md) and [verification status](../../../docs/VERIFICATION.md). Community disables optional extensions and experimental Seedvault automation; supported manual backup/restore remains a separately checked phone procedure. Historical physical records qualify only their recorded candidate, not the current build.
+Use the [command reference](../../../docs/operators/command-reference.md), [automation/MCP](../../../docs/ai-agents/workflow-and-recovery.md), [Docker operation](../../../docs/operators/host-setup.md), [security boundaries](../../../SECURITY.md) and [verification status](../../../docs/operators/acceptance.md). Community disables optional extensions and experimental Seedvault automation; supported manual backup/restore remains a separately checked phone procedure. Historical physical records qualify only their recorded candidate, not the current build.

@@ -1,4 +1,6 @@
-# Local encrypted phone registry
+# Consent and the encrypted support registry
+
+Agree what the recipient authorizes you to retain, who can unlock the record, how private changes are reported, and when exports are removed. Registry retention is optional and separate from phone provisioning. Use [per-device printing](guides-and-inserts.md) only after reviewing the selected asset and saved value states.
 
 The registry retains last-confirmed current phone and profile credentials for one
 operator/workstation. Each project has one encrypted database at
@@ -189,136 +191,9 @@ the encrypted database and its entire project state are rolled back together, th
 offline system cannot detect that rollback; compare with separately retained backup
 revision records and reconcile the restored copy before using it.
 
-## Device box cards and asset stickers
+## Printing and private inserts
 
-Generate an exact-size card from the latest saved record for one enrolled phone:
-
-```sh
-pxv registry print-card --project-root DIRECTORY --asset PHONE \
-  --output PRIVATE_DIRECTORY/card.pdf --locale en --chromium /absolute/path/to/chromium
-```
-
-Each PDF page is **68 × 100 mm**, ready for printing at **100% / actual size**.
-The generator targets one card and adds cards when the contents need more space.
-It includes the canonical hardware serial, device duress PIN/password, device and
-profile phone numbers, every profile's Session ID and Oblivion notification-wipe
-key. Ordinary unlock and Proton VPN credentials are omitted. Profile identity,
-effective credential states, update/confirmation times, destructive-use warnings,
-and missing-value notices remain visible. Identical metadata is shared across
-consecutive fields in the same profile. Continuation cards repeat the phone serial
-and relevant profile/field identity, with card numbering. Long values wrap and
-continue without truncation or shrinking the credential font.
-
-This command uses the same hidden unlock prompt or `--passphrase-file`, read-only
-registry loading, project identity, revision-anchor and effective binding checks as
-`registry print-insert`. It works offline without connecting to the phone.
-
-Generate a small asset sticker directly from inventory, without a registry unlock:
-
-```sh
-pxv inventory print-label --project-root DIRECTORY --asset PHONE \
-  --output PRIVATE_DIRECTORY/label --date 202610 --locale en \
-  --chromium /absolute/path/to/chromium
-```
-
-The extensionless output basename creates **both** `label.pdf` and `label.png`.
-The PDF contains one **40 × 15 mm** page with three lines: asset ID, canonical phone
-serial, and date. The matching PNG is rasterized from that PDF at **300 DPI**
-(473 × 178 pixels, with pixel rounding). `--date` accepts `YYYYMM` with month
-`01`–`12`; omit it to use the machine's local generation month. Supply the original
-month explicitly for a reproducible reprint. Poppler's `pdftoppm` is required on
-PATH, or select it with `--pdftoppm /absolute/path/to/pdftoppm`. Oversized identities
-are rejected instead of clipped, truncated or reduced below the fixed print font.
-
-Both generators support `--locale en|pl` (English by default), require one exact
-enrolled `--asset`, and run only on the local host. No handoff record is required.
-Print the PDF at actual size, without fit-to-page. Output destinations follow the
-private registry export rules: a new file under project `secrets` or outside the
-project and product resources, a `0700` parent directory and `0600` files, with no
-symlinks or overwriting. Sticker outputs are both rendered before publication;
-failure to publish either removes any newly published partner without changing
-existing files. Temporary HTML, PDFs and isolated browser profiles are removed
-after success or failure. Only export metadata reaches the console. A fixed,
-CSP-hashed layout script measures text; supplied values remain escaped text and
-the renderer disables background networking.
-
-These are separate commands; existing A4 cut-and-fold inserts and shared guide
-rebuilds retain their current behavior.
-
-## Prefilled private phone-sized insert
-
-Export the latest saved record for one enrolled phone as a recipient PDF:
-
-```sh
-pxv registry print-insert --project-root DIRECTORY --asset PHONE \
-  --output PRIVATE_DIRECTORY/insert.pdf --locale en --chromium /absolute/path/to/chromium
-```
-
-Use `--locale pl` for Polish; English is the default. Unlock uses the same hidden
-prompt or `--passphrase-file` as other registry commands. A local Chromium executable with CSS page-margin-box support
-is required (for repeating asset/profile headers); nothing is downloaded. The command works offline during preparation
-and does not require an accepted handoff report or connect to a phone.
-
-Guide rebuilding can also export a separate private insert from the same registry:
-
-```sh
-pxv guides rebuild --project-root DIRECTORY --asset PHONE \
-  --output-dir PUBLIC_GUIDE_DIRECTORY \
-  --private-insert-output PRIVATE_DIRECTORY/insert.pdf \
-  --locale pl --chromium /absolute/path/to/chromium
-```
-
-This source-checkout command uses the selected project's policy. An explicit
-`--project-root`, `--asset`, `--output-dir` and Chromium are required; do not combine
-it with `--policy` or `--html-only`. English is the default private-insert locale;
-`PXV_CHROMIUM` can supply the browser path. Unlock uses the same hidden prompt or
-`--passphrase-file`. The PDF must be outside the shared guide output directory.
-Both export paths use the same registry loading, binding checks and renderer.
-Both use optional `insertMetadata` from the project's `pxv.project.json`: the project
-name is printed when supplied, and a project support contact replaces the whole
-product contact. Without a support override, the product contact is used. See
-[project names and support contacts](../guides/README.md#project-names-and-support-contacts)
-for configuration, validation and the required policy-lock/review refresh after edits.
-Shared guide HTML, Markdown, PDFs and QA artifacts remain blank templates, and the
-publishing subprocess receives only the selected insert metadata in addition to the
-project policy, with no registry values or passphrase. Blank credential editions
-include the project name and support contact; credentials stay blank. Insert export is
-offline and can run after debugging has been disabled.
-
-The PDF includes **all saved values in the latest record**, including ordinary unlocks,
-phone numbers, Session IDs, Proton VPN accounts, device duress credentials and per-
-profile Oblivion keys. Historical revisions are not supported. Values are grouped into
-one section per profile, with identical effective state and update/confirmation metadata
-shared within that section. Field-specific differences remain explicit; stale and
-unknown values are prominently flagged. Current means last operator-confirmed, not
-measured from the phone. Only recorded fields are printed; blank recipient, recovery and
-backup worksheets are omitted. Profiles without ordinary values and destructive sections
-without values are explicitly marked. Omitted fields are not recorded, which does not
-mean unconfigured.
-
-The phone's canonical hardware serial is printed in the device details of both
-the ordinary and destructive sections, labeled in the selected language. It comes
-from the saved registry record; it is distinct from an Android profile's user serial.
-
-The output must be a new `.pdf` under project `secrets` or outside the project and
-product resources, in a private `0700` directory. Files are `0600`; existing files
-and symlinks are refused. Only the PDF is retained. Temporary HTML and the isolated
-browser profile are removed after success or failure. Console output contains only
-export metadata. The plaintext PDF remains sensitive: protect it and remove it when
-finished, accounting for backups and printer queues.
-
-Print landscape A4 at **100% / actual size, single-sided**. Check the 50 mm scale, cut
-solid lines and fold dashed lines with printing inside to 68 × 100 mm. Stack slips by
-number. The populated asset identifier appears once per A4 sheet; profile identity
-repeats on continuation panels. Ordinary device/profile credentials come first, with
-compact destructive credentials starting on a fresh sheet. Typical one- and five-profile
-records target two sheets; long values or larger records use extra sheets without
-truncation or smaller type. Values use 10 pt type; state/date metadata uses at least 8
-pt. Keep destructive credential sheets detached and sealed separately from ordinary
-credentials. Never test duress or send an Oblivion key as a test. Match the asset to the
-phone and report, privately verify ordinary unlocks, and seal for the recipient. Store
-the completed insert securely apart from the phone. The insert is an operator record and
-does not certify readiness or erasure capability.
+See [guides and inserts](guides-and-inserts.md) for per-device PDFs, exact-size cards, inventory labels, and the complete packing checklist. Shared guide generation does not include registry values.
 
 ## Identity and security boundaries
 

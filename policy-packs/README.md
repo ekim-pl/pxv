@@ -3,7 +3,7 @@
 These packs demonstrate one, three, five and arbitrary profile layouts. They are structural templates, not certified hardening policies. No live device acceptance is claimed.
 
 Use each pack's `policy.json` for Community projects. Its shared app catalog,
-profile app references and per-codename OS pins follow the [policy format](../docs/POLICY_FORMAT.md).
+profile app references and per-codename OS pins follow the [policy format](../docs/operators/policy-reference.md).
 
 Before using a pack on a phone, a product maintainer must add reviewed OS provenance, required settings, permission grants and service-specific network configuration. The nerd and privacy packs include pinned apps listed below; review their versions, sources and signer pins for the deployment. The `single-simple` and `fleet-custom` app catalogs remain empty. Add repository trust anchors if using repository-backed artifacts. Changes to the normalized execution policy change its resolved digest and invalidate the previous reviewed plan. Authoring-only changes, such as adding an unused app catalog entry, do not change that digest. Validate and lock the edited policy before reviewing a new plan.
 
@@ -125,7 +125,7 @@ Create `secrets/credentials/<assetId>.json` inside the private project, replacin
 }
 ```
 
-Normal defaults initialize profiles without an existing screen lock. The recipient privately verifies or replaces each default at `normal_credentials`, then confirms each profile's locale through the accepted UI path or the manual `language:<profileId>` checkpoint. Owner duress setup follows locale setup and retains the manual `duress` checkpoint. See [initial screen locks, language and duress](../docs/POLICY_FORMAT.md#initial-screen-locks-language-and-duress) for credential formats, private-file conditions and the current-owner-credential procedure. This starter remains a structural template, with no certified hardening or live-device acceptance claim.
+Normal defaults initialize profiles without an existing screen lock. The recipient privately verifies or replaces each default at `normal_credentials`, then confirms each profile's locale through the accepted UI path or the manual `language:<profileId>` checkpoint. Owner duress setup follows locale setup and retains the manual `duress` checkpoint. See [initial screen locks, language and duress](../docs/operators/policy-reference.md#initial-screen-locks-language-and-duress) for credential formats, private-file conditions and the current-owner-credential procedure. This starter remains a structural template, with no certified hardening or live-device acceptance claim.
 
 Select a pack at new-project initialization with `project init --path DIRECTORY --policy FILE`, or explicitly review an installed extension's declared policy contribution. Validate the resulting project policy and write a fresh lock before planning. Copying a file is not policy acceptance.
 
@@ -145,4 +145,4 @@ The app catalog contains the pinned five-profile apps above. OS pins still need
 to be supplied, and no VPN route is configured. Review a private copy with explicit
 per-profile network and backup expectations before the full test. Installing Orbot
 does not configure Tor routing, and Aurora Store does not install Google services.
-Follow the [full self-service procedure](../docs/SELF_SERVICE_FIVE_PROFILE_TEST.md).
+Follow the [full self-service procedure](../docs/operators/acceptance.md).

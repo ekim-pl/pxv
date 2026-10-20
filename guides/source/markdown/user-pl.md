@@ -87,7 +87,7 @@ Wpis może zawierać:
 
 Flashowanie, tworzenie profilu, niektóre początkowe zapisy blokady i zdarzenia serwisowe mogą oznaczyć odpowiednie dane jako nieaktualne. Poprzednie rewizje pozostają zaszyfrowaną historią. Dawna pobrana wartość nie jest dowodem, że nadal odblokowuje telefon.
 
-Zwykłe raporty i pakiety przekazania pomijają wartości rejestru. Prywatne pobranie celowo tworzy plik jawny, który trzeba chronić i usunąć po użyciu. Kopie rejestru i dane do ich odblokowania wymagają osobnej ochrony; operator może zmienić hasło szyfrowania. Przeczytaj [szczegóły rejestru](../../../docs/PHONE_REGISTRY.md) i [zasady bezpieczeństwa](../../../SECURITY.md).
+Zwykłe raporty i pakiety przekazania pomijają wartości rejestru. Prywatne pobranie celowo tworzy plik jawny, który trzeba chronić i usunąć po użyciu. Kopie rejestru i dane do ich odblokowania wymagają osobnej ochrony; operator może zmienić hasło szyfrowania. Przeczytaj [szczegóły rejestru](../../../docs/operators/registry.md) i [zasady bezpieczeństwa](../../../SECURITY.md).
 
 Osoba przygotowująca telefon może dostarczyć prywatną wkładkę z rejestru: zwykłe dane są pogrupowane według profilu, a dane destrukcyjne znajdują się na osobnym arkuszu A4 do złożenia. Zwykle są to dwa arkusze; dłuższy wpis wymaga większej liczby. Identyfikator pojawia się raz na arkuszu. Pominiętych pól nie zapisano; nie oznacza to braku konfiguracji. Arkusze destrukcyjne przechowuj zapieczętowane osobno.
 
@@ -109,4 +109,4 @@ Podczas serwisu pod nadzorem może być potrzebne tymczasowe debugowanie. Po zak
 
 ## Dalsze instrukcje i zakres weryfikacji
 
-Zobacz [przewodnik operatora](operator-pl.md), [zależności komputera](../../../docs/HOST_DEPENDENCIES.md), [format polityki](../../../docs/POLICY_FORMAT.md), [listę poleceń](../../../docs/COMMAND_REFERENCE.md), [kopie i odzyskiwanie](../../../docs/CANARY_BACKUP_RECOVERY.md), [automatyzację](../../../docs/AUTOMATION.md) i [Dockera](../../../docs/DOCKER.md). [Stan weryfikacji](../../../docs/VERIFICATION.md): próby offline i dawne wyniki nie zastępują fizycznych kontroli instalacji, aplikacji, VPN i odzyskiwania za zgodą właściciela.
+Zobacz [przewodnik operatora](operator-pl.md), [zależności komputera](../../../docs/operators/host-setup.md), [format polityki](../../../docs/operators/policy-reference.md), [listę poleceń](../../../docs/operators/command-reference.md), [kopie i odzyskiwanie](../../../docs/operators/recovery-and-maintenance.md), [automatyzację](../../../docs/ai-agents/workflow-and-recovery.md) i [Dockera](../../../docs/operators/host-setup.md). [Stan weryfikacji](../../../docs/operators/acceptance.md): próby offline i dawne wyniki nie zastępują fizycznych kontroli instalacji, aplikacji, VPN i odzyskiwania za zgodą właściciela.

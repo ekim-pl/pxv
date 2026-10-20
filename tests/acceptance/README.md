@@ -10,6 +10,6 @@ a policy or UI adapter.
 
 
 For the one-person physical walkthrough, use the
-[five-profile self-service procedure](../../docs/SELF_SERVICE_FIVE_PROFILE_TEST.md)
+[five-profile self-service procedure](../../docs/operators/acceptance.md)
 and copy [the blank results sheet](single-nerd-results.md) into the external
 private test directory. The committed sheet contains no completed device evidence.

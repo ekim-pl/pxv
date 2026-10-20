@@ -1,6 +1,8 @@
-# Developing and testing pxv
+# Development checks and qualification
 
-Run the commands below from the checkout root. The normal development suite uses synthetic policies, local fixture artifacts, temporary projects and real supervised test processes. It does not require a connected phone. For physical-device experiments and live acceptance, use [canary, backup and recovery testing](CANARY_BACKUP_RECOVERY.md).
+Use this reference after [building](build.md) or changing an [extension](creating-extensions.md). Choose focused tests for the changed behavior, then retain the required complete source-bound evidence before release.
+
+Run the commands below from the checkout root. The normal development suite uses synthetic policies, local fixture artifacts, temporary projects and real supervised test processes. It does not require a connected phone. For physical-device experiments and live acceptance, use [canary, backup and recovery testing](../operators/recovery-and-maintenance.md).
 
 Development source, test, configuration and CI links in this guide refer to the matching source checkout. Installed distributions do not contain the development workspace or test suite.
 
@@ -24,9 +26,9 @@ Use the exact workspace versions; `.npmrc` enforces the Node/pnpm engine require
 | Cryptography        | OpenSSH with `ssh-keygen -Y` signing/verification                                                                |
 | Android SDK         | Platform `android-35` and Build Tools `35.0.0`, including aapt, d8 and apksigner                                 |
 | Browser/PDF tools   | Chrome or Chromium at an absolute `PXV_CHROMIUM` path; Poppler (`pdftotext`, `pdfinfo`, `pdftoppm`, `pdftohtml`) |
-| Basic build tools   | Git for source identity, tar/xz and the tools described in [host dependencies](HOST_DEPENDENCIES.md)             |
+| Basic build tools   | Git for source identity, tar/xz and the tools described in [host dependencies](../operators/host-setup.md)             |
 
-Compilation uses TypeScript 7.0.2. The separately pinned TypeScript 6 API package supports type-aware linting; changing that package to match the compiler is not a setup step. TypeScript has stable releases rather than an LTS channel. Dependencies and analyzer versions are pinned in [package.json](../package.json), [runtime package](../packages/runtime/package.json) and [quality-tools.json](../tools/quality-tools.json).
+Compilation uses TypeScript 7.0.2. The separately pinned TypeScript 6 API package supports type-aware linting; changing that package to match the compiler is not a setup step. TypeScript has stable releases rather than an LTS channel. Dependencies and analyzer versions are pinned in [package.json](../../package.json), [runtime package](../../packages/runtime/package.json) and [quality-tools.json](../../tools/quality-tools.json).
 
 Install the pinned Node runtime first. If pnpm is missing, `npm install --global pnpm@12.11.2` installs that exact package manager. Check the active tools before installing the workspace:
 
@@ -46,7 +48,7 @@ export PXV_REQUIRE_CRYPTO=1
 unset PXV_SKIP_ANDROID_CRYPTO
 ```
 
-SDK/JDK and ADB precedence follows [environment selection](HOST_DEPENDENCIES.md#environment-selection), including empty-value fallback and failure on an invalid selected path. No `.env` file is loaded automatically.
+SDK/JDK and ADB precedence follows [environment selection](../operators/host-setup.md#environment-selection), including empty-value fallback and failure on an invalid selected path. No `.env` file is loaded automatically.
 
 If the required SDK packages are absent, install them through your SDK manager after reviewing and accepting the applicable upstream licenses:
 
@@ -175,7 +177,7 @@ with the matching run.
 
 The full check requires genuine SSH/JAR/APK verification. `PXV_REQUIRE_CRYPTO=1` makes that expectation explicit; skipping Android cryptography does not qualify a merge or release. Strict acceptance requires zero skipped tests, including real browser/PDF scenarios. Set `PXV_REQUIRE_CRYPTO=1`, export an absolute `PXV_CHROMIUM` executable, install Poppler, and repair missing prerequisites rather than treating a skip as a pass. Retain explicit `numSkippedTests: 0` in strict test evidence from the actual unfiltered run; a focused pass does not establish this evidence. Failure tests deliberately create process exits, malformed records and rejected operations; evaluate the test assertion and retained evidence rather than classifying every injected child failure as a suite failure.
 
-Keep developer fixture data synthetic. Do not copy recipient credentials, real device serials, private registry tokens, production backups, ADB keys or signing keys into test fixtures, snapshots, logs or candidate resources. Tests should allocate their own temporary project/control directories and remove their generated material. Inspect a leaked test worker or temporary directory before removing only the resources owned by that test. Never clear a real operator's recovery reservation to make a development test proceed. Real-device visits continue to use shared host ownership across projects; follow the [canary and recovery procedure](CANARY_BACKUP_RECOVERY.md).
+Keep developer fixture data synthetic. Do not copy recipient credentials, real device serials, private registry tokens, production backups, ADB keys or signing keys into test fixtures, snapshots, logs or candidate resources. Tests should allocate their own temporary project/control directories and remove their generated material. Inspect a leaked test worker or temporary directory before removing only the resources owned by that test. Never clear a real operator's recovery reservation to make a development test proceed. Real-device visits continue to use shared host ownership across projects; follow the [canary and recovery procedure](../operators/recovery-and-maintenance.md).
 
 ## Finish a change with retained evidence
 
@@ -192,7 +194,7 @@ Read `.quality/report.md` and retain `.quality/report.json`. The aggregate recor
 
 ## Verify distributions separately
 
-A source-suite pass does not establish that the derived packages execute. Follow the [publication checklist](PUBLICATION_CHECKLIST.md) for immutable candidate creation and exact-artifact verification. Docker/buildx and Debian packaging tools are additional prerequisites for all-format builds. A local preview command is:
+A source-suite pass does not establish that the derived packages execute. Follow the [publication checklist](distribution.md) for immutable candidate creation and exact-artifact verification. Docker/buildx and Debian packaging tools are additional prerequisites for all-format builds. A local preview command is:
 
 ```sh
 pnpm build:preview --formats portable,deb,npm,oci
@@ -202,7 +204,7 @@ This creates uniquely named previews and does not publish, push, install globall
 
 The supervisor uses the reviewed Koffi Linux glibc x64 prebuild. Release validation checks ELF identity, dependencies and symbol versions, then executes the installed runtime and addon on Debian 12 and Ubuntu 24.04. `tools/check-native-baseline.mjs` accepts an explicit packaged-runtime module path. After building, run `node tools/check-packaged-runtime.mjs BUILD_RESULT.json` with the JSON printed by the release CLI to exercise every selected supported format on both baselines; Docker and a locally loaded OCI image are required. CI uses candidate bytes as a non-root user with a read-only root; it does not mount workspace dist code.
 
-These tests can qualify code and package behavior without a phone. They do not establish GrapheneOS image provenance, live Docker USB/host-ADB transport behavior, localized UI support, cross-user isolation, routing/failure recovery, backup restoration or recipient custody. Retain separate live evidence through the [canary, backup and recovery guide](CANARY_BACKUP_RECOVERY.md), using the [verification boundaries](VERIFICATION.md).
+These tests can qualify code and package behavior without a phone. They do not establish GrapheneOS image provenance, live Docker USB/host-ADB transport behavior, localized UI support, cross-user isolation, routing/failure recovery, backup restoration or recipient custody. Retain separate live evidence through the [canary, backup and recovery guide](../operators/recovery-and-maintenance.md), using the [verification boundaries](../operators/acceptance.md).
 
 Coverage uses ast-v8-to-istanbul 1.0.7 with @babel/parser 8.0.7 and executable source maps. `NODE_V8_COVERAGE` traces include test processes, workers, supervisors and subprocesses. Missing maps fail the gate; the default module and package thresholds are 90% line and 85% branch coverage. `.quality/tests.json`, `coverage/coverage-final.json` and source-bound report freshness retain their consumer contracts.
 
