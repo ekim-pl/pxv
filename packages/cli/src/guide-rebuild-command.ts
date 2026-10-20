@@ -1,5 +1,7 @@
 import { execFile } from 'node:child_process';
-import { access } from 'node:fs/promises';
+import { access, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { containedPath, loadProject, type ProjectContext } from '@pxv/engine';
 import { dirname, join, resolve, sep } from 'node:path';
 import { promisify } from 'node:util';
 import type { CliContext } from './arguments.js';
@@ -60,7 +62,8 @@ async function buildRenderer(root: string, context: CliContext, execute: Command
 }
 
 function outputDirectory(context: CliContext, callerDirectory: string, root: string): string | undefined {
-  const policy = context.values['policy'] ?? context.values['private-insert-output'];
+  const policy =
+    context.values['policy'] ?? context.values['private-insert-output'] ?? context.values['project-root'];
   const output = context.values['output-dir'];
   if (policy && !output) throw new Error('Policy booklets require an explicit --output-dir');
   if (!output) return undefined;
@@ -83,6 +86,31 @@ function rebuildArguments(context: CliContext, callerDirectory: string, root: st
   return args;
 }
 
+async function projectGuide(context: CliContext): Promise<ProjectContext | undefined> {
+  if (context.values['project-root'] === undefined) return undefined;
+  if (context.values['policy'] !== undefined)
+    throw new Error('Project guide builds use the project policy; omit --policy');
+  return loadProject(context.projectRoot, context.product, context.resources);
+}
+
+/** The publishing subprocess receives only the explicitly selected display fields. */
+async function withProjectMetadata(
+  project: ProjectContext | undefined,
+  args: string[],
+  execute: (args: string[]) => Promise<void>,
+): Promise<void> {
+  if (!project) return execute(args);
+  const temporary = await mkdtemp(join(tmpdir(), 'pxv-guide-metadata-'));
+  try {
+    const metadataFile = join(temporary, 'insert-metadata.json');
+    await writeFile(metadataFile, JSON.stringify(project.config.insertMetadata ?? {}), { mode: 0o600 });
+    const policyFile = await containedPath(project.root, project.config.policyFile);
+    await execute([...args, '--policy', policyFile, '--insert-metadata-file', metadataFile]);
+  } finally {
+    await rm(temporary, { recursive: true, force: true });
+  }
+}
+
 export async function guidesRebuildCommand(
   context: CliContext,
   dependencies: GuideRebuildDependencies = {},
@@ -97,16 +125,18 @@ export async function guidesRebuildCommand(
     );
   const privateInsert = await prepareGuidePrivateInsert(context, callerDirectory);
   const args = rebuildArguments(context, callerDirectory, root);
-  if (privateInsert) args.push('--policy', privateInsert.policyFile);
+  const project = privateInsert?.project ?? (await projectGuide(context));
   context.io.out(`Building guide renderer in ${root}`);
   const execute = dependencies.execute ?? run;
-  await buildRenderer(root, context, execute);
-  await execute(
-    process.execPath,
-    [join(root, 'tools/optional/publishing/rebuild.mjs'), ...args],
-    root,
-    context,
-  );
+  await withProjectMetadata(project, args, async (forwarded) => {
+    await buildRenderer(root, context, execute);
+    await execute(
+      process.execPath,
+      [join(root, 'tools/optional/publishing/rebuild.mjs'), ...forwarded],
+      root,
+      context,
+    );
+  });
   await privateInsert?.export();
   context.output({ rebuilt: true });
   return 0;

@@ -1,5 +1,6 @@
 export const insertLabels = {
   en: {
+    project: 'Project',
     title: 'Private credentials',
     erasure: 'DESTRUCTIVE CREDENTIALS',
     asset: 'Asset',
@@ -39,6 +40,7 @@ export const insertLabels = {
     secondary: 'Secondary profile',
   },
   pl: {
+    project: 'Projekt',
     title: 'Prywatne dane dostępu',
     erasure: 'DANE DESTRUKCYJNE',
     asset: 'Identyfikator',

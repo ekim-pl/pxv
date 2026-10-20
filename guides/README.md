@@ -36,7 +36,7 @@ pxv guides rebuild --chromium /usr/bin/google-chrome
 For a workspace invocation, use `pnpm pxv guides rebuild`. The command runs `pnpm build`, then the [optional publishing tool](../tools/optional/publishing/rebuild.mjs). It requires no initialized project or device. Installed releases include the guide sources, but rebuilding requires the source checkout.
 
 ```text
-pxv guides rebuild [--policy FILE] [--output-dir DIR] [--chromium PATH] [--html-only] [--no-render]
+pxv guides rebuild [--policy FILE | --project-root DIR] [--output-dir DIR] [--chromium PATH] [--html-only] [--no-render]
 ```
 
 `--output-dir` selects the destination; the default is `guides/`. `PXV_CHROMIUM` can replace `--chromium`. `--html-only` creates HTML without Chromium or Poppler. `--no-render` creates and checks PDFs but skips page images. A full build creates HTML for every edition, office/bleed PDFs for operator and user guides, and one A4 cut-and-fold PDF for each quickstart and credential edition. Use `--output-dir output/pdf` to keep a separate local print build.
@@ -52,6 +52,57 @@ pxv guides rebuild --policy policy-packs/fleet-nerd/policy.json --output-dir out
 The phone-sized quick start gains a profile appendix with the policy's profile names, roles, language and declared configuration. The credential insert repeats its ordinary profile and account/recovery sections automatically. For `N` configured profiles there are `8 + N` quickstart sections and `2N + 2` credential sections. Sections can span multiple 68 × 100 mm panels; sheet counts depend on content and language and are recorded in the QA manifest. The generated files are installation instructions, not proof that those profiles or settings are present. The accepted handoff report and dated checks remain the record of the actual device.
 
 Only selected configuration fields enter the editions. The shared builder does not receive registry values or copy the input policy into the output. An explicit private-insert export is separate from the shared builder. Complete credentials privately after printing. Generated Markdown under the destination's `source/markdown/` records the content actually rendered; do not replace shared source files with a personalized build.
+
+## Project names and support contacts
+
+To personalize credential inserts, add an optional `insertMetadata` object to the existing
+`pxv.project.json` in your private project. Preserve all its other fields:
+
+```json
+{
+  "insertMetadata": {
+    "projectName": "Example Fleet",
+    "support": {
+      "name": "Example Device Support",
+      "email": "help@example.org",
+      "url": "https://example.org/support",
+      "phone": "+48 123 456 789"
+    }
+  }
+}
+```
+
+Both `projectName` and `support` are optional. A support override requires a name and
+at least one email, HTTPS website or phone number. It replaces the whole product
+contact: omitted contact routes are not filled from the product. Without an override,
+project inserts use the product contact; without a project name, they omit that line.
+Use nonblank single-line values of at most 4096 characters. Text is printed literally.
+These details appear in EN/PL inserts; the project name does not rename the product.
+
+Project metadata is part of the resolved policy identity. After editing it, run
+`pxv policy lock --project-root DIRECTORY` and prepare fresh operational reviews.
+Existing projects need no metadata or migration.
+
+Build project-specific blank inserts and policy booklets from the source checkout:
+
+```sh
+pxv guides rebuild --project-root DIRECTORY --output-dir PROJECT_GUIDE_DIRECTORY --chromium /usr/bin/google-chrome
+```
+
+This uses the project's policy and metadata without opening the encrypted registry.
+Use `--html-only` to generate HTML without Chromium. An explicit separate output
+directory is required; do not combine `--project-root` with `--policy`. Both languages
+are built. Project metadata fills the introductory support contact in credential
+editions; fields for credentials, recovery and alternate support routes stay blank.
+Only the selected display metadata enters the publisher, through a temporary file
+removed on success or failure. The generated project-specific Markdown, HTML and
+PDFs contain the chosen contact details; review them before sharing.
+
+The same metadata is used by `pxv registry print-insert` and the separate
+`guides rebuild --private-insert-output` export. Builds without `--project-root`
+keep their generic blank contact fields.
+
+## Build verification
 
 The rebuild uses an explicitly selected local Chromium and never downloads a browser. Use Chromium with CSS page-margin-box support for repeating panel identities. PDF QA requires Poppler: `pdfinfo`, `pdftotext`, `pdffonts` and `pdftoppm`; real-PDF regression tests also use `pdftohtml`. It does not install dependencies, run the full source quality gate, contact phones or publish files. Follow [the contributor workflow](../CONTRIBUTING.md) when changing the renderer.
 

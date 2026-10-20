@@ -22,6 +22,7 @@ import type {
   PolicyDocument,
   ProductDescriptor,
   ProjectConfig,
+  ProjectInsertMetadata,
   RecoveryObligation,
   ReviewedPlan,
   RunEvent,
@@ -590,6 +591,29 @@ export const extensionLockSchema = z
     installPath: relativePath,
   })
   .strict();
+const insertText = nonempty.refine(
+  (value) => value.trim().length > 0 && !/[\u2028\u2029]/u.test(value),
+  'Expected nonblank single-line text',
+);
+export const projectInsertMetadataSchema = z
+  .object({
+    projectName: insertText.optional(),
+    support: z
+      .object({
+        name: insertText,
+        email: z.string().email().pipe(insertText).optional(),
+        url: https.pipe(insertText).optional(),
+        phone: insertText.optional(),
+      })
+      .strict()
+      .refine(
+        (value) => Boolean(value.email || value.url || value.phone),
+        'Support requires at least one contact route',
+      )
+      .optional(),
+  })
+  .strict();
+
 export const projectConfigSchema = z
   .object({
     format: z.literal('pxv-ts'),
@@ -601,6 +625,7 @@ export const projectConfigSchema = z
     extensions: z
       .array(extensionLockSchema)
       .refine((value) => distinct(value, (extension) => extension.id), 'Duplicate extension'),
+    insertMetadata: projectInsertMetadataSchema.optional(),
   })
   .strict();
 export const productDescriptorSchema = z
@@ -805,6 +830,31 @@ function rejectDuplicateJsonKeys(source: string): void {
     }
     return JSON.parse(source.slice(start, offset)) as string;
   };
+  const object = (): void => {
+    offset++;
+    whitespace();
+    if (source[offset] === '}') {
+      offset++;
+      return;
+    }
+    const keys = new Set<string>();
+    while (true) {
+      whitespace();
+      const key = string();
+      if (keys.has(key)) throw new Error('Invalid configuration: Duplicate JSON object key');
+      keys.add(key);
+      whitespace();
+      offset++; // JSON.parse has already validated the colon.
+      value();
+      whitespace();
+      if (source[offset] === ',') {
+        offset++;
+        continue;
+      }
+      offset++; // JSON.parse has already validated the closing brace.
+      return;
+    }
+  };
   const value = (): void => {
     whitespace();
     const character = source[offset];
@@ -813,29 +863,8 @@ function rejectDuplicateJsonKeys(source: string): void {
       return;
     }
     if (character === '{') {
-      offset++;
-      whitespace();
-      if (source[offset] === '}') {
-        offset++;
-        return;
-      }
-      const keys = new Set<string>();
-      while (true) {
-        whitespace();
-        const key = string();
-        if (keys.has(key)) throw new Error('Invalid configuration: Duplicate JSON object key');
-        keys.add(key);
-        whitespace();
-        offset++; // JSON.parse has already validated the colon.
-        value();
-        whitespace();
-        if (source[offset] === ',') {
-          offset++;
-          continue;
-        }
-        offset++; // JSON.parse has already validated the closing brace.
-        return;
-      }
+      object();
+      return;
     }
     if (character === '[') {
       offset++;
@@ -924,6 +953,8 @@ export const validateExecutionPolicy = (value: unknown): ExecutionPolicy =>
   parseContract(executionPolicySchema, value);
 export const validateInventory = (value: unknown): Inventory => parseContract(inventorySchema, value);
 export const validateProject = (value: unknown): ProjectConfig => parseContract(projectConfigSchema, value);
+export const validateProjectInsertMetadata = (value: unknown): ProjectInsertMetadata =>
+  parseContract(projectInsertMetadataSchema, value);
 export const validateProduct = (value: unknown): ProductDescriptor =>
   parseContract(productDescriptorSchema, value);
 export const validateExtension = (value: unknown): ExtensionLock => parseContract(extensionLockSchema, value);

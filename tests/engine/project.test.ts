@@ -7,6 +7,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from './../test-api.js';
 import {
   containedPath,
+  assertProjectFresh,
   engineIntegrity,
   createProject,
   loadProduct,
@@ -85,6 +86,27 @@ describe('isolated project data', () => {
       'Python state',
     );
     expect(await readFile(legacy, 'utf8')).toBe('legacy-state-sentinel');
+  });
+
+  it('rejects a stale context after insert metadata changes and preserves the original lock', async () => {
+    const project = await createProject(root, product, toPolicyDocument(basePolicy()));
+    await writePolicyLock(project);
+    const lock = await readFile(join(root, 'policy.lock.json'));
+    await writeFile(
+      join(root, 'pxv.project.json'),
+      JSON.stringify({
+        ...project.config,
+        insertMetadata: { projectName: 'New fleet name' },
+      }),
+    );
+    await expect(assertProjectFresh(project)).rejects.toThrow('Project source changed');
+    const reloaded = await loadProject(root, product);
+    expect(reloaded.resolved.digest).not.toBe(project.resolved.digest);
+    expect(await readFile(join(root, 'policy.lock.json'))).toEqual(lock);
+    await writePolicyLock(reloaded);
+    expect(JSON.parse(await readFile(join(root, 'policy.lock.json'), 'utf8')) as unknown).toEqual(
+      reloaded.resolved,
+    );
   });
 
   it('rejects traversal, symlinks, malformed policy and duplicate-key project markers', async () => {

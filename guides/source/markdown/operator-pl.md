@@ -223,6 +223,26 @@ Prywatną wkładkę z zapisanymi danymi utworzysz poleceniem `pxv registry print
 
 Przebudowa poradników może utworzyć ten sam prywatny PDF przez `--private-insert-output PLIK --project-root KATALOG --asset ID --output-dir KATALOG --chromium ŚCIEŻKA`. Używa polityki projektu; prywatny wynik musi być poza wspólnym katalogiem poradników. Wspólne pliki zachowują puste formularze.
 
+Aby wydrukować nazwę projektu lub inny kontakt do wsparcia, dodaj opcjonalne
+`insertMetadata` do istniejącego `pxv.project.json`, na przykład
+`"insertMetadata": { "projectName": "Przykładowa flota", "support": { "name": "Wsparcie urządzeń", "phone": "+48 123 456 789" } }`.
+Nazwa projektu i obiekt wsparcia są niezależnie opcjonalne. Kontakt wymaga nazwy
+oraz co najmniej adresu e-mail, strony HTTPS lub telefonu; zastępuje cały kontakt
+produktu. Bez niego używany jest kontakt produktu. Wartości muszą być niepuste
+i jednowierszowe. Edycja metadanych zmienia tożsamość polityki: zaktualizuj jej
+blokadę i przygotuj nowe przeglądy operacji.
+
+```sh
+pxv policy lock --project-root "$P"
+pxv guides rebuild --project-root "$P" --output-dir /prywatny/katalog-poradnikow --chromium /usr/bin/google-chrome
+```
+
+Powstaną puste wkładki EN/PL z metadanymi i polityką projektu, bez odblokowania
+rejestru. Opcja `--html-only` może zastąpić wskazanie Chromium. Wybierz osobny
+katalog wynikowy i pomiń `--policy`. Obie ścieżki eksportu prywatnego korzystają
+z tych samych danych kontaktowych. Zobacz
+[metadane wkładek projektu](../../../guides/README.md#project-names-and-support-contacts).
+
 Flashowanie, tworzenie profilu, zapisy domyślnych blokad i zdarzenia cyklu życia unieważniają odpowiednie powiązania; stare wartości pozostają w historii. Polecenia rejestru są lokalne i offline; nie konfigurują telefonu ani nie dostarczają sekretów do konfiguracji. Użytkownik opisał klucz powiadomienia Oblivion, przypisany do profilu, jako wymazujący cały telefon; zachowanie nie ma kwalifikacji dla konkretnej aplikacji i kompilacji. Oddzielaj te klucze od przymusu GrapheneOS; nigdy nie umieszczaj prawdziwych kluczy w powiadomieniach, logach, zwykłych eksportach ani testach.
 
 ## 10. Obsłuż przerwanie i późniejszy serwis

@@ -5,7 +5,7 @@ import {
   inspectRegistryBinding,
   readRegistryGeneration,
 } from '@pxv/engine';
-import { writeCredentialInsert } from '@pxv/guides';
+import { resolveInsertMetadata, writeCredentialInsert } from '@pxv/guides';
 import { readEncryptedRegistry, SqliteStore, type Store } from '@pxv/runtime';
 import type { ProjectCliContext } from './arguments.js';
 import { registryOutputPath } from './registry-output.js';
@@ -31,12 +31,11 @@ async function writeInsert(
     await readRegistryGeneration(store, saved),
     context.project.inventory,
   );
-  const support = context.project.product.support;
   await writeCredentialInsert(record, output, {
     locale,
     model: device.model,
     exportedAt: new Date().toISOString(),
-    support: `${support.name}: ${support.email} · ${support.url}`,
+    ...resolveInsertMetadata(context.project.product, context.project.config.insertMetadata),
     chromiumExecutable: context.value('chromium'),
   });
   context.output({ exported: true, assetId: device.assetId, recordRevision: record.revision, output });

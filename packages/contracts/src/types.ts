@@ -193,6 +193,11 @@ export interface ExtensionLock {
   installPath: string;
 }
 
+export interface ProjectInsertMetadata {
+  projectName?: string;
+  support?: { name: string; email?: string; url?: string; phone?: string };
+}
+
 export interface ProjectConfig {
   format: 'pxv-ts';
   schemaVersion: 1;
@@ -201,6 +206,7 @@ export interface ProjectConfig {
   policyFile: string;
   inventoryFile: string;
   extensions: ExtensionLock[];
+  insertMetadata?: ProjectInsertMetadata;
 }
 
 export interface ProductDescriptor {

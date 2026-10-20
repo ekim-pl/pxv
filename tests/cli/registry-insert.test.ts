@@ -4,6 +4,7 @@ import type * as Arguments from '../../packages/cli/src/arguments.js';
 import type * as Insert from '../../packages/cli/src/registry-insert.js';
 import type * as Selection from '../../packages/cli/src/selection.js';
 import type * as Cli from '@pxv/cli';
+import type * as GuideRebuild from '../../packages/cli/src/guide-rebuild-command.js';
 import type { ProjectContext } from '@pxv/engine';
 import { createProject, loadProject, saveInventory } from '@pxv/engine';
 import { toPolicyDocument, validatePhoneRegistryDocument } from '@pxv/contracts';
@@ -36,6 +37,10 @@ const { exportRegistryInsert } = await importModule<typeof Insert>(
   import.meta.url,
 );
 const { runCli } = await importModule<typeof Cli>('@pxv/cli', import.meta.url);
+const { guidesRebuildCommand } = await importModule<typeof GuideRebuild>(
+  '../../packages/cli/src/guide-rebuild-command.js',
+  import.meta.url,
+);
 
 let root: string;
 let resources: string;
@@ -131,6 +136,51 @@ function change(values: Record<string, unknown>): Arguments.ProjectCliContext {
     flag: (name) => merged[name] === true,
     value: (name, fallback) => (typeof merged[name] === 'string' ? merged[name] : (fallback ?? '')),
   };
+}
+
+for (const mode of ['registry', 'guides']) {
+  for (const locale of ['en', 'pl']) {
+    it(`uses project insert metadata through ${mode} in ${locale}`, async () => {
+      const metadata = { projectName: 'Project <Zażółć>', support: { name: 'Phone help', phone: '+48 123' } };
+      await writeFile(
+        join(project.root, 'pxv.project.json'),
+        JSON.stringify({ ...project.config, insertMetadata: metadata }),
+      );
+      const common = ['--asset', device.assetId, '--locale', locale, '--chromium', '/local/chromium'];
+      if (mode === 'registry') {
+        await runCli(
+          args('registry', 'print-insert', ...common, '--output', join(project.root, 'secrets/custom.pdf')),
+          io,
+        );
+      } else {
+        const selected = await parseCli(
+          args(
+            'guides',
+            'rebuild',
+            ...common,
+            '--private-insert-output',
+            join(project.root, 'secrets/custom.pdf'),
+            '--output-dir',
+            join(root, 'guides'),
+          ),
+          io,
+        );
+        await guidesRebuildCommand(selected, {
+          execute: async (_command, forwarded) => {
+            const index = forwarded.indexOf('--insert-metadata-file');
+            if (index >= 0)
+              expect(JSON.parse(await readFile(forwarded[index + 1]!, 'utf8'))).toEqual(metadata);
+          },
+        });
+      }
+      expect(guides.writeCredentialInsert).toHaveBeenCalledOnce();
+      expect(vi.mocked(guides.writeCredentialInsert).mock.calls[0]![2]).toMatchObject({
+        projectName: metadata.projectName,
+        support: 'Phone help: +48 123',
+        locale,
+      });
+    });
+  }
 }
 
 async function assertReleased(selected = context, message?: string) {

@@ -221,6 +221,25 @@ For a prefilled private insert, use `pxv registry print-insert` with an asset, n
 
 Guide rebuilding can also create the same private PDF with `--private-insert-output FILE --project-root DIRECTORY --asset ID --output-dir DIRECTORY --chromium PATH`. It uses the project policy; keep the private output outside the shared guide directory. Shared guide artifacts remain blank.
 
+To print a project name or a different support contact, add optional `insertMetadata`
+to the existing `pxv.project.json`, for example
+`"insertMetadata": { "projectName": "Example Fleet", "support": { "name": "Device Support", "phone": "+48 123 456 789" } }`.
+The project name and support object are independently optional. A support override
+requires a name and at least one email, HTTPS website or phone number; it replaces
+the complete product contact. Without it, the product contact is used. Use nonblank,
+single-line text. Metadata edits change the policy identity: update the policy lock
+and prepare fresh operational reviews.
+
+```sh
+pxv policy lock --project-root "$P"
+pxv guides rebuild --project-root "$P" --output-dir /private/project-guides --chromium /usr/bin/google-chrome
+```
+
+This builds EN/PL blank inserts using project metadata and policy without unlocking
+the registry. `--html-only` can replace the Chromium option. Use a separate output
+directory and omit `--policy`. Both private export paths use the same contact details.
+See [project insert metadata](../../../guides/README.md#project-names-and-support-contacts).
+
 Flashing, profile creation, credential-default writes and lifecycle changes stale affected bindings; old values remain history. Registry commands are local/offline and do not configure phones or supply provisioning secrets. Per-profile Oblivion notification-wipe behavior is user-described as affecting the whole phone and is unqualified for any exact app/build. Keep its keys separate from GrapheneOS duress values; never place real keys in notifications, logs, ordinary exports or tests.
 
 ## 10. Handle interruptions and later maintenance

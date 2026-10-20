@@ -6,12 +6,17 @@ import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { parseArgs } from 'node:util';
 import { buildDocumentation } from '../../../packages/release/dist/docs.js';
-import { parseDocument, validatePolicyDocument } from '../../../packages/contracts/dist/index.js';
+import {
+  parseDocument,
+  validatePolicyDocument,
+  validateProjectInsertMetadata,
+} from '../../../packages/contracts/dist/index.js';
+import { readBounded } from '../../../packages/runtime/dist/index.js';
 import { verifyGuideLinks } from './links.mjs';
 import { assertFoldPanelBounds } from './fold-qa.mjs';
 import { foldLayout, validateFoldLayoutMetadata } from '../../../packages/guides/dist/index.js';
 
-/** @typedef {{destination:string,htmlOnly:boolean,render:boolean,chrome?:string,policyFile?:string}} BuildOptions */
+/** @typedef {{destination:string,htmlOnly:boolean,render:boolean,chrome?:string,policyFile?:string,metadataFile?:string}} BuildOptions */
 /** @typedef {{x0:number,y0:number,x1:number,y1:number}} PageBox */
 /** @typedef {{size:'A4'|'fold',width:number,height:number}} GuideFormat */
 /** @typedef {{pdfSha256:string,pages:number,pageSize:string,trimBox?:PageBox,bleedBox?:PageBox,embeddedFonts:string,polishGlyphs:string,pageRasters:string[]}} PdfRecord */
@@ -35,6 +40,7 @@ function buildOptions(root) {
     options: {
       'output-dir': { type: 'string' },
       policy: { type: 'string' },
+      'insert-metadata-file': { type: 'string' },
       chromium: { type: 'string' },
       'html-only': { type: 'boolean' },
       'no-render': { type: 'boolean' },
@@ -42,14 +48,23 @@ function buildOptions(root) {
   });
   const chrome = values.chromium ?? process.env['PXV_CHROMIUM'];
   const htmlOnly = values['html-only'] ?? false;
-  if (values.policy && !values['output-dir']) throw Error('Policy booklets require an explicit --output-dir');
+  if ((values.policy || values['insert-metadata-file']) && !values['output-dir'])
+    throw Error('Policy booklets require an explicit --output-dir');
   if (!htmlOnly && !chrome) throw Error('Select Chromium explicitly with PXV_CHROMIUM or --chromium');
   return {
     destination: resolve(values['output-dir'] ?? join(root, 'guides')),
     htmlOnly,
     render: !values['no-render'],
     ...(chrome ? { chrome } : {}),
-    ...(values.policy ? { policyFile: resolve(values.policy) } : {}),
+    ...guideInputs(values.policy, values['insert-metadata-file']),
+  };
+}
+
+/** @param {string|undefined} policy @param {string|undefined} metadata */
+function guideInputs(policy, metadata) {
+  return {
+    ...(policy ? { policyFile: resolve(policy) } : {}),
+    ...(metadata ? { metadataFile: resolve(metadata) } : {}),
   };
 }
 
@@ -313,6 +328,11 @@ const options = buildOptions(root);
 const policy = options.policyFile
   ? validatePolicyDocument(parseDocument(await readFile(options.policyFile, 'utf8')))
   : undefined;
+const insertMetadata = options.metadataFile
+  ? validateProjectInsertMetadata(
+      parseDocument((await readBounded(options.metadataFile, 1024 * 1024)).toString('utf8')),
+    )
+  : undefined;
 const configuration = /** @type {{editions:string[],foldLayout:unknown}} */ (
   JSON.parse(await readFile(join(root, 'guides/source/build-manifest.json'), 'utf8'))
 );
@@ -330,6 +350,7 @@ const outputs = await buildDocumentation(root, options.destination, {
   pdf: !options.htmlOnly,
   ...(options.chrome ? { chromiumExecutable: options.chrome } : {}),
   ...(policy ? { policy } : {}),
+  ...(insertMetadata ? { insertMetadata } : {}),
 });
 if (outputs.length !== editionNames.length)
   throw Error(`Expected ${editionNames.length} configured guide editions; received ${outputs.length}`);

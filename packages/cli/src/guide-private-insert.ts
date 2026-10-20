@@ -1,4 +1,4 @@
-import { containedPath, loadProject } from '@pxv/engine';
+import { loadProject, type ProjectContext } from '@pxv/engine';
 import { basename, dirname, isAbsolute, relative, resolve, sep } from 'node:path';
 import { lstat, realpath } from 'node:fs/promises';
 import type { CliContext, ProjectCliContext } from './arguments.js';
@@ -7,7 +7,7 @@ import { exportRegistryInsert } from './registry-insert.js';
 import { selectedContext } from './selection.js';
 
 export interface GuidePrivateInsert {
-  policyFile: string;
+  project: ProjectContext;
   export(): Promise<void>;
 }
 
@@ -59,7 +59,7 @@ export async function prepareGuidePrivateInsert(
       name === 'output' ? output : name === 'chromium' ? chromium : context.value(name, fallback),
   } satisfies ProjectCliContext;
   return {
-    policyFile: await containedPath(project.root, project.config.policyFile),
+    project,
     export: () => exportRegistryInsert(insertContext),
   };
 }

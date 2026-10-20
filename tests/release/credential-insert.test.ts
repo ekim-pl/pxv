@@ -6,7 +6,8 @@ import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it } from './../test-api.js';
 import type { PhoneRegistryRecord } from '@pxv/contracts';
 import type { Runtime } from '@pxv/runtime';
-import { writeCredentialInsert } from '../../packages/guides/src/index.js';
+import { resolveInsertMetadata, writeCredentialInsert } from '../../packages/guides/src/index.js';
+import { product } from '../contracts/fixtures.js';
 import { renderCredentialInsert } from '../../packages/guides/src/credential-insert.js';
 
 const at = '2026-10-17T12:00:00.000Z';
@@ -59,6 +60,20 @@ async function root() {
 }
 
 describe('private credential insert', () => {
+  it('prints an optional project name literally in either locale without changing legacy output', () => {
+    for (const locale of ['en', 'pl'] as const) {
+      const html = renderCredentialInsert(record(), {
+        ...options,
+        locale,
+        projectName: '<Fleet> & **Zażółć**',
+      });
+      expect(html).toContain(locale === 'en' ? '<strong>Project:</strong>' : '<strong>Projekt:</strong>');
+      expect(html).toContain('&lt;Fleet&gt; &amp; **Zażółć**');
+      expect(renderCredentialInsert(record(), { ...options, locale })).not.toContain(
+        '<strong>' + (locale === 'en' ? 'Project' : 'Projekt') + ':</strong>',
+      );
+    }
+  });
   it('renders EN/PL values, dates, missing fields and effective states; separates destructive values', () => {
     for (const locale of ['en', 'pl'] as const) {
       const html = renderCredentialInsert(record(), { ...options, locale });
@@ -281,12 +296,24 @@ it('renders one/five-profile EN/PL records on two readable A4 sheets (PXV_CHROMI
     for (const locale of ['en', 'pl'] as const) {
       const data = populatedRecord(count);
       const destination = join(await root(), `compact-${count}-${locale}.pdf`);
-      await writeCredentialInsert(data, destination, { ...options, locale, chromiumExecutable: chromium });
+      const metadata = resolveInsertMetadata(product, {
+        projectName: 'Zażółć <Flota> **nazwa**',
+        support: { name: 'Wsparcie', phone: '+48 (123) 456 789' },
+      });
+      await writeCredentialInsert(data, destination, {
+        ...options,
+        ...metadata,
+        locale,
+        chromiumExecutable: chromium,
+      });
       const pdf = await PDFDocument.load(await readFile(destination));
       expect(pdf.getPageCount()).toBe(2);
       expect(pdf.getPage(0).getWidth()).toBeCloseTo((297 * 72) / 25.4, 4);
       expect(pdf.getPage(0).getHeight()).toBeCloseTo((210 * 72) / 25.4, 4);
       const text = execFileSync('pdftotext', ['-raw', destination, '-'], { encoding: 'utf8' });
+      expect(text).toContain(metadata.projectName);
+      expect(text).toContain(metadata.support);
+      expect(text).not.toContain(product.support.email);
       const sheets = text.split('\f').filter((page) => page.trim());
       for (const sheet of sheets) expect(sheet.match(/phone-01/gu)).toHaveLength(1);
       expect(sheets[0]).toContain('VPN-password-0');

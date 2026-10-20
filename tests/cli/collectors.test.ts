@@ -254,6 +254,14 @@ describe('collected registry values in both private insert entry points', () => 
     expect(saved.fields.phoneNumber?.value).toBe(firstNumber + '\n' + secondNumber);
     expect(saved.profiles[0]?.fields.sessionMessengerId?.value).toBe(sessionId);
     expect(saved.profiles[0]?.fields.oblivionNotificationWipeKey?.value).toContain(syntheticOblivionKey);
+    const metadata = {
+      projectName: 'Flota Zażółć',
+      support: { name: 'Project Support', phone: '+48 123 456' },
+    };
+    await writeFile(
+      join(project.root, 'pxv.project.json'),
+      JSON.stringify({ ...project.config, insertMetadata: metadata }),
+    );
     const standalone = join(project.root, 'secrets', 'standalone.pdf');
     await runCli(
       args(
@@ -309,6 +317,9 @@ describe('collected registry values in both private insert entry points', () => 
       const text = execFileSync('pdftotext', [path, '-'], { encoding: 'utf8' }).replace(/\s+/gu, '');
       for (const marker of [firstNumber, secondNumber, sessionId, syntheticOblivionKey + '-0'])
         expect(text).toContain(marker);
+      expect(text).toContain(metadata.projectName.replace(/\s/gu, ''));
+      expect(text).toContain('ProjectSupport:+48123456');
+      expect(text).not.toContain(product.support.email);
     }
     const publicText = output.join('\n') + diagnostics.join('\n') + JSON.stringify(calls);
     for (const marker of [firstNumber, sessionId, syntheticOblivionKey])

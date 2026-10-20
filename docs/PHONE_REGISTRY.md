@@ -218,8 +218,15 @@ it with `--policy` or `--html-only`. English is the default private-insert local
 `PXV_CHROMIUM` can supply the browser path. Unlock uses the same hidden prompt or
 `--passphrase-file`. The PDF must be outside the shared guide output directory.
 Both export paths use the same registry loading, binding checks and renderer.
+Both use optional `insertMetadata` from the project's `pxv.project.json`: the project
+name is printed when supplied, and a project support contact replaces the whole
+product contact. Without a support override, the product contact is used. See
+[project names and support contacts](../guides/README.md#project-names-and-support-contacts)
+for configuration, validation and the required policy-lock/review refresh after edits.
 Shared guide HTML, Markdown, PDFs and QA artifacts remain blank templates, and the
-publishing subprocess receives no registry values or passphrase. Insert export is
+publishing subprocess receives only the selected insert metadata in addition to the
+project policy, with no registry values or passphrase. Blank credential editions
+include the project name and support contact; credentials stay blank. Insert export is
 offline and can run after debugging has been disabled.
 
 The PDF includes **all saved values in the latest record**, including ordinary unlocks,

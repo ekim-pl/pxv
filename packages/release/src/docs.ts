@@ -1,7 +1,15 @@
 import { marked } from 'marked';
 import { chromium, type Page } from 'playwright';
 import { PDFDocument } from 'pdf-lib';
-import { foldPanelStyles, foldPrintingInstructions, imposeFoldPacket, foldLayout } from '@pxv/guides';
+import {
+  foldPanelStyles,
+  foldPrintingInstructions,
+  imposeFoldPacket,
+  foldLayout,
+  resolveInsertMetadata,
+  renderBlankInsertMetadata,
+  type ResolvedInsertMetadata,
+} from '@pxv/guides';
 import {
   access,
   copyFile,
@@ -15,7 +23,12 @@ import {
 } from 'node:fs/promises';
 import { basename, dirname, extname, join, resolve, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { parseDocument, validatePolicy, validateProduct } from '@pxv/contracts';
+import {
+  parseDocument,
+  validatePolicy,
+  validateProduct,
+  validateProjectInsertMetadata,
+} from '@pxv/contracts';
 import type { ExecutionPolicy } from '@pxv/contracts';
 import { walkPublic } from './candidate.js';
 import { renderPolicyBooklet } from './booklet.js';
@@ -27,6 +40,7 @@ interface DocumentationOptions {
   chromiumExecutable?: string;
   browser?: Pick<typeof chromium, 'launch'>;
   policy?: unknown;
+  insertMetadata?: unknown;
 }
 interface GuideBrand {
   brandName: string;
@@ -484,8 +498,13 @@ export async function buildDocumentation(
   const root = resolve(sourceRoot);
   const destination = resolve(outputRoot);
   const policy = options.policy === undefined ? undefined : validatePolicy(options.policy);
-  if (policy) await ensureSeparatePolicyDestination(root, destination);
+  if (policy || options.insertMetadata !== undefined)
+    await ensureSeparatePolicyDestination(root, destination);
   const product = validateProduct(parseDocument(await readFile(join(root, 'product.json'), 'utf8')));
+  const metadata =
+    options.insertMetadata === undefined
+      ? undefined
+      : resolveInsertMetadata(product, validateProjectInsertMetadata(options.insertMetadata));
   const paths = await walkPublic(root, 'guides/source/markdown', new Set(['.md']));
   if (!paths.length) throw new Error('No public guide sources found');
   await mkdir(destination, { recursive: true });
@@ -502,6 +521,7 @@ export async function buildDocumentation(
     assets,
     options.pdf ?? false,
     policy,
+    metadata,
   );
   const editions = outputs.map((path) => path.slice(path.lastIndexOf('/') + 1, -5));
   await writeFile(
@@ -558,6 +578,20 @@ async function copyGuideFiles(root: string, destination: string, paths: string[]
   }
 }
 
+function adaptGuideSource(
+  source: string,
+  kind: GuideKind,
+  locale: 'en' | 'pl',
+  policy?: ExecutionPolicy,
+  metadata?: ResolvedInsertMetadata,
+): string {
+  let adapted = source;
+  if (policy && (kind === 'quickstart' || kind === 'credentials'))
+    adapted = renderPolicyBooklet(adapted, kind, policy, locale);
+  if (metadata && kind === 'credentials') adapted = renderBlankInsertMetadata(adapted, metadata, locale);
+  return adapted;
+}
+
 async function renderGuideHtmlSources(
   root: string,
   destination: string,
@@ -568,14 +602,15 @@ async function renderGuideHtmlSources(
   assets: string[],
   pdfOutput: boolean,
   policy?: ExecutionPolicy,
+  metadata?: ResolvedInsertMetadata,
 ): Promise<string[]> {
   const editions: GuideEdition[] = [];
   for (const path of paths) {
-    let source = await readFile(join(root, path), 'utf8');
+    const template = await readFile(join(root, path), 'utf8');
     const locale = /(?:^|[._/-])pl(?:[._/-]|$)/u.test(path) ? 'pl' : 'en';
     const kind = editionKind(path);
-    if (policy && (kind === 'quickstart' || kind === 'credentials')) {
-      source = renderPolicyBooklet(source, kind, policy, locale);
+    const source = adaptGuideSource(template, kind, locale, policy, metadata);
+    if (source !== template) {
       await writeFile(join(destination, path.slice('guides/'.length)), source);
     }
     const rendered = (await marked.parse(source, { async: true })).replaceAll(

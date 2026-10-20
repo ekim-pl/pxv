@@ -12,6 +12,13 @@ For HTML only:
   pxv guides rebuild --html-only
 For another destination:
   pxv guides rebuild --output-dir output/pdf --chromium /usr/bin/google-chrome
+For project-specific booklets and blank inserts with optional insertMetadata from pxv.project.json:
+  pxv guides rebuild --project-root DIRECTORY --output-dir PROJECT_GUIDE_DIRECTORY --chromium /usr/bin/google-chrome
+Project builds accept --html-only, reject --policy and require separate output. They
+do not unlock the registry. Project support replaces the complete product contact;
+the product contact is used when no override exists. Names/contact details appear
+in both EN/PL inserts; credential fields stay blank. Metadata edits affect policy
+identity: update the policy lock and prepare fresh operational reviews.
 For an installation-specific phone-sized booklet and blank credential insert:
   pxv guides rebuild --policy policy-packs/fleet-nerd/policy.json --output-dir output/pdf/fleet-nerd --chromium /usr/bin/google-chrome
 
@@ -28,7 +35,7 @@ produce 13/12 sections. Names, roles, language and declared configuration are
 intended settings, not device verification. Secrets remain blank; the input
 policy and private registry are not copied into public guide outputs. Generated
 Markdown in the destination records the rendered source without personalizing
-the shared source files. Without --policy, the generic quickstart has eight sections
+the shared source files. Without --policy or --project-root, the generic quickstart has eight sections
 and the credential insert has four sections.
 
 The command builds the workspace, then calls tools/optional/publishing/rebuild.mjs.

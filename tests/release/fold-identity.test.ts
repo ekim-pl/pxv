@@ -94,12 +94,27 @@ it('keeps asset writing fields and full profile identity on every real blank pan
     );
     for (const [index, policy] of [undefined, owner, five].entries()) {
       const output = join(root, `output-${index}`);
+      const insertMetadata = {
+        projectName: 'Zażółć <Flota> **nazwa** '.repeat(4).trim(),
+        support: { name: 'Wsparcie <Telefonów>', phone: '+48 (123) 456 789' },
+      };
       await buildDocumentation(source, output, {
         pdf: true,
         chromiumExecutable: chromium,
-        ...(policy ? { policy } : {}),
+        ...(policy ? { policy, insertMetadata } : {}),
       });
       await assertPanelIdentities(output, policy ? validatePolicy(policy) : undefined);
+      if (policy) {
+        for (const locale of ['en', 'pl']) {
+          const text = execFileSync('pdftotext', [join(output, `credentials-${locale}-a4-fold.pdf`), '-'], {
+            encoding: 'utf8',
+          });
+          expect(normalized(text)).toContain(normalized(insertMetadata.projectName));
+          expect(normalized(text)).toContain(normalized(insertMetadata.support.phone));
+          expect(normalized(text)).toContain(normalized(insertMetadata.support.name));
+          expect(text).not.toContain('support@example.org');
+        }
+      }
     }
   } finally {
     await rm(root, { recursive: true, force: true });

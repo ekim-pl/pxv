@@ -18,6 +18,7 @@ interface CredentialInsertOptions {
   locale?: 'en' | 'pl';
   exportedAt: string;
   support: string;
+  projectName?: string;
   model?: string;
 }
 interface CredentialInsertWriteOptions extends CredentialInsertOptions {
@@ -154,6 +155,7 @@ class InsertRenderer {
   private ordinary(): string {
     const { t, record, options } = this;
     const summary = [
+      ...(options.projectName ? [[t.project, options.projectName]] : []),
       [t.model, options.model ? options.model + ' (' + record.codename + ')' : record.codename],
       [t.revision, String(record.revision)],
       [t.exported, timestamp(options.exportedAt)],
