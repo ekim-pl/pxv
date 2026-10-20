@@ -20,15 +20,18 @@ import { atomicWritePrivate, commitProjectFile, hashFile, readBounded } from '@p
 import { fileURLToPath } from 'node:url';
 import { engineIntegrity } from './integrity.js';
 
-export interface ProjectContext {
+export interface ProjectSources {
   readonly root: string;
   readonly codeRoot?: string;
   readonly config: ProjectConfig;
   readonly product: ProductDescriptor;
-  readonly policy: ExecutionPolicy;
   readonly inventory: Inventory;
-  readonly resolved: ResolvedPolicy;
   readonly revisions: { config: string; policy: string; inventory: string };
+}
+
+export interface ProjectContext extends ProjectSources {
+  readonly policy: ExecutionPolicy;
+  readonly resolved: ResolvedPolicy;
 }
 
 async function readProjectValue<T>(
@@ -71,11 +74,11 @@ async function exists(path: string): Promise<boolean> {
   );
 }
 
-export async function loadProject(
+export async function loadProjectSources(
   root: string,
   product: ProductDescriptor,
   codeRoot = fileURLToPath(new URL('../../../', import.meta.url)),
-): Promise<ProjectContext> {
+): Promise<ProjectSources & { document: unknown }> {
   const base = await realpath(root);
   const marker = resolve(base, 'pxv.project.json');
   if (!(await exists(marker))) {
@@ -92,28 +95,40 @@ export async function loadProject(
   const configFile = await readProjectValue(base, 'pxv.project.json', 1024 * 1024, validateProject);
   const config = configFile.value;
   if (config.productId !== product.id) throw new Error('Project belongs to a different product fork');
-  const policyFile = await readProjectValue(base, config.policyFile, 4 * 1024 * 1024, validatePolicy);
+  const policyFile = await readProjectValue(base, config.policyFile, 4 * 1024 * 1024, (value) => value);
   const inventoryFile = await readProjectValue(
     base,
     config.inventoryFile,
     4 * 1024 * 1024,
     validateInventory,
   );
-  const policy = policyFile.value;
   const inventory = inventoryFile.value;
   return Object.freeze({
     root: base,
     codeRoot,
     config,
     product,
-    policy,
+    document: policyFile.value,
     inventory,
-    resolved: resolvePolicy(policy, config, product, await engineIntegrity(codeRoot)),
     revisions: {
       config: configFile.revision,
       policy: policyFile.revision,
       inventory: inventoryFile.revision,
     },
+  });
+}
+
+export async function loadProject(
+  root: string,
+  product: ProductDescriptor,
+  codeRoot = fileURLToPath(new URL('../../../', import.meta.url)),
+): Promise<ProjectContext> {
+  const { document, ...sources } = await loadProjectSources(root, product, codeRoot);
+  const policy = validatePolicy(document);
+  return Object.freeze({
+    ...sources,
+    policy,
+    resolved: resolvePolicy(policy, sources.config, product, await engineIntegrity(codeRoot)),
   });
 }
 

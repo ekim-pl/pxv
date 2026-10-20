@@ -13,6 +13,7 @@ import type {
   Action,
   AndroidUserIdentity,
   ArtifactPolicy,
+  PolicySourceDocument,
   DeviceObservation,
   ExtensionLock,
   HandoffRecord,
@@ -172,7 +173,7 @@ export const artifactSourceSchema = z.discriminatedUnion('kind', [
     })
     .strict(),
 ]);
-export const artifactPolicySchema = z
+const artifactBaseSchema = z
   .object({
     packageId,
     versionCode: integer.positive(),
@@ -184,11 +185,30 @@ export const artifactPolicySchema = z
     repositoryId: id.optional(),
     redirectHosts: redirectHostsSchema.optional(),
   })
-  .strict()
-  .refine((value) => {
-    if (value.source) return !value.path && !value.url && !value.repositoryId && !value.redirectHosts;
-    return Boolean(value.path ?? value.url ?? value.repositoryId);
-  }, 'An artifact requires a source; source objects cannot be combined with legacy source fields');
+  .strict();
+function validArtifactSource(value: {
+  source?: unknown;
+  path?: string | undefined;
+  url?: string | undefined;
+  repositoryId?: string | undefined;
+  redirectHosts?: string[] | undefined;
+}): boolean {
+  if (value.source) return !value.path && !value.url && !value.repositoryId && !value.redirectHosts;
+  return (
+    [value.path, value.url, value.repositoryId].filter(Boolean).length === 1 &&
+    (!value.redirectHosts || Boolean(value.url))
+  );
+}
+export const artifactPolicySchema = artifactBaseSchema.refine((value) => {
+  if (value.source) return !value.path && !value.url && !value.repositoryId && !value.redirectHosts;
+  return Boolean(value.path ?? value.url ?? value.repositoryId);
+}, 'An artifact requires a source; source objects cannot be combined with legacy source fields');
+const artifactDeclarationSchema = artifactBaseSchema
+  .partial({ versionCode: true, sha256: true, signerSha256: true })
+  .extend({
+    source: z.union([artifactSourceSchema, z.object({ kind: z.literal('fdroid') }).strict()]).optional(),
+  })
+  .refine(validArtifactSource, 'An app declaration requires exactly one source');
 const settingObservationSchema = z
   .object({
     namespace: z.enum(['system', 'secure', 'global']),
@@ -312,7 +332,7 @@ export const networkProbePolicySchema = z
     failurePackages: z.array(packageId).refine(uniqueStrings, 'Duplicate failure package'),
   })
   .strict();
-function profilePackageReferences(value: z.infer<typeof profileBaseSchema>, context: z.RefinementCtx): void {
+function profilePackageReferences(value: SourceProfile, context: z.RefinementCtx): void {
   for (const permission of value.permissions) {
     if (!value.packages.some((artifact) => artifact.packageId === permission.packageId))
       context.addIssue({
@@ -326,14 +346,20 @@ function profilePackageReferences(value: z.infer<typeof profileBaseSchema>, cont
   )
     context.addIssue({ code: 'custom', message: 'VPN references an undeclared package' });
 }
-function profileRecipeReferences(value: z.infer<typeof profileBaseSchema>, context: z.RefinementCtx): void {
+function profileRecipeReferences(
+  value: SourceProfile,
+  context: z.RefinementCtx,
+  allowMissingPins = false,
+): void {
   for (const recipe of value.recipes ?? []) {
     if (
       !value.packages.some(
         (artifact) =>
           artifact.packageId === recipe.packageId &&
-          artifact.versionCode === recipe.versionCode &&
-          artifact.signerSha256 === recipe.signerSha256,
+          (artifact.versionCode === recipe.versionCode ||
+            (allowMissingPins && artifact.versionCode === undefined)) &&
+          (artifact.signerSha256 === recipe.signerSha256 ||
+            (allowMissingPins && artifact.signerSha256 === undefined)),
       )
     )
       context.addIssue({
@@ -342,7 +368,7 @@ function profileRecipeReferences(value: z.infer<typeof profileBaseSchema>, conte
       });
   }
 }
-function profileProbeReferences(value: z.infer<typeof profileBaseSchema>, context: z.RefinementCtx): void {
+function profileProbeReferences(value: SourceProfile, context: z.RefinementCtx): void {
   if (
     value.networkProbe?.failurePackages.some(
       (packageName) => !value.packages.some((artifact) => artifact.packageId === packageName),
@@ -357,10 +383,7 @@ function profileProbeReferences(value: z.infer<typeof profileBaseSchema>, contex
 }
 const defaultCredentialPolicySchema = z.object({ type: z.enum(['pin', 'password']), secretRef: id }).strict();
 const defaultDuressPolicySchema = z.object({ ownerCredentialRef: id, pinRef: id, passwordRef: id }).strict();
-function profileCredentialReferences(
-  value: z.infer<typeof profileBaseSchema>,
-  context: z.RefinementCtx,
-): void {
+function profileCredentialReferences(value: SourceProfile, context: z.RefinementCtx): void {
   if (!value.defaultDuress) return;
   if (value.kind !== 'owner')
     context.addIssue({ code: 'custom', message: 'Default duress requires the owner profile' });
@@ -388,7 +411,14 @@ const profileBaseSchema = z
     backup: z.object({ enabled: z.boolean(), transportPackage: packageId }).strict().optional(),
   })
   .strict();
-export const profilePolicySchema = profileBaseSchema.superRefine((value, context) => {
+type SourceProfile = Omit<z.infer<typeof profileBaseSchema>, 'packages'> & {
+  packages: z.infer<typeof artifactDeclarationSchema>[];
+};
+function validateProfileReferences(
+  value: SourceProfile,
+  context: z.RefinementCtx,
+  allowMissingPins = false,
+): void {
   if (value.defaultLocale && value.language && value.defaultLocale !== value.language)
     context.addIssue({ code: 'custom', message: 'Profile defaultLocale conflicts with alternate language' });
   if (!distinct(value.packages, (artifact) => artifact.packageId))
@@ -398,10 +428,16 @@ export const profilePolicySchema = profileBaseSchema.superRefine((value, context
   if (!distinct(value.permissions, (permission) => `${permission.packageId}:${permission.permission}`))
     context.addIssue({ code: 'custom', message: 'Duplicate profile permission' });
   profilePackageReferences(value, context);
-  profileRecipeReferences(value, context);
+  profileRecipeReferences(value, context, allowMissingPins);
   profileProbeReferences(value, context);
   profileCredentialReferences(value, context);
-});
+}
+export const profilePolicySchema = profileBaseSchema.superRefine((value, context) =>
+  validateProfileReferences(value, context),
+);
+const sourceProfileSchema = profileBaseSchema
+  .extend({ packages: z.array(artifactDeclarationSchema) })
+  .superRefine((value, context) => validateProfileReferences(value, context, true));
 export const repositoryPolicySchema = z
   .object({
     id,
@@ -436,24 +472,39 @@ export const DEFAULT_ATTESTATIONS = [
   'operator_signoff',
 ] as const;
 
-function policyArtifactReferences(value: z.infer<typeof policyBaseSchema>, context: z.RefinementCtx): void {
-  const shared = new Map<string, string>();
-  for (const profile of value.profiles)
-    for (const artifact of profile.packages) {
-      if (
-        artifact.repositoryId &&
-        !value.repositories.some((repository) => repository.id === artifact.repositoryId)
+function policyArtifactReferences(
+  value: Pick<SourcePolicy, 'profiles' | 'repositories'>,
+  context: z.RefinementCtx,
+): void {
+  artifactReferences(
+    value.profiles.flatMap((profile) => profile.packages),
+    value.repositories,
+    context,
+  );
+}
+function artifactReferences(
+  artifacts: z.infer<typeof artifactDeclarationSchema>[],
+  repositories: SourcePolicy['repositories'],
+  context: z.RefinementCtx,
+): void {
+  const shared = new Map<string, z.infer<typeof artifactDeclarationSchema>>();
+  for (const artifact of artifacts) {
+    if (artifact.repositoryId && !repositories.some((repository) => repository.id === artifact.repositoryId))
+      context.addIssue({ code: 'custom', message: `Unknown repository ${artifact.repositoryId}` });
+    const existing = shared.get(artifact.packageId);
+    if (
+      existing &&
+      (['versionCode', 'sha256', 'signerSha256'] as const).some(
+        (key) =>
+          existing[key] !== undefined && artifact[key] !== undefined && existing[key] !== artifact[key],
       )
-        context.addIssue({ code: 'custom', message: `Unknown repository ${artifact.repositoryId}` });
-      const identity = `${artifact.versionCode}:${artifact.sha256}:${artifact.signerSha256}`;
-      const existing = shared.get(artifact.packageId);
-      if (existing !== undefined && existing !== identity)
-        context.addIssue({ code: 'custom', message: `Conflicting device-wide APK ${artifact.packageId}` });
-      shared.set(artifact.packageId, identity);
-    }
+    )
+      context.addIssue({ code: 'custom', message: `Conflicting device-wide APK ${artifact.packageId}` });
+    shared.set(artifact.packageId, { ...existing, ...artifact });
+  }
 }
 
-function policyGlobalSettings(value: z.infer<typeof policyBaseSchema>, context: z.RefinementCtx): void {
+function policyGlobalSettings(value: SourcePolicy, context: z.RefinementCtx): void {
   const globals = new Map<string, string>();
   for (const profile of value.profiles)
     for (const setting of profile.settings) {
@@ -464,7 +515,7 @@ function policyGlobalSettings(value: z.infer<typeof policyBaseSchema>, context: 
       globals.set(setting.key, setting.value);
     }
 }
-function policyCredentialReferences(value: z.infer<typeof policyBaseSchema>, context: z.RefinementCtx): void {
+function policyCredentialReferences(value: SourcePolicy, context: z.RefinementCtx): void {
   const normalRefs = new Set(
     value.profiles.flatMap((profile) => [
       ...(profile.defaultCredential ? [profile.defaultCredential.secretRef] : []),
@@ -492,7 +543,8 @@ const policyBaseSchema = z
     osByCodename: z.record(id, osPolicySchema).optional(),
   })
   .strict();
-export const executionPolicySchema = policyBaseSchema.superRefine((value, context) => {
+type SourcePolicy = Omit<z.infer<typeof policyBaseSchema>, 'profiles'> & { profiles: SourceProfile[] };
+function validatePolicyReferences(value: SourcePolicy, context: z.RefinementCtx): void {
   if (value.profiles.filter((profile) => profile.kind === 'owner').length !== 1)
     context.addIssue({ code: 'custom', message: 'Exactly one owner profile is required' });
   if (!distinct(value.profiles, (profile) => profile.id))
@@ -505,9 +557,10 @@ export const executionPolicySchema = policyBaseSchema.superRefine((value, contex
   policyCredentialReferences(value, context);
   policyGlobalSettings(value, context);
   policyOsPins(value, context);
-});
+}
+export const executionPolicySchema = policyBaseSchema.superRefine(validatePolicyReferences);
 
-function policyOsPins(value: z.infer<typeof policyBaseSchema>, context: z.RefinementCtx): void {
+function policyOsPins(value: SourcePolicy, context: z.RefinementCtx): void {
   if (value.osByCodename) {
     if (!Object.keys(value.osByCodename).length)
       context.addIssue({ code: 'custom', message: 'OS model pins cannot be empty' });
@@ -546,6 +599,32 @@ const policyDocumentSchema = policyBaseSchema
     os: z.record(id, osPolicySchema).optional(),
   })
   .strict();
+
+const policySourceDocumentSchema = policyDocumentSchema
+  .extend({ apps: z.record(id, artifactDeclarationSchema) })
+  .superRefine((value, context) =>
+    artifactReferences(Object.values(value.apps), value.repositories, context),
+  );
+const sourceExecutionSchema = policyBaseSchema
+  .extend({ profiles: z.array(sourceProfileSchema).min(1) })
+  .superRefine(validatePolicyReferences);
+
+export function validatePolicySourceDocument(value: unknown): PolicySourceDocument {
+  const document = parseContract<PolicySourceDocument>(policySourceDocumentSchema, value);
+  const { apps, deviceSettings, os, profiles, ...base } = document;
+  const expanded = profiles.map(({ apps: references, settings, ...profile }) => ({
+    ...profile,
+    packages: references.map((reference) => {
+      const app = Object.hasOwn(apps, reference) ? apps[reference] : undefined;
+      if (!app) throw new Error(`Unknown app catalog reference ${reference}`);
+      return app;
+    }),
+    settings: profile.kind === 'owner' ? [...settings, ...deviceSettings] : settings,
+  }));
+  parseContract(sourceExecutionSchema, { ...base, profiles: expanded, ...(os ? { osByCodename: os } : {}) });
+
+  return document;
+}
 
 function normalizePolicy(document: PolicyDocument): ExecutionPolicy {
   const { apps, deviceSettings, os, profiles, ...base } = document;

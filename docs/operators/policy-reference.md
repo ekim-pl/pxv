@@ -88,6 +88,90 @@ does not affect it, while a change to referenced apps or other normalized fields
 does. Review actual changes instead of treating every authoring byte as a new
 execution identity.
 
+## Resolving app sources into pins
+
+`policy resolve-apps` accepts a source authoring document (`PolicySourceDocument`)
+with the same catalog, profiles and configuration as a normal policy. Each app
+requires its `packageId` and one source; `versionCode`, `sha256` and `signerSha256`
+may be omitted independently. For example, the `apps` catalog may contain:
+
+```json
+{
+  "messenger": {
+    "packageId": "org.example.messenger",
+    "source": { "kind": "direct", "url": "https://publisher.example/app.apk" }
+  },
+  "store": {
+    "packageId": "com.aurora.store",
+    "source": { "kind": "fdroid" }
+  }
+}
+```
+
+The resolver accepts `fdroid` as an authoring alias and writes canonical `fdroidcl`.
+Inline `fdroid-repository` sources require an already trusted repository certificate
+`fingerprint`. Existing `repositoryId`, legacy `url` and local `path` inputs also
+work. Local paths must be contained within the project, or beside a standalone
+policy. Source objects cannot be combined with legacy source fields.
+
+Preview against an enrolled phone or an explicit SDK/ABI pair, then write after
+review. Standalone files require the explicit pair; `--abi` accepts comma-separated
+ABIs. `--asset` and optional `--transport` perform the same read-only identity and
+compatibility observations as `update-apps`.
+
+```sh
+pxv policy resolve-apps --project-root "$P" --asset PHONE --dry-run
+pxv policy resolve-apps --project-root "$P" --asset PHONE --yes
+pxv policy resolve-apps --policy policy.sources.json \
+  --sdk 36 --abi arm64-v8a --dry-run
+pxv policy resolve-apps --policy policy.sources.json \
+  --sdk 36 --abi arm64-v8a --output policy.pinned.json --yes --json
+```
+
+By default the input is updated in place. `--output FILE` writes a separate policy
+without changing the project's configured policy path. Existing output files use
+the ordinary confirmation and revision checks. `--yes` accepts the write;
+`--dry-run` downloads and verifies every app without writing either file. `--json`
+emits one result on stdout, with the review on stderr.
+
+Direct sources resolve the APK currently served at the declared URL. All supplied
+pins are constraints, including a supplied version. PXV verifies the APK signature,
+package, version, hash and SDK/ABI compatibility before filling missing pins. If a
+direct source has no signer pin, the review shows its observed certificate
+fingerprint. Confirming the write establishes that first source-observed signer
+pin; it does not independently establish the publisher's identity. Later resolutions
+must match that signer. Use `update-apps` when you intend to upgrade existing pins.
+
+Repository sources use the isolated host `fdroidcl`, authenticated `index-v1.jar`,
+repository freshness checks and existing project freshness floors described below.
+Without an explicit version, resolution selects the highest compatible version at
+or below signed `suggestedVersionCode` satisfying supplied pins. Missing stable
+metadata is an error unless an exact version was supplied. Explicit versions are
+resolved exactly, including versions above that stable suggestion. Repository
+certificate pins are never discovered automatically.
+
+Host prerequisites are `aapt` and `apksigner` for all APKs, plus `fdroidcl` and Java
+for repository sources. Resolution performs network discovery on the host; no apps
+are installed. Every catalog entry, including unused entries, must resolve and the
+complete output must pass normal strict policy validation. Unsupported sources,
+missing candidates, incompatible APKs, conflicting identities or verification
+failures abort the entire write. No incomplete entries are skipped.
+
+Results include `resolutions` with `before`, `after`, `discovered` pin names and
+newly `observedSignerSha256`, plus `unchanged`, `destination`, `written` and
+`policyLockRequired`. Catalog IDs, references, unrelated configuration and authored
+omissions are preserved. Fully pinned no-op inputs are verified and left byte-for-byte
+unchanged. Temporary downloads are removed even on failure or interruption, and
+revision checks protect input, output and project sources against concurrent edits.
+
+Normal policy validation, project initialization and execution still require fully
+pinned policies. A project whose configured policy has incomplete pins can be read
+by `resolve-apps`. Resolution leaves its existing policy lock untouched. After
+changing the active project policy, run `policy validate`, explicitly create a fresh
+`policy lock`, and prepare and review a new plan. A separately written output must
+first be adopted as the project's policy before that workflow. Local path strings
+are preserved; retain their artifact layout when moving or adopting output.
+
 ## Updating app pins
 
 `policy update-apps` refreshes trusted F-Droid repositories through the host

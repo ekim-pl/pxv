@@ -109,7 +109,7 @@ function command(
   return { name, description, flags: [...common, ...executionFlags(name), ...flags], required, ...options };
 }
 function executionFlags(name: string): readonly Flag[] {
-  if (name === 'policy update-apps') return ['execution'];
+  if (['policy update-apps', 'policy resolve-apps'].includes(name)) return ['execution'];
   if (name === 'inventory print-label') return ['execution'];
   if (['extension install', 'extension update'].includes(name)) return ['execution'];
   const section = name.split(' ')[0];
@@ -130,6 +130,16 @@ const commands: readonly CommandDefinition[] = [
     'transport',
     'sdk',
     'abi',
+    'dry-run',
+    'yes',
+  ]),
+  command('policy resolve-apps', 'Resolve app sources into a verified pinned policy.', [
+    'policy',
+    'asset',
+    'transport',
+    'sdk',
+    'abi',
+    'output',
     'dry-run',
     'yes',
   ]),
@@ -382,7 +392,9 @@ function validateCommand(
   const unsupported = Object.keys(values).find((name) => !definition.flags.includes(name as Flag));
   if (unsupported) throw new Error(`--${unsupported} is not supported for ${definition.name}`);
   if (values['help']) return definition;
-  if (definition.name === 'policy update-apps') validatePolicyUpdateArguments(values);
+  if (['policy update-apps', 'policy resolve-apps'].includes(definition.name)) {
+    validatePolicyUpdateArguments(values);
+  }
   validateExecutionFlags(definition, values);
   validateExactSelection(definition, values);
   validateConditionalInput(definition, values);

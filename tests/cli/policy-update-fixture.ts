@@ -65,7 +65,7 @@ function updateDocument(): PolicyDocument {
   });
 }
 
-export async function updateFixture() {
+export async function updateFixture(command = 'update-apps') {
   const root = await mkdtemp(join(tmpdir(), 'pxv-policy-updates-'));
   const resources = join(root, 'resources');
   const path = join(root, 'standalone.json');
@@ -161,14 +161,7 @@ export async function updateFixture() {
     throw new Error(`Unexpected command ${JSON.stringify(args)}`);
   });
   await writeFile(path, JSON.stringify(document));
-  const args = (extra: string[]) => [
-    'policy',
-    'update-apps',
-    '--json',
-    '--resource-root',
-    resources,
-    ...extra,
-  ];
+  const args = (extra: string[]) => ['policy', command, '--json', '--resource-root', resources, ...extra];
   return {
     root,
     resources,

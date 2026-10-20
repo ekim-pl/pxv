@@ -1,3 +1,4 @@
+import { compatibleRepositoryApk } from './policy-app-candidates.js';
 import {
   FdroidclSession,
   type ArtifactService,
@@ -5,7 +6,6 @@ import {
   type CandidateDevice,
   type CommandRunner,
   type HostTools,
-  type RepositoryApk,
   type RepositoryService,
 } from '@pxv/adapters';
 import type { ArtifactPolicy, PolicyDocument, RepositoryPolicy } from '@pxv/contracts';
@@ -62,15 +62,6 @@ function repositoryGroups(document: PolicyDocument, plan: AppUpdatePlan): Reposi
   return [...groups.values()];
 }
 
-function compatible(row: RepositoryApk, device: CandidateDevice): boolean {
-  const { minSdk, maxSdk, abis } = row.compatibility;
-  return (
-    minSdk <= device.sdk &&
-    (maxSdk === undefined || maxSdk >= device.sdk) &&
-    (!abis.length || abis.some((abi) => device.abis.includes(abi)))
-  );
-}
-
 function stableCandidate(
   services: AppUpdateServices,
   index: AuthenticatedUpdateRepository,
@@ -84,7 +75,7 @@ function stableCandidate(
     throw new Error(`Repository replaced pinned APK bytes for ${app.packageId}:${app.versionCode}`);
   const suggestion = index.suggestedVersionCodes[app.packageId];
   if (suggestion === undefined) return 'Repository has no stable suggestedVersionCode for this package';
-  const stable = rows.filter((row) => row.versionCode <= suggestion && compatible(row, device));
+  const stable = rows.filter((row) => row.versionCode <= suggestion && compatibleRepositoryApk(row, device));
   const approved = stable.filter((row) => row.signerSha256 === signer);
   const latest = Math.max(0, ...approved.map((row) => row.versionCode));
   if (stable.some((row) => row.versionCode >= app.versionCode && row.versionCode > latest))

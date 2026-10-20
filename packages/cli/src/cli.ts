@@ -27,6 +27,8 @@ async function externalCommand(context: CliContext): Promise<number | undefined>
   if (guides !== undefined) return guides;
   const delegated = await executionMode(context);
   if (delegated !== undefined) return delegated;
+  if (section === 'policy' && command === 'resolve-apps')
+    return (await import('./policy-resolve-command.js')).policyResolveCommand(context);
   if (section === 'policy' && command === 'update-apps')
     return (await import('./policy-update-command.js')).policyUpdateCommand(context);
   if (section === 'guide' && command !== 'project') return staticGuide(context);

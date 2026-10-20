@@ -18,7 +18,7 @@ export function repositoryUpdateKey(repository: RepositoryPolicy): string {
 }
 
 export function artifactRepository(
-  artifact: ArtifactPolicy,
+  artifact: Pick<ArtifactPolicy, 'source' | 'repositoryId'>,
   repositories: readonly RepositoryPolicy[],
 ): RepositoryPolicy | undefined {
   const source = artifact.source;

@@ -58,6 +58,21 @@ export interface ArtifactPolicy {
   redirectHosts?: string[];
 }
 
+/** Source authoring input accepted only by policy resolve-apps. */
+export interface ArtifactDeclaration extends Omit<
+  ArtifactPolicy,
+  'versionCode' | 'sha256' | 'signerSha256' | 'source'
+> {
+  versionCode?: number;
+  sha256?: string;
+  signerSha256?: string;
+  source?: ArtifactSource | { kind: 'fdroid' };
+}
+
+export interface PolicySourceDocument extends Omit<PolicyDocument, 'apps'> {
+  apps: Record<string, ArtifactDeclaration>;
+}
+
 export interface SettingPolicy {
   namespace: 'system' | 'secure' | 'global';
   key: string;

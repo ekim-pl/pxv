@@ -21,6 +21,7 @@ function validatePolicyInput(values: Record<string, unknown>): void {
 
 export function validatePolicyUpdateArguments(values: Record<string, unknown>): void {
   validatePolicyInput(values);
+  if (values['output'] === '') throw new Error('--output requires a file');
   const asset = values['asset'] !== undefined;
   const explicit = values['sdk'] !== undefined || values['abi'] !== undefined;
   if (asset && explicit) throw new Error('Choose --asset or the --sdk and --abi pair');
