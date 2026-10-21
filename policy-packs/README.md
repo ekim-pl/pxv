@@ -18,15 +18,16 @@ Every starter profile, including the owner, declares `defaultLocale`. Edit profi
 | Profile | Apps |
 | --- | --- |
 | owner | Rethink DNS, Oblivion |
-| contacts | Rethink DNS, Session, Telegram, Signal |
+| contacts | Rethink DNS, Session, Telegram, Signal, Molly |
 | google | Rethink DNS, Aurora Store |
-| testing | Rethink DNS |
+| testing | Rethink DNS, Molly |
 | onion | Rethink DNS, Orbot |
 
 [`fleet-privacy`](fleet-privacy/policy.json) copies `fleet-nerd`, and
 [`single-privacy`](single-privacy/policy.json) copies `single-nerd`, with the testing
 and onion profiles removed. Both privacy packs retain owner, contacts and google
-with the same app assignments above; the unused Orbot catalog entry is removed.
+with the same app assignments above except Molly; the unused Orbot catalog entry
+is removed.
 `fleet-privacy` retains the fleet credential defaults and owner duress configuration
 for those three profiles. `single-privacy` retains private on-device credential
 entry with no initial credential references or duress configuration. It selects
@@ -34,7 +35,7 @@ Rethink DNS + Firewall (`com.celzero.bravedns`) as an always-on VPN with lockdow
 for Owner, contacts and google, and disables Android's global Private DNS setting.
 Configure and test Rethink separately in each profile before lockdown; the policy
 does not configure an upstream VPN tunnel or proxy. The capabilities, required
-attestations, locales, app assignments and other settings follow the corresponding
+attestations, locales and remaining app assignments follow the corresponding
 nerd pack.
 
 F-Droid is not installed in any profile. This catalog currently uses pinned direct
@@ -54,9 +55,10 @@ Refresh eligible F-Droid app pins in a selected starter with
 Use the intended phone's actual SDK and ABI values, review the result, then replace
 `--dry-run` with `--yes` to write it. Run the command separately for each starter
 that should receive the update. Custom repositories require trust anchors in the
-policy. See [updating app pins](../docs/operators/policy-reference.md#updating-app-pins).
+policy. Both nerd packs declare trust anchors for Session and Molly, matching
+their pinned direct APK URLs. See [updating app pins](../docs/operators/policy-reference.md#updating-app-pins).
 
-The catalogs were pinned on 2026-10-19:
+The existing catalog pins date from 2026-10-19; Molly was added on 2026-10-21:
 
 | Catalog ID | Version (version code) | Distribution |
 | --- | --- | --- |
@@ -65,6 +67,7 @@ The catalogs were pinned on 2026-10-19:
 | session | 1.33.7 (4555) | Session repository, universal |
 | telegram | 13.0.3 (71839) | Telegram website distribution |
 | signal | 8.31.2 (176601) | Signal website distribution, universal |
+| molly | v8.19.2-4 (171904) | Molly repository, universal; nerd packs only |
 | aurora | 4.8.4 (76) | F-Droid, universal |
 | orbot | 17.9.5-RC-4-tor-0.4.9.11 (1795300400) | Guardian Project, universal |
 
@@ -105,6 +108,21 @@ its signature, package ID and version code were inspected with Android Build Too
 The catalog pins each APK content hash and signer. PXV's private artifact cache
 retains the APK bytes and signing evidence. This artifact review does not claim live
 phone or routing acceptance.
+
+Molly comes from the [official Molly repository](https://molly.im/fdroid/repo/)
+provided for the nerd packs. Its `entry.jar` was authenticated with PXV's repository
+verifier against repository signer
+`3b7e93b1fe32c6e35a93d6ddfc5afbeb1239a7c6ea6af20ff33ed53cdc38b04a`.
+The authenticated index-v2 SHA-256 was
+`ab6d7f04c4819a3481bf5612d63f7297049de121b6068f37c33883f329d43dd9`;
+its size and digest, and the APK's size, digest, signature, package ID and version
+code were verified. This is the regular Molly build; Molly-FOSS uses a separate
+repository and signing key. Both nerd policies retain this repository's trust
+anchor for `policy update-apps`, while installing the pinned APK through its direct
+URL, like the other catalog entries. The observed repository index is dated
+2026-07-31, outside the retained 30-day update freshness window; repository updates
+will be rejected until Molly publishes a fresh index. The pinned direct APK remains
+subject to its exact content and APK signer checks.
 
 ## Fleet Nerd defaults
 

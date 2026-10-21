@@ -14,7 +14,22 @@
     "recipient_acceptance",
     "operator_signoff"
   ],
-  "repositories": [],
+  "repositories": [
+    {
+      "id": "session",
+      "url": "https://fdroid.getsession.org/fdroid/repo",
+      "signerSha256": "db0e5297eb65cc22d6bd93c869943bdcfcb6a07dc69a48a0dd8c7ba698ec04e6",
+      "maxAgeDays": 30,
+      "redirectHosts": []
+    },
+    {
+      "id": "molly",
+      "url": "https://molly.im/fdroid/repo",
+      "signerSha256": "3b7e93b1fe32c6e35a93d6ddfc5afbeb1239a7c6ea6af20ff33ed53cdc38b04a",
+      "maxAgeDays": 30,
+      "redirectHosts": []
+    }
+  ],
   "apps": {
     "rethink": {
       "packageId": "com.celzero.bravedns",
@@ -56,6 +71,13 @@
       "sha256": "c3e51db54b2af9f4a8a2d0ce3b469ef67d56a13a433208325bcb981e1ca3a536",
       "signerSha256": "4be4f6cd5be844083e900279dc822af65a547fecc26aba7ff1f5203a45518cd8",
       "url": "https://updates.signal.org/android/Signal-Android-website-prod-universal-release-8.31.2.apk"
+    },
+    "molly": {
+      "packageId": "im.molly.app",
+      "versionCode": 171904,
+      "sha256": "f1c6fd929f9047809a7a9bb4e663d1ec1ec4d9f33d9794799c8e2f8e1663ec11",
+      "signerSha256": "6aa80fdf4a8cc13737cfb434fc0cde486f09cf8fcda21a67bea5ee1ca2700886",
+      "url": "https://molly.im/fdroid/repo/im.molly.app_171904.apk"
     },
     "aurora": {
       "packageId": "com.aurora.store",
@@ -119,7 +141,8 @@
         "rethink",
         "session",
         "telegram",
-        "signal"
+        "signal",
+        "molly"
       ]
     },
     {
@@ -160,7 +183,8 @@
       },
       "defaultLocale": "pl-PL",
       "apps": [
-        "rethink"
+        "rethink",
+        "molly"
       ]
     },
     {
