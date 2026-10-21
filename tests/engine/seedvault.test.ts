@@ -219,6 +219,25 @@ describe('supervised Seedvault runs', () => {
     return { prepared, run };
   }
 
+  it('blocks optional continuations while preserving retained shutdown intent and inspection', async () => {
+    const { prepared, run } = await prepare();
+    const retained = { schemaVersion: 1, policyDigest: 'old-baseline', pending: ['debugging-shutdown'] };
+    await store.set('workflow', device.assetId, retained);
+    await expect(engine.prepareSeedvault(target, { operation: 'backup', adapter })).rejects.toThrow(
+      'finalization-inspection',
+    );
+    await expect(engine.submit(prepared.plan.id, prepared.reviewSummary, 'Owner')).rejects.toThrow(
+      'finalization-inspection',
+    );
+    await expect(engine.execute(run.id)).rejects.toThrow('finalization-inspection');
+    await store.set('runs', run.id, { ...run, status: 'pending', manualGate: 'seedvault:admin' });
+    await expect(engine.refreshReview(run.id)).rejects.toThrow('finalization-inspection');
+    expect((await engine.inspectSeedvault(target)).deviceSerial).toBe(device.canonicalSerial);
+    await engine.cancel(run.id);
+    expect(port.calls).toEqual([]);
+    expect(await store.get('workflow', device.assetId)).toEqual(retained);
+  });
+
   it('prepares read-only exact reviews and idempotently approves without touching provision evidence', async () => {
     await store.set('workflow', device.assetId, { preserved: 'provisioning' });
     const { prepared, run } = await prepare();

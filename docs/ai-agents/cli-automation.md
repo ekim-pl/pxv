@@ -140,3 +140,30 @@ For complete command families and supported options, use the
 [operator command reference](../operators/command-reference.md) and command-specific
 help. `--dry-run` is supported only for operations that explicitly prepare plans;
 attestation, finalization, and inspected recovery reject it.
+
+Treat `finalization-inspection` as a stop for physical/evidence inspection and the documented maintenance recovery, not a retry signal. Storage and decoding errors must remain errors; never substitute a successful readiness response or restart provisioning to repair them. Custody verifies complete plan content against its original snapshot.
+
+This stop also applies to preparation, submission, refresh, resume, attestation,
+extension contributions, Seedvault and collectors, independently of baseline changes.
+Only explicit lifecycle maintenance archives incomplete shutdown evidence. For
+backup-only automation, validate and explicitly renew a missing/stale/invalid lock
+before connecting; dry runs verify approval too and never renew it.
+
+Managed package observations and all-user effects require installed APK SHA-256.
+Same package/version/signer with different content requires a reviewed reinstall;
+split installations require maintenance and must never be automatically removed.
+Historical hashless evidence remains historical, never a new content measurement.
+
+Recipe/probe blockers also cover incomplete results, mismatched source actions,
+missing observation checkpoints and invalid refresh ancestry. Assisted recipe
+completion requires the consumed app-setup witness in retained audit history.
+Do not repair evidence files or synthesize a successful result. Storage errors
+remain errors. Worker launch failures retain newer run evidence and attempt-owned
+cleanup; inspect the returned error before deciding on a new review.
+
+All new Seedvault connections require current approval, including direct CLI dry
+runs. Approval is checked again under ownership after prompts. Backup-only work
+must restart if its initially validated baseline changes while waiting, even after
+explicit lock renewal. Disconnect and exact-session cleanup stay available.
+
+Historical status and offline custody/lifecycle records remain available when pinned extension files are missing or corrupt. Custody after finalization uses the original validated snapshot even after an executable or policy change; lifecycle invalidation still blocks it. Device reports can return `readinessStatus: unavailable` with `ready: false`, `readiness-unavailable` and `readinessUnavailableReason`, while retaining historical run information. Never treat a completed subset/extension run as proof of custody.

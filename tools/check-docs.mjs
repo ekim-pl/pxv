@@ -2,6 +2,7 @@ import { readdir, readFile, access } from 'node:fs/promises';
 import { dirname, extname, join, resolve, relative } from 'node:path';
 import { marked } from 'marked';
 import { checkCommandExamples } from './lib/doc-command-examples.mjs';
+import { documentLinks, placeholderLink } from './lib/document-links.mjs';
 const root = process.cwd();
 const files = [
   'README.md',
@@ -55,16 +56,6 @@ async function hasAnchor(target, fragment) {
   }
   return anchors.has(decodeURIComponent(fragment));
 }
-/** @param {string} text @returns {string[]} */
-function documentLinks(text) {
-  /** @type {string[]} */
-  const links = [];
-  marked.walkTokens(marked.lexer(text), (token) => {
-    if ((token.type === 'link' || token.type === 'image') && typeof token.href === 'string')
-      links.push(token.href);
-  });
-  return links;
-}
 for (const file of files) {
   const text = await readFile(join(root, file), 'utf8');
   errors.push(...checkCommandExamples(text, file));
@@ -75,6 +66,10 @@ for (const file of files) {
   )
     errors.push(`${file}: obsolete application command`);
   for (const link of documentLinks(text)) {
+    if (placeholderLink(link)) {
+      errors.push(`${file}: empty or placeholder link destination`);
+      continue;
+    }
     if (/^(?:[a-z][a-z0-9+.-]*:|\/)/iu.test(link)) continue;
     const [path, fragment] = link.split('#');
     const target = path ? resolve(root, dirname(file), decodeURIComponent(path)) : join(root, file);

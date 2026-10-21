@@ -33,6 +33,8 @@ import type { PlanWriter } from './plan-repository.js';
 import { sameArtifact } from './reviewed-plan.js';
 import type { CredentialDefaultHistory } from './credential-default-history.js';
 import { assertApprovedProject } from './policy-lock.js';
+import { assertFinalizationResolved } from './finalization-guard.js';
+import type { Store } from '@pxv/runtime';
 export interface Preparation {
   prepare(target: SelectedTarget, operation?: Operation, signal?: AbortSignal): Promise<PreparedOperation>;
   prepareExtension(
@@ -69,6 +71,7 @@ export class PreparationService implements Preparation {
     readonly plans: PlanWriter,
     readonly clock: () => Date,
     readonly credentialDefaults: CredentialDefaultHistory,
+    readonly store: Store,
   ) {}
   /** Artifact acquisition is allowed; preparation never changes the phone. */
   async prepare(
@@ -164,6 +167,7 @@ export class PreparationService implements Preparation {
     contributions?: Action[],
   ): Promise<PreparedOperation> {
     await assertApprovedProject(this.project);
+    await assertFinalizationResolved(this.store, target.device.assetId);
     this.observations.assertTarget(target);
     const lifecycleGeneration = await this.plans.generation(target.device.assetId);
     const baseline = await this.prepareBaseline(target, operation, signal);
@@ -337,7 +341,11 @@ export class PreparationService implements Preparation {
     for (const artifact of profile.packages) {
       const current = observed?.packages.find((value) => value.packageId === artifact.packageId);
       if (current && current.versionCode > artifact.versionCode) throw new Error('Package downgrade refused');
-      if (current?.versionCode === artifact.versionCode && current.signerSha256 === artifact.signerSha256)
+      if (
+        current?.versionCode === artifact.versionCode &&
+        current.signerSha256 === artifact.signerSha256 &&
+        current.sha256 === artifact.sha256
+      )
         continue;
       const snapshot = await this.snapshotArtifact(
         target,

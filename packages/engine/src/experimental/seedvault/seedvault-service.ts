@@ -10,6 +10,7 @@ import { type SeedvaultPlans, seedvaultIdentity } from './seedvault-plans.js';
 import { validateSeedvaultReport } from './seedvault-reports.js';
 import type { PreparedSeedvaultOperation, SeedvaultReport } from './seedvault-types.js';
 import type { RunRecord } from '../../workflow-types.js';
+import { assertFinalizationResolved } from '../../finalization-guard.js';
 
 /** Independent backup evidence must never replace provisioning evidence or attestations. */
 export class SeedvaultService {
@@ -43,6 +44,7 @@ export class SeedvaultService {
     return this.projects.run(
       async () => {
         const prepared = await this.plans.read(planId, summary);
+        await assertFinalizationResolved(this.store, prepared.target.device.assetId);
         if (!operator.trim() || operator.length > 200) throw new Error('Operator identity is required');
         await this.validateLineage(prepared);
         const id = digest({ project: this.project.config.id, seedvaultPlan: prepared.plan.digest });
@@ -86,6 +88,7 @@ export class SeedvaultService {
         if (run?.status !== 'pending' || !run.manualGate?.startsWith('seedvault:'))
           throw new Error('Only an intentional Seedvault manual checkpoint can receive a fresh review');
         const previous = await this.plans.read(run.planId, undefined, true);
+        await assertFinalizationResolved(this.store, previous.target.device.assetId);
         return this.devices.run(previous.target, `${randomUUID()}-seedvault-refresh`, () =>
           this.refreshLeased(run, previous, signal),
         );

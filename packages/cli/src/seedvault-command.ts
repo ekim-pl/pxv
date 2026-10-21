@@ -9,6 +9,7 @@ import {
 import { connectSeedvaultEndpoint, seedvaultConnections, type SeedvaultConnectionRequest } from '@pxv/engine';
 import { readBounded } from '@pxv/runtime';
 import { dirname, resolve } from 'node:path';
+import { assertApprovedProject } from '@pxv/engine';
 import { stdin, stderr } from 'node:process';
 import { createInterface } from 'node:readline/promises';
 import { confirmation, type ApplicationCliContext } from './arguments.js';
@@ -68,6 +69,7 @@ function connectionInput(context: ApplicationCliContext, target: SelectedTarget)
 async function connection(context: ApplicationCliContext, target: SelectedTarget): Promise<number> {
   const input = connectionInput(context, target);
   const { endpoint, pairEndpoint } = input;
+  if (!input.disconnect) await assertApprovedProject(context.project);
   if (context.flag('dry-run')) {
     context.output({ action: context.command, assetId: target.device.assetId, endpoint, pairEndpoint });
     return 0;

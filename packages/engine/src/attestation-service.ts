@@ -27,6 +27,7 @@ import type {
 } from './workflow-types.js';
 import { normalReceiptMatches } from './setup-evidence.js';
 import { pausedVpnAction, checkVpnDelta } from './vpn-evidence.js';
+import { assertFinalizationResolved } from './finalization-guard.js';
 
 export class AttestationService {
   constructor(
@@ -63,6 +64,7 @@ export class AttestationService {
     note?: string,
     evidence?: EmulatorImagePin,
   ): Promise<OperatorAttestation> {
+    await assertFinalizationResolved(this.store, target.device.assetId);
     const state = await this.evidence.state(target.device.assetId);
     this.evidence.requireFresh(state);
     const live = await this.observations.observe(target);

@@ -29,6 +29,25 @@ function runner(
   };
 }
 describe('strict APK identity and compatibility failures', () => {
+  it('hashes the verified bytes and rejects changes during identity verification', async () => {
+    const path = join(directory, 'measured.apk');
+    await writeFile(path, 'original signed bytes');
+    const service = new ArtifactService({
+      runner: runner("package: name='org.example.app' versionCode='1'"),
+    });
+    expect(await service.contentIdentity(path)).toMatchObject({
+      packageId: 'org.example.app',
+      versionCode: 1,
+      sha256: createHash('sha256').update('original signed bytes').digest('hex'),
+    });
+    vi.spyOn(service, 'identity').mockImplementationOnce(async () => {
+      await writeFile(path, 'changed signed bytes');
+      return { packageId: 'org.example.app', versionCode: 1, signerSha256: 'b'.repeat(64) };
+    });
+    await expect(service.contentIdentity(path)).rejects.toThrow('changed during verification');
+    await rm(path);
+    await expect(service.contentIdentity(path)).rejects.toThrow();
+  });
   it('rejects malformed and future SDK declarations, duplicate metadata and incompatible ABIs', async () => {
     expect(
       parseApkCompatibility("sdkVersion:'28'\nmaxSdkVersion:'35'\nnative-code: 'arm64-v8a' 'x86_64'\n"),

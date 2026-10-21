@@ -15,6 +15,33 @@ export async function requirePersonalRecovery(root) {
   if (product.features?.seedvault === false)
     throw new Error('Personal recovery requires a Seedvault-enabled product; no changes were made');
 }
+/** Reuse operational approval verification; an existing project is never relocked by backup automation.
+ * @param {string} root @param {string} projectRoot */
+export async function requireBackupApproval(root, projectRoot) {
+  const { loadProjectSources, policyLockStatus } = await import('../../packages/engine/dist/index.js');
+  const { validateProduct, validatePolicy, resolvePolicy } = await contracts();
+  const { installedIdentity } = await import('./personal-master.mjs');
+  const identity = await installedIdentity(root);
+  const { document, ...sources } = await loadProjectSources(
+    projectRoot,
+    validateProduct(identity.product),
+    root,
+  );
+  const policy = validatePolicy(document);
+  const project = {
+    ...sources,
+    policy,
+    resolved: resolvePolicy(policy, sources.config, sources.product, identity.engineDigest),
+  };
+  const status = await policyLockStatus(project);
+  if (status !== 'current')
+    throw new Error(
+      'Policy lock is ' +
+        status +
+        '; run policy validate and explicitly renew policy lock before backup-only work',
+    );
+  return project.resolved.digest;
+}
 /** @param {string} path */
 export async function qualifiedAdapter(path) {
   const { validateSeedvaultAdapter } = await contracts();

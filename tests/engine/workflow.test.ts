@@ -252,7 +252,12 @@ describe('reviewed workflows, operator and recipient gates', () => {
         {
           packageId: 'org.example.vpn',
           users: [
-            { user: { userId: 10, serialNo: 77, name: 'Unmanaged' }, versionCode: 99, signerSha256: hashB },
+            {
+              user: { userId: 10, serialNo: 77, name: 'Unmanaged' },
+              versionCode: 99,
+              signerSha256: hashB,
+              sha256: hashA,
+            },
           ],
         },
       ]);
@@ -274,6 +279,38 @@ describe('reviewed workflows, operator and recipient gates', () => {
         { packageId: 'org.example.vpn', users: [] },
       ]);
     await expect(engine.prepare(target)).rejects.toThrow('Duplicate shared');
+  });
+
+  it('reviews a same-version content replacement and rejects content drift before execution', async () => {
+    const installed = port.observation.profiles[0]!.packages[0]!;
+    installed.sha256 = 'c'.repeat(64);
+    const prepared = await engine.prepare(target);
+    expect(prepared.plan.actions.filter((action) => action.kind === 'install-apk')).toHaveLength(1);
+    expect(prepared.sharedEffects[0]!.users[0]).toMatchObject({
+      versionCode: installed.versionCode,
+      sha256: installed.sha256,
+    });
+    expect(prepared.reviewSummary).toContain(installed.sha256);
+    const run = await engine.submit(prepared.plan.id, prepared.reviewSummary, 'Alice');
+    installed.sha256 = 'd'.repeat(64);
+    const changed = await engine.execute(run.id);
+    expect(changed.status).toBe('needs-inspection');
+    expect(port.calls).not.toContain('install-apk');
+  });
+
+  it('reinstalls reviewed content and binds the content hash in execution checkpoints', async () => {
+    port.observation.profiles[0]!.packages[0]!.sha256 = 'c'.repeat(64);
+    const { run } = await preparedRun();
+    expect((await executeWithWitnesses(engine, run.id)).status).toBe('pending');
+    expect(port.calls.filter((value) => value === 'install-apk')).toHaveLength(1);
+    expect(port.observation.profiles[0]!.packages[0]!.sha256).toBe(hashA);
+    for (const check of requiredAttestations(context.policy)) await engine.attest(target, check, 'Alice');
+    const state = await engine.state(device.assetId);
+    expect(state.observation.profiles[0]!.packages[0]!.sha256).toBe(hashA);
+    delete state.observation.profiles[0]!.packages[0]!.sha256;
+    await store.set('workflow', device.assetId, state);
+    expect((await engine.readiness(target)).ready).toBe(false);
+    await expect(engine.finalize(target, 'Alice')).rejects.toThrow();
   });
 
   it('blocks live drift and never replays interrupted or failed mutations', async () => {

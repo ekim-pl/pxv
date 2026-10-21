@@ -67,7 +67,7 @@ This is a complete test procedure for **one person acting as operator and recipi
 with one exact physical Pixel and five Android profiles. It prepares a test; it does
 not record a pass. Use your own name for both roles and complete their confirmations
 separately. Follow the [self-managed guide](single-device.md) for background and
-[verification boundaries]() when interpreting evidence.
+[verification boundaries](#evidence-and-qualification) when interpreting evidence.
 
 The starter is [single-nerd](../../policy-packs/single-nerd/policy.json).
 It contains no app pins, OS pins, VPN configuration, credentials or destructive

@@ -161,26 +161,28 @@ const commands: readonly CommandDefinition[] = [
     ...['inspect', 'report'].map((name) =>
       command(
         `${section} ${name}`,
-        name === 'inspect' ? 'Observe live device state.' : 'Read stored readiness evidence.',
+        name === 'inspect'
+          ? 'Observe live device state.'
+          : 'Read stored readiness and history; incomplete shutdown reports finalization-inspection. Storage failures remain errors.',
         selection,
       ),
     ),
     ...workflows.map((name) =>
       command(
         `${section} ${name}`,
-        'Prepare reviewed work; execute only after approval.',
+        'Prepare reviewed work with installed APK hashes; approval and resolved shutdown intent are required.',
         workflowFlags(name),
       ),
     ),
     command(
       `${section} attest`,
-      'Record a check actually performed by the named operator.',
+      'Record a witnessed check with matching APK content; incomplete shutdown requires maintenance first.',
       [...selection, 'check', 'operator', 'note', 'evidence', 'yes'],
       ['asset', 'check', 'operator'],
     ),
     command(
       `${section} finalize`,
-      'Verify readiness and disable debugging.',
+      'Authenticate the complete retained plan and capability proofs before disabling debugging; unresolved shutdown requires inspection.',
       [...selection, 'operator', 'locale', 'yes'],
       ['asset', 'operator'],
     ),
@@ -254,7 +256,7 @@ const commands: readonly CommandDefinition[] = [
   ),
   command(
     'handoff accept',
-    'Confirm debugging is off and transfer recipient custody.',
+    'Confirm debugging is off and record custody against the original finalized handoff.',
     ['asset', 'recipient', 'debugging-off', 'yes'],
     ['asset', 'recipient', 'debugging-off'],
   ),
@@ -369,7 +371,11 @@ function seedvaultCommand(name: string): CommandDefinition {
         : ['asset'];
   return command(
     `seedvault ${name}`,
-    'Inspect or perform a reviewed personal recovery operation.',
+    name === 'connections' || name === 'disconnect'
+      ? 'Inspect all retained connection sessions or disconnect with retryable audited cleanup.'
+      : name === 'connect'
+        ? 'Require current policy approval before pairing prompts and recheck before creating a connection; dry runs also require approval.'
+        : 'Inspect or perform reviewed recovery; incomplete shutdown blocks new device changes.',
     flags[name],
     required,
     !['report', 'connections', 'disconnect'].includes(name) ? { feature: 'seedvault' } : {},

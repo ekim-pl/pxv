@@ -12,6 +12,7 @@ import {
 } from './seedvault-reports.js';
 import type { PreparedSeedvaultOperation, SeedvaultReport } from './seedvault-types.js';
 import type { RunRecord } from '../../workflow-types.js';
+import { assertFinalizationResolved } from '../../finalization-guard.js';
 
 interface ActiveSeedvault {
   run: RunRecord;
@@ -37,6 +38,7 @@ export class SeedvaultExecution {
     const resume = run.status === 'pending' && run.manualGate?.startsWith('seedvault:');
     if (run.status !== 'queued' && !resume) return run;
     const prepared = await this.plans.read(run.planId);
+    await assertFinalizationResolved(this.store, prepared.target.device.assetId);
     const control = new ExecutionControl(this.store, runId, signal);
     this.journal.track(run);
     try {
@@ -76,6 +78,7 @@ export class SeedvaultExecution {
     control: ExecutionControl,
     lease: DeviceLease,
   ): Promise<void> {
+    await assertFinalizationResolved(this.store, prepared.target.device.assetId);
     if (lease.operationId !== run.id)
       await this.store.set('recovery-attempts', run.id, {
         operationId: lease.operationId,

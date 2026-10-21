@@ -193,7 +193,7 @@ describe('production dependency wiring and evidence boundaries', () => {
     obligations: writer,
   };
   const openApp = async (readOnly = false) => {
-    const app = await application(projectRoot, resources, readOnly);
+    const app = await application(projectRoot, resources, { readOnly });
     apps.push(app);
     return app;
   };
@@ -317,7 +317,7 @@ describe('production dependency wiring and evidence boundaries', () => {
       'cannot execute projects with extensions',
     );
     const reportApp = await openApp(true);
-    const recoveryApp = await application(projectRoot, resources, false, true);
+    const recoveryApp = await application(projectRoot, resources, { verifyInstalledExtensions: false });
     apps.push(recoveryApp);
     await recoveryApp.store.set('runs', 'retained-run', {
       id: 'retained-run',

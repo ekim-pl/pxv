@@ -3,7 +3,15 @@ import { createWorkflowServices } from './composition.js';
 import { assertProjectFresh } from './project.js';
 import type { EngineOptions, EmulatorImagePin, Operation, RunRecord } from './workflow-types.js';
 import type { EntryPageOptions } from '@pxv/runtime';
+import type { ReadinessAssessment } from './evidence-service.js';
 import type { RunStatus } from './run-query-service.js';
+/** Stored reporting remains available independently of current provisioning readiness. */
+export type DeviceStatus = ReadinessAssessment & {
+  currentStateVerified: false;
+  evidenceSource: 'stored';
+  vpnEvidenceScope: 'operator-witnessed-settings';
+  run?: RunStatus;
+};
 /** @public Retained application façade types for existing WorkflowEngine port consumers. */
 export type {
   EmulatorImagePin,
@@ -107,8 +115,9 @@ export class WorkflowEngine {
     await assertProjectFresh(this.project);
     return this.services.evidence.readiness(target);
   }
-  async deviceStatus(target: SelectedTarget) {
-    const readiness = await this.readiness(target);
+  async deviceStatus(target: SelectedTarget): Promise<DeviceStatus> {
+    await assertProjectFresh(this.project);
+    const readiness = await this.services.evidence.reportReadiness(target);
     const run = await this.services.runs.latest(target.device.assetId);
     return {
       ...readiness,

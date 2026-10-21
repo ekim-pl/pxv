@@ -196,6 +196,14 @@ out of commands, notes, logs, general guides, and MCP.
 
 ## Accept, finalize, and record custody
 
+An incomplete earlier debugging shutdown reports `finalization-inspection` and blocks another finalization. Follow [incomplete-finalization recovery](recovery-and-maintenance.md#recover-incomplete-finalization). Storage errors require investigation, not another provisioning run. Custody checks the full original prepared plan; altered or incomplete retained evidence requires inspection.
+
+That intent also blocks new preparation, execution, attestation and optional device
+changes after upgrades or policy changes. Inspect/recover, then explicitly record
+maintenance before newly reviewed provisioning. Installed managed APK content must
+match its SHA-256 pin; same-version content replacements require review, and split
+installations require maintenance without automatic uninstallation.
+
 Read readiness and the installation-specific requirements:
 
 ```sh
@@ -243,3 +251,7 @@ offline after debugging is off; their presence does not certify readiness.
 Review [receiving your phone](../endusers/receiving-your-phone.md) with the recipient,
 especially [ordinary and duress credentials](../endusers/pins-passwords-and-duress.md).
 The path is complete when this phone’s checks, custody, and packet all match.
+
+A stored device report remains available after an upgrade or lifecycle archival. If current readiness cannot be evaluated, it reports `readinessStatus: unavailable`, `ready: false`, `readiness-unavailable` and a reason: `missing-workflow`, `baseline-changed` or `invalid-workflow`. Its historical run remains visible. Invalid evidence needs inspection; unavailable readiness does not itself require repeating a completed handover. Storage errors remain errors.
+
+Custody after finalization uses the original handoff snapshot, including after a policy/configuration change or executable upgrade. It needs neither a renewed lock nor installed extension files. Lifecycle invalidation prevents accepting that old handoff. A completed subset or extension run may still need signoff, finalization and custody; its execution status alone does not prove handover.

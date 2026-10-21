@@ -267,17 +267,18 @@ export interface DesiredState {
 
 export interface SharedApkEffect {
   packageId: string;
-  users: { user: AndroidUserIdentity; versionCode: number; signerSha256: string }[];
+  users: { user: AndroidUserIdentity; versionCode: number; signerSha256: string; sha256?: string }[];
 }
 
 export interface ReviewedApkEffect extends SharedApkEffect {
   toVersionCode: number;
+  toSha256?: string;
 }
 
 export interface ProfileObservation {
   profileId: string;
   user: AndroidUserIdentity;
-  packages: { packageId: string; versionCode: number; signerSha256: string }[];
+  packages: { packageId: string; versionCode: number; signerSha256: string; sha256?: string }[];
   settings: SettingPolicy[];
   permissions: PermissionPolicy[];
   /** Configured Settings state only; live enforcement requires separate evidence. */

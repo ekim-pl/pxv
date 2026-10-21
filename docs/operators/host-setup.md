@@ -97,7 +97,7 @@ Helper builds require an explicitly configured SDK and write private signing key
 
 Run `host adb-start --yes` explicitly before native host device work. Doctor/probe operations do not start a service. Guarded device clients require the configured server to exist; losing it creates inspection/recovery work rather than starting an unowned daemon.
 
-For Docker direct USB, use `host docker-prepare` and `host docker-adb-start --image IMAGE`. The persistent service listens on loopback port 5038 and stores private keys outside operation workers. Host-ADB mode uses an already running host endpoint, commonly 5037. See [Docker]().
+For Docker direct USB, use `host docker-prepare` and `host docker-adb-start --image IMAGE`. The persistent service listens on loopback port 5038 and stores private keys outside operation workers. Host-ADB mode uses an already running host endpoint, commonly 5037. See [Docker](#docker-operation).
 
 An approved Platform Tools descriptor has the following shape. The license ID is an operator-reviewed identifier; replace it with the identifier of the actual accepted upstream terms. The extracted executables live below the returned destination/distribution directory.
 

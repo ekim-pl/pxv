@@ -9,12 +9,13 @@ import {
   type AcceptedHandoffSnapshot,
   type SelectedTarget,
 } from '@pxv/contracts';
-import type { Store, DeviceLease } from '@pxv/runtime';
+import type { Store, DeviceLease, ExpectedRecord } from '@pxv/runtime';
 import type { ProjectContext } from './project.js';
 import type { ObservationReader } from './observation-service.js';
 import type { EvidenceReader } from './evidence-service.js';
 import type { DeviceOwnership, ProjectOwnership } from './ownership.js';
 import type { WorkflowPort, WorkflowState } from './workflow-types.js';
+import { validateStoredWorkflow } from './stored-workflow.js';
 import { custodyRun, custodyCompletionEvent } from './custody-completion.js';
 
 export class HandoffService {
@@ -82,12 +83,20 @@ export class HandoffService {
       operator,
       createdAt: this.clock().toISOString(),
     });
+    const snapshot: AcceptedHandoffSnapshot = {
+      schemaVersion: 1,
+      recordId: record.id,
+      assetId,
+      resolvedPolicy: verifyResolvedPolicy(this.project.resolved),
+    };
+    const run = await custodyRun(this.store, state, record, snapshot);
     const intent = { ...state, status: 'pending', pending: ['debugging-shutdown'] };
     const committed = await this.store.transition({
       expected: [
         { collection: 'workflow', key: assetId, value: state },
         { collection: 'attestations', key: assetId, value: attestations },
         { collection: 'handoff', key: assetId, value: handoff },
+        ...run.expected,
       ],
       changes: [{ kind: 'set', collection: 'workflow', key: assetId, value: intent }],
       events: [
@@ -96,27 +105,24 @@ export class HandoffService {
     });
     if (!committed) throw new Error('Asset evidence changed before finalization; inspect before retrying');
     await this.port.finalize(target, { lease });
-    await this.commitHandoff(assetId, record, state, intent, handoff);
+    await this.commitHandoff(record, state, intent, handoff, snapshot, run.expected);
     return record;
   }
   private async commitHandoff(
-    assetId: string,
     record: HandoffRecord,
     state: WorkflowState,
     intent: unknown,
     previousHandoff: unknown,
+    snapshot: AcceptedHandoffSnapshot,
+    runExpected: ExpectedRecord[],
   ): Promise<void> {
-    const snapshot: AcceptedHandoffSnapshot = {
-      schemaVersion: 1,
-      recordId: record.id,
-      assetId,
-      resolvedPolicy: verifyResolvedPolicy(this.project.resolved),
-    };
+    const assetId = state.assetId;
     const committed = await this.store.transition({
       expected: [
         { collection: 'workflow', key: assetId, value: intent },
         { collection: 'handoff', key: assetId, value: previousHandoff },
         { collection: 'handoff-snapshots', key: record.id, value: undefined },
+        ...runExpected,
       ],
       changes: [
         { kind: 'set', collection: 'handoff-snapshots', key: record.id, value: snapshot },
@@ -182,11 +188,16 @@ export class HandoffService {
     lease: DeviceLease,
   ): Promise<HandoffRecord> {
     const record = await this.store.get<HandoffRecord>('handoff', assetId);
-    const state = await this.evidence.state(assetId);
-    if (!record || state.status !== 'shutdown-requested' || !recipient.trim() || !togglesOff)
+    const state = validateStoredWorkflow(await this.store.get('workflow', assetId), assetId);
+    if (
+      !record ||
+      record.outcome !== 'ready-for-handoff' ||
+      state.status !== 'shutdown-requested' ||
+      !recipient.trim() ||
+      !togglesOff
+    )
       throw new Error('Confirm physical debugging shutdown and recipient custody after finalization');
-    if (record.deviceSerial !== device.canonicalSerial)
-      throw new Error('Accepted handoff identity differs from the enrolled device; inspect before custody');
+    this.assertCustodyIdentity(record, state, device);
     if (
       (await this.ownership.reservations(device)).some(
         (value) => value.operation_id !== lease.operationId || value.status !== 'reserved',
@@ -205,7 +216,7 @@ export class HandoffService {
         expected: [
           { collection: 'handoff', key: assetId, value: record },
           { collection: 'workflow', key: assetId, value: state },
-          { collection: 'runs', key: run.previous.id, value: run.previous },
+          ...run.expected,
         ],
         changes: [
           { kind: 'set', collection: 'handoff', key: assetId, value: accepted },
@@ -228,5 +239,19 @@ export class HandoffService {
     )
       throw new Error('Asset evidence changed before custody; inspect before retrying');
     return accepted;
+  }
+  private assertCustodyIdentity(
+    record: HandoffRecord,
+    state: WorkflowState,
+    device: SelectedTarget['device'],
+  ): void {
+    if (
+      record.projectId !== this.project.config.id ||
+      record.deviceSerial !== device.canonicalSerial ||
+      state.observation.device.canonicalSerial !== device.canonicalSerial ||
+      state.observation.device.codename !== device.codename ||
+      state.observation.device.kind !== device.kind
+    )
+      throw new Error('Accepted handoff identity differs from the enrolled device; inspect before custody');
   }
 }

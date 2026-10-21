@@ -29,6 +29,16 @@ reuse, and no automatic garbage collection removes historical references. Execut
 still makes and authenticates private staging copies. APK observations deduplicate
 only within one measurement; user membership and permission checks remain separate.
 
+Managed installed packages require exactly one APK path. The adapter hashes the
+same pulled bytes used for package/version/signature verification, detects local
+byte and installed-path changes, and verifies content after installation. Generic
+optional-workflow identity inspection remains metadata-only. Observed packages and
+all-user shared effects carry optional `sha256`; reviewed installation effects carry
+optional `toSha256`. New operational observations require hashes. Identical metadata
+with different content produces a reviewed reinstall, including same-version effects
+on other users. Checkpoints and resume comparisons bind those hashes. Schema 1 and
+the digest algorithm remain unchanged: old evidence receives no defaults or rewrites.
+
 1. Resolve a validated policy, product descriptor, project marker, inventory, engine identity and extension locks.
 2. Read a live target observation and authenticated artifact metadata.
 3. Freeze artifact bytes and an exact reviewed plan; bind global APK effects and manual checkpoints.
@@ -50,16 +60,29 @@ The CLI command registry owns usage, supported flags, required arguments and
 feature gates, and validates requests before project state is opened. Presentation
 converts structured results to readable summaries or explicit `--json` output.
 
-Application composition owns storage lifetime; services borrow it. Failed application construction closes the opened worker, and each MCP request closes its own context. Storage startup has a bounded readiness wait, rejects premature exits including exit 0, and retries only idempotent database initialization on lock contention. Worker loss rejects pending requests; reopening does not replay them. Closing storage awaits worker exit, and a failed database close still closes the worker message port so shutdown can settle with the original error.
+Application composition owns storage lifetime; services borrow it. Failed application construction closes the opened worker, and each MCP request closes its own context. Named application options distinguish read-only storage from installed-extension verification. Retained history, offline custody/lifecycle records, cancellation and typed recovery skip extension loading in both CLI and MCP; execution paths still verify installed contributions. Storage startup has a bounded readiness wait, rejects premature exits including exit 0, and retries only idempotent database initialization on lock contention. Worker loss rejects pending requests; reopening does not replay them. Closing storage awaits worker exit, and a failed database close still closes the worker message port so shutdown can settle with the original error.
 
-Readiness and review refresh share an asynchronous VPN proof verifier injected
-with the plan reader and store. It validates source action/run completion, consumed
-receipts, paginated attestation audit snapshots and committed refresh ancestry.
-Plan/run/audit caches last for one verification operation. Retained source plans
+Readiness and review refresh share capability proof verification injected with the
+plan reader and store. Recipe, probe and VPN checks share query-scoped plan/run/audit
+caches, source action completion and committed refresh ancestry. Recipe/probe proofs
+retain their existing layout: their canonical identifier and source run identify the
+exact plan/action without inventing fields in older records. Complete results and
+observation digests must match retained execution checkpoints. Measured recipes
+require exact postconditions; assisted completion requires a consumed, audit-backed
+app-setup receipt. Probes bind the helper UID/user, approved CIDRs and each requested
+failure/recovery result. Audit traversal is paginated. Internal typed evidence-validation failures become existing capability blockers; asynchronous storage failures and unexpected errors propagate unchanged. Only pure synchronous checks are wrapped as validation errors. Retained source plans
 allow expired approval while keeping integrity, policy, target and lifecycle checks.
 The contracts layer supplies per-profile VPN witness requirements to readiness and
 English/Polish guide generation. Generic setting actions cannot write the reserved
 VPN secure keys; observation parsing remains separate from authoring validation.
+
+Detached worker failures use an engine-owned expected-state transition with its
+audit event. Only an unchanged queued/manual run can become needs-inspection;
+competing or completed evidence is preserved. Unique launch-attempt tokens cross
+the private child environment and guard claim release. Old/foreign claims remain
+inspectable. Recording, cleanup and application-disposal failures retain the original
+error. Inspection and personal-automation runners decode UTF-8 incrementally while
+enforcing output limits in bytes.
 
 Docker workers use an attached streaming runner with an explicit container identity
 and independently bounded control operations. Ownership labels isolate worker
@@ -77,17 +100,45 @@ inspection, policy editing/locking, cancellation, typed recovery, lifecycle,
 registry/export and custody operations. Lock renewal is explicit, including after
 an executable upgrade; it never approves a device plan.
 
-Readiness and finalization share the same bounded measurement-age predicate.
-Reports add `measurement-freshness` and `policy-lock` blockers while continuing to
-identify their evidence as stored. Custody commits its matching workflow run's
+Every new Seedvault connection verifies approval under project ownership before
+session creation, pairing or connecting. CLI preflight also checks before pairing
+prompts and dry-run output. Disconnect/recovery remain independent of current locks.
+Backup-only automation checks before inputs and again after the physical checkpoint,
+including read-only dry runs; a changed baseline requires restarting even if its
+replacement lock is approved. It never renews existing approval. New-project
+initialization retains its explicit initial-lock flow.
+
+Readiness and finalization share the same bounded measurement-age predicate. Uncommitted `debugging-shutdown` intent adds `finalization-inspection` without clearing the retained state or replaying shutdown. Reports add `measurement-freshness` and `policy-lock` blockers while identifying their evidence as stored. The exported `DeviceStatus` is a discriminated result: `readinessStatus: available` includes `state`; `unavailable` omits it and supplies `readinessUnavailableReason` (`missing-workflow`, `baseline-changed` or `invalid-workflow`), `ready: false` and `readiness-unavailable`. Narrow on `readinessStatus` before accessing state. Historical run queries remain available in either case; storage failures propagate.
+
+A shared baseline-independent shutdown-intent guard protects preparation, retention,
+submission, refresh, execution/resume, attestation and new optional device-changing
+work, including extension contributions, Seedvault and collectors. Every workflow
+checkpoint and execution failure path preserves unresolved intent with expected-state
+checks. Reports retain `finalization-inspection` for valid older-baseline intent
+alongside unavailable readiness. Explicit lifecycle maintenance archives the evidence
+and invalidates prior plans; inspection, cancellation, recovery and offline records
+remain accessible.
+
+Connection reports preserve their array interface while traversing internal bounded
+pages. Exact-session disconnect recovery validates its direct record and native
+ownership lineage; enrolled endpoints need no history scan for authorization.
+Disconnect reconciles prior sessions for the same physical serial and endpoint with
+individual expected-state record/audit transitions. The initiating session remains
+cleanup-required until all reconciliation succeeds. Partial progress, storage/audit
+errors and conflicts stay visible for explicit retry; no history is deleted.
+
+A shared lineage validator checks finalization eligibility before debugging shutdown and validates custody against the original retained handoff snapshot. Fully executed pending acceptance runs and completed subset/extension runs are eligible; completed run status alone never establishes custody. Executable/policy/configuration changes do not invalidate that original custody baseline, while lifecycle invalidation removes its active eligibility. Custody commits its matching workflow run's
 completion, workflow state, handoff and both audit events in one expected-state
-transition. Query-scoped compatibility projection also recognizes exact completed
+transition, checking the retained run, plan and handoff snapshot as well as workflow/receipt records.
+
+Prepared-plan content authentication is a shared pure check: schema, baseline and target/transport binding, shared effects, recomputed digest and exact review summary. Ordinary reads apply current enrollment, policy, lifecycle and approval-age checks separately. Finalization, custody and compatibility projection authenticate against the original resolved snapshot's extension locks; they never accept a claimed digest without recomputing it. Incomplete legacy plans cannot establish inferred completion, and stored completed runs are not rewritten.
+
+Query-scoped compatibility projection also recognizes exact completed
 custody from current or lifecycle-archived records, verifying the handoff snapshot,
 plan, observation and run identity. It does not rewrite historical records or
 promote ambiguous evidence. Archive traversal is paginated and lookups are shared
 within a query. Completed custody remains historical evidence after policy changes
 or measurement expiry and supplies no acceptance/resume instructions.
-
 
 Physical serial, transport selector, asset ID and Android user identity are distinct. Android user recovery binds userId, name and serialNo, because user IDs can be reused. The shared per-operator host control directory is independent of product/fork/project and also mounted into containers. Simultaneous ownership from several workstations is unsupported.
 

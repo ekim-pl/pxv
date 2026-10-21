@@ -89,6 +89,28 @@ function assertUser(user: AndroidUserIdentity): void {
     throw new AdapterError('Invalid stable Android user identity');
 }
 
+function installedApkPath(output: string, standalone: boolean): string {
+  const paths = output
+    .trim()
+    .split('\n')
+    .filter(Boolean)
+    .map((line) => (line.startsWith('package:') ? line.slice(8).trim() : ''));
+  if (
+    paths.length < 1 ||
+    paths.some(
+      (path) => !/^\/(?:data\/app|system|product|system_ext|vendor)\/[A-Za-z0-9_./~+=-]+\.apk$/.test(path),
+    )
+  )
+    throw new AdapterError('Installed APK paths are missing or unsafe');
+  if (standalone && paths.length !== 1)
+    throw new AdapterError(
+      'Managed split APK installations require explicit maintenance remediation with a reviewed standalone APK; no package was removed',
+    );
+  const base = paths.find((path) => /\/base\.apk$/.test(path)) ?? (paths.length === 1 ? paths[0] : undefined);
+  if (!base) throw new AdapterError('Installed base APK cannot be identified');
+  return base;
+}
+
 export class AndroidAdapter {
   readonly runner: CommandRunner;
   readonly adb: string;
@@ -241,41 +263,57 @@ export class AndroidAdapter {
     signal?: AbortSignal,
     inspected?: Map<string, Promise<ApkIdentity>>,
   ): Promise<{ packageId: string; versionCode: number; signerSha256: string }> {
+    return this.installedPackage(target, user, id, signal, inspected, false);
+  }
+  private async installedContent(
+    target: SelectedTarget,
+    user: AndroidUserIdentity,
+    id: string,
+    signal?: AbortSignal,
+    inspected?: Map<string, Promise<ApkIdentity>>,
+  ): Promise<ApkIdentity & { sha256: string }> {
+    const identity = await this.installedPackage(target, user, id, signal, inspected, true);
+    if (!identity.sha256) throw new AdapterError('Installed APK content measurement is missing');
+    return { ...identity, sha256: identity.sha256 };
+  }
+  private async installedPackage(
+    target: SelectedTarget,
+    user: AndroidUserIdentity,
+    id: string,
+    signal: AbortSignal | undefined,
+    inspected: Map<string, Promise<ApkIdentity>> | undefined,
+    standalone: boolean,
+  ): Promise<ApkIdentity & { sha256?: string }> {
     packageId(id);
     const output = await this.shell(
       target,
       ['pm', 'path', '--user', String(user.userId), id],
       signalOptions(signal),
     );
-    const paths = output
-      .trim()
-      .split('\n')
-      .filter(Boolean)
-      .map((line) => (line.startsWith('package:') ? line.slice(8).trim() : ''));
-    if (
-      paths.length < 1 ||
-      paths.some(
-        (path) => !/^\/(?:data\/app|system|product|system_ext|vendor)\/[A-Za-z0-9_./~+=-]+\.apk$/.test(path),
-      )
-    )
-      throw new AdapterError('Installed APK paths are missing or unsafe');
-    const base =
-      paths.find((path) => /\/base\.apk$/.test(path)) ?? (paths.length === 1 ? paths[0] : undefined);
-    if (!base) throw new AdapterError('Installed base APK cannot be identified');
+    const base = installedApkPath(output, standalone);
     let pending = inspected?.get(base);
     if (!pending) {
-      pending = this.inspectInstalledPath(target, base, signal);
+      pending = this.inspectInstalledPath(target, base, signal, standalone);
       inspected?.set(base, pending);
     }
     const identity = await pending;
     if (identity.packageId !== id) throw new AdapterError('Installed APK package changed during inspection');
+    if (standalone) {
+      const after = await this.shell(
+        target,
+        ['pm', 'path', '--user', String(user.userId), id],
+        signalOptions(signal),
+      );
+      if (after !== output) throw new AdapterError('Installed APK paths changed during content inspection');
+    }
     return identity;
   }
   private async inspectInstalledPath(
     target: SelectedTarget,
     base: string,
     signal?: AbortSignal,
-  ): Promise<ApkIdentity> {
+    content = false,
+  ): Promise<ApkIdentity & { sha256?: string }> {
     const directory = await mkdtemp(join(tmpdir(), 'pxv-observe-apk-'));
     try {
       const path = join(directory, 'base.apk');
@@ -286,7 +324,9 @@ export class AndroidAdapter {
         }),
         'Installed APK read',
       );
-      return await this.artifacts.identity(path, signal);
+      return await (content
+        ? this.artifacts.contentIdentity(path, signal)
+        : this.artifacts.identity(path, signal));
     } finally {
       await rm(directory, { recursive: true, force: true });
     }
@@ -384,7 +424,7 @@ export class AndroidAdapter {
     const packages: ProfileObservation['packages'] = [];
     for (const wanted of profile.packages)
       if (installed.has(wanted.packageId))
-        packages.push(await this.installedIdentity(target, user, wanted.packageId, signal, inspected));
+        packages.push(await this.installedContent(target, user, wanted.packageId, signal, inspected));
     const settings: SettingPolicy[] = [];
     for (const setting of effectiveProfileSettings(profile))
       settings.push({ ...setting, value: await this.readSetting(target, user, setting, signal) });
@@ -514,8 +554,13 @@ export class AndroidAdapter {
       const installed: SharedApkEffect['users'] = [];
       for (const user of users)
         if (listings.get(user.userId)?.has(id)) {
-          const identity = await this.installedIdentity(target, user, id, signal, inspected);
-          installed.push({ user, versionCode: identity.versionCode, signerSha256: identity.signerSha256 });
+          const identity = await this.installedContent(target, user, id, signal, inspected);
+          installed.push({
+            user,
+            versionCode: identity.versionCode,
+            signerSha256: identity.signerSha256,
+            sha256: identity.sha256,
+          });
         }
       effects.push({ packageId: id, users: installed.sort((a, b) => a.user.serialNo - b.user.serialNo) });
     }
@@ -559,8 +604,12 @@ export class AndroidAdapter {
         if (!/^Success\s*$/m.test(installed))
           throw new AdapterError('APK installation outcome is uncertain', 'MUTATION_UNCERTAIN');
         await this.guardUser(target, user, options.signal);
-        const identity = await this.installedIdentity(target, user, artifact.packageId, options.signal);
-        if (identity.versionCode !== artifact.versionCode || identity.signerSha256 !== artifact.signerSha256)
+        const identity = await this.installedContent(target, user, artifact.packageId, options.signal);
+        if (
+          identity.versionCode !== artifact.versionCode ||
+          identity.signerSha256 !== artifact.signerSha256 ||
+          identity.sha256 !== artifact.sha256
+        )
           throw new AdapterError('Installed APK does not match the reviewed artifact', 'MUTATION_UNCERTAIN');
       },
       options.signal,
@@ -581,7 +630,9 @@ export class AndroidAdapter {
     if (shared.users.some((entry) => entry.versionCode > artifact.versionCode))
       throw new AdapterError('APK version downgrade is unsupported');
     const affected = shared.users.filter(
-      (entry) => entry.user.userId !== user.userId && entry.versionCode !== artifact.versionCode,
+      (entry) =>
+        entry.user.userId !== user.userId &&
+        (entry.versionCode !== artifact.versionCode || entry.sha256 !== artifact.sha256),
     );
     if (affected.length) {
       const reviewed = options.reviewedDeviceWideEffect;
@@ -589,6 +640,7 @@ export class AndroidAdapter {
         !reviewed ||
         reviewed.packageId !== artifact.packageId ||
         reviewed.toVersionCode !== artifact.versionCode ||
+        reviewed.toSha256 !== artifact.sha256 ||
         canonicalJson(reviewed.users.slice().sort((a, b) => a.user.serialNo - b.user.serialNo)) !==
           canonicalJson(shared.users)
       )

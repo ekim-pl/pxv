@@ -3,7 +3,7 @@ import { ObservationService } from './observation-service.js';
 import { PlanRepository } from './plan-repository.js';
 import { NativeDeviceOwnership, NativeProjectOwnership } from './ownership.js';
 import { RunJournal } from './journal.js';
-import { VpnProofVerifier } from './vpn-proof-verifier.js';
+import { CapabilityProofVerifier } from './capability-proof-verifier.js';
 import { EvidenceService } from './evidence-service.js';
 import { PreparationService } from './preparation-service.js';
 import { ReviewService } from './review-service.js';
@@ -19,14 +19,14 @@ interface Collaborators {
   observations: ObservationService;
   plans: PlanRepository;
   evidence: EvidenceService;
-  vpnProofs: VpnProofVerifier;
+  proofs: CapabilityProofVerifier;
   devices: NativeDeviceOwnership;
   projects: NativeProjectOwnership;
   journal: RunJournal;
 }
 function operationServices(deps: Dependencies, services: Collaborators) {
   const { project, store, port, artifacts, clock } = deps;
-  const { observations, plans, evidence, devices, projects, journal, vpnProofs } = services;
+  const { observations, plans, evidence, devices, projects, journal, proofs } = services;
   const credentialDefaults = new CredentialDefaultHistory(store);
   const preparation = new PreparationService(
     project,
@@ -36,6 +36,7 @@ function operationServices(deps: Dependencies, services: Collaborators) {
     plans,
     clock,
     credentialDefaults,
+    store,
   );
   const review = new ReviewService(
     project,
@@ -48,7 +49,7 @@ function operationServices(deps: Dependencies, services: Collaborators) {
     devices,
     journal,
     clock,
-    vpnProofs,
+    proofs,
   );
   const execution = new ExecutionService(
     project,
@@ -75,10 +76,10 @@ export function createWorkflowServices(options: EngineOptions) {
   const devices = new NativeDeviceOwnership(controlRoot);
   const projects = new NativeProjectOwnership(project, controlRoot);
   const plans = new PlanRepository(project, store, observations, clock);
-  const vpnProofs = new VpnProofVerifier(project, store, plans);
-  const evidence = new EvidenceService(project, store, observations, devices, clock, vpnProofs);
+  const proofs = new CapabilityProofVerifier(project, store, plans);
+  const evidence = new EvidenceService(project, store, observations, devices, clock, proofs);
   const journal = new RunJournal(store, controlRoot, clock);
-  const collaborators = { observations, plans, evidence, devices, projects, journal, vpnProofs };
+  const collaborators = { observations, plans, evidence, devices, projects, journal, proofs };
   let seedvault: Promise<SeedvaultService> | undefined;
   return {
     ...collaborators,

@@ -44,6 +44,19 @@ async function ownerCoverageFlushed(directory: string, pid: number): Promise<boo
 }
 
 describe('checked runtime', () => {
+  test('preserves UTF-8 output across every byte boundary on both streams', async () => {
+    const expected = JSON.stringify({ name: 'Właściciel', text: 'Zażółć 🧪' });
+    for (let split = 1; split < Buffer.byteLength(expected); split++) {
+      const script = `const b=Buffer.from(${JSON.stringify(expected)});for(const s of [process.stdout,process.stderr])s.write(b.subarray(0,${split}));setTimeout(()=>{for(const s of [process.stdout,process.stderr])s.write(b.subarray(${split}));},30)`;
+      const result = await runner.run([node, '-e', script]);
+      expect(result.stdout).toBe(expected);
+      expect(result.stderr).toBe(expected);
+      expect(JSON.parse(result.stdout)).toEqual(JSON.parse(expected));
+    }
+    expect((await runner.run([node, '-e', 'process.stdout.write(Buffer.from([0xc5]))'])).stdout).toBe(
+      '\ufffd',
+    );
+  });
   test('inspection supports explicit environment, input, timeout and checked exit', async () => {
     const result = await runner.run(
       [node, '-e', 'process.stdin.pipe(process.stdout); console.error(process.env.ONLY,process.env.HOME)'],

@@ -164,6 +164,7 @@ const store = {
   delete: vi.fn(),
   entries: vi.fn(),
   events: vi.fn(),
+  transition: vi.fn(),
 };
 const engine = {
   observe: vi.fn(),
@@ -196,6 +197,7 @@ beforeEach(async () => {
     mock.mockReset();
   saved = { ...process.env };
   delete process.env['PXV_DOCKER_MODE'];
+  delete process.env['PXV_WORKER_ATTEMPT'];
   root = await mkdtemp(join(tmpdir(), 'pxv-controller-'));
   resources = join(root, 'resources');
   projectRoot = join(root, 'project');
@@ -225,6 +227,7 @@ beforeEach(async () => {
   store.delete.mockResolvedValue(undefined);
   store.entries.mockResolvedValue([]);
   store.events.mockResolvedValue([]);
+  store.transition.mockResolvedValue(true);
   mocks.runCommand.mockResolvedValue({ code: 0, stdout: 'built helper\n', stderr: '' });
   mocks.toolRequire.mockResolvedValue('/fixture/adb');
   mocks.toolDiscover.mockResolvedValue('/fixture/adb');
@@ -303,7 +306,8 @@ describe('operator controller dispatch without device access', () => {
       engine.execute.mockResolvedValueOnce({ id: 'run', status });
       expect(await runCli(args(['internal-worker', '--run', 'run']), io)).toBe(code);
     }
-    expect(store.delete).toHaveBeenCalledTimes(3);
+    expect(store.delete).not.toHaveBeenCalled();
+    expect(store.transition).not.toHaveBeenCalled();
     expect(mocks.takeCoverage).toHaveBeenCalledTimes(3);
     engine.execute.mockRejectedValueOnce(new Error('missing run'));
     store.get.mockResolvedValueOnce(undefined);
@@ -827,11 +831,28 @@ describe('operator controller dispatch without device access', () => {
       disconnect?.mockRestore();
       send?.mockRestore();
     }
-    expect(store.set).toHaveBeenCalledWith(
-      'runs',
-      'run',
-      expect.objectContaining({ status: 'needs-inspection' }),
-    );
+    expect(store.set).not.toHaveBeenCalled();
+    expect(store.transition).not.toHaveBeenCalled();
+    const queued = { id: 'run', planId: 'plan', status: 'queued', cursor: 2, completedSetup: [] };
+    const failure = new Error('Worker failed before progress');
+    store.get.mockResolvedValueOnce(queued);
+    engine.execute.mockRejectedValueOnce(failure);
+    await expect(runCli(args(['internal-worker', '--run', 'run']), io)).rejects.toBe(failure);
+    expect(store.transition).toHaveBeenCalledWith({
+      expected: [
+        { collection: 'runs', key: 'run', value: queued },
+        { collection: 'worker-launch', key: 'run', value: undefined },
+      ],
+      changes: [
+        {
+          kind: 'set',
+          collection: 'runs',
+          key: 'run',
+          value: expect.objectContaining({ ...queued, status: 'needs-inspection' }),
+        },
+      ],
+      events: [{ runId: 'run', value: expect.objectContaining({ type: 'worker-failed' }) }],
+    });
     for (const [status, expected] of [
       ['failed', 3],
       ['needs-inspection', 3],
@@ -845,6 +866,21 @@ describe('operator controller dispatch without device access', () => {
     await expect(runCli(args(['fleet', 'provision', '--all', '--jobs', '9', '--yes']), io)).rejects.toThrow(
       /jobs must/,
     );
+  });
+  it('retains the execution error alongside a disposal failure and reports standalone disposal failures', async () => {
+    const original = new Error('Execution lost'),
+      secondary = new Error('Close lost');
+    engine.execute.mockRejectedValueOnce(original);
+    store.get.mockResolvedValueOnce({ id: 'run', status: 'running' });
+    store.close.mockRejectedValueOnce(secondary);
+    const failure = await runCli(args(['internal-worker', '--run', 'run']), io).catch(
+      (error: unknown) => error,
+    );
+    expect(failure).toBeInstanceOf(AggregateError);
+    expect((failure as AggregateError).errors).toEqual([original, secondary]);
+    expect(store.transition).not.toHaveBeenCalled();
+    store.close.mockRejectedValueOnce(secondary);
+    await expect(runCli(args(['internal-worker', '--run', 'run']), io)).rejects.toBe(secondary);
   });
   it('supports explicit recipient acceptance and recovery while keeping missing handoff evidence blocked', async () => {
     expect(

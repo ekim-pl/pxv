@@ -41,6 +41,14 @@ Sprawdź politykę przed rejestracją i wykonaniem operacji. Dołączony zestaw 
 
 Zdefiniuj katalog `apps` raz, a w listach `apps` profili wskazuj jego identyfikatory. Przypnij identyfikator pakietu, kod wersji, SHA-256 pliku APK, SHA-256 podpisującego i zatwierdzone źródło. Wersje pakietów Androida są wspólne dla użytkowników; profile nie mogą instalować sprzecznych wersji niezależnie.
 
+Zarządzana aplikacja musi mieć jeden samodzielny plik APK. PXV sprawdza pakiet,
+wersję, podpisującego i SHA-256 na tych samych pobranych bajtach. Inna zawartość
+przy tej samej wersji i podpisie wymaga zatwierdzonej reinstalacji z uwzględnieniem
+wpływu na innych użytkowników. Instalacja dzielona wymaga jawnej konserwacji;
+PXV nigdy nie usuwa jej automatycznie. Brak lub niezgodność aktualnych skrótów
+blokuje akceptację i finalizację. Starsze autentyczne przekazania pozostają dowodem
+historycznym bez dopisywania skrótów.
+
 ### Uzupełnij i aktualizuj przypięcia aplikacji
 
 `policy resolve-apps` uzupełnia brakujące kody wersji, skróty APK i odciski
@@ -99,7 +107,9 @@ pxv guide project --project-root "$P" --kind pixel --locale pl
 
 Zgodna blokada polityki jest wymagana przed planowaniem i ponownie sprawdzana przed wykonaniem, odświeżeniem przeglądu, poświadczeniem i finalizacją. `policy validate` podaje `policyLockStatus`: `current`, `missing`, `stale` lub `invalid`. Poprawną politykę można zweryfikować przed zablokowaniem. Jawnie odnów blokadę także po aktualizacji programu oraz zmianach polityki, konfiguracji lub rozszerzeń. Inspekcja, anulowanie, odzyskiwanie ze sprzątaniem, zapisy offline i potwierdzanie odbioru pozostają dostępne.
 
-Zmiana polityki wymaga nowej blokady polityki i nowego przeglądu. Wybierz sprawdzoną politykę w `pxv.project.json`, zweryfikuj i zablokuj ją przed przygotowaniem nowych planów.
+Przed nowym planem wybierz politykę w `pxv.project.json`, zweryfikuj i jawnie zablokuj ją.
+
+Brak plików rozszerzenia nie blokuje historii, odbioru, zdarzeń cyklu życia ani kontrolowanego odzyskiwania. Po finalizacji odbiór potwierdza pierwotną, zweryfikowaną wersję przekazania mimo zmian programu lub polityki; zdarzenie cyklu życia unieważnia możliwość tego odbioru.
 
 ## 3. Zarejestruj dokładnie wskazany telefon
 
@@ -170,11 +180,9 @@ Konfiguracja aplikacji poprzedza weryfikację VPN. Zmieniona konfiguracja bez od
 
 Stan VPN deklaruj wyłącznie w bloku `vpn` polityki. Usuń wpisy secure-setting dla
 `always_on_vpn_app` i `always_on_vpn_lockdown`; duplikaty są odrzucane także przy
-zgodnych wartościach. Zakończone potwierdzenie wymaga zachowanej zatwierdzonej
-czynności, przebiegu i audytowanego potwierdzenia operatora. Odnowienie przeglądu
-zachowuje dowody tylko przez zweryfikowaną historię. Przy brakujących lub zmienionych
-danych zachowaj je do inspekcji i przygotuj nowy zatwierdzony przebieg konfiguracji;
-nie poprawiaj ręcznie plików dowodowych.
+zgodnych wartościach. Potwierdzenie wymaga zachowanej czynności, przebiegu i audytu.
+Odświeżenie zachowuje tylko uwierzytelnioną historię. Braki lub zmiany wymagają
+inspekcji i nowego zatwierdzonego przygotowania; nie edytuj dowodów.
 
 Receptury są przypisane do konkretnej kompilacji Androida oraz wersji i podpisującego aplikację. Nieobsługiwane ekrany i importy pozostają ręczne lub wspomagane. Bez zaakceptowanego adaptera wyboru pliku wykonaj cały import zatwierdzoną prywatną metodą; plik tymczasowy nie czeka na późniejsze wskazanie. Nie umieszczaj wrażliwej konfiguracji w publicznym tekście receptury.
 
@@ -191,6 +199,12 @@ Po wygaśnięciu przeglądu na celowym ręcznym punkcie kontrolnym `agent refres
 Po konfiguracji atestacja może korzystać z wygasłego planu wykonania, jeśli pomiary mają najwyżej 15 minut, a stan telefonu nie zmienił się. Nieaktualne pomiary odbioru wymagają nowej konfiguracji po przeglądzie planu. Terminal Dockera przekazuje pytania i postęp na bieżąco; tryb JSON wymaga jawnego potwierdzenia nieinteraktywnego. Nakładka montuje wskazane pliki zewnętrzne i katalogi wynikowe, a bezpośrednie USB zachowuje dodatkowe grupy operatora. Instrukcja Dockera opisuje ponowne utworzenie usługi ADB i MCP uruchamiane bezpośrednio w kontenerze.
 
 ## 7. Sprawdź telefon i przekaż go odbiorcy
+
+Receptury i testy sieci wymagają kompletnych wyników powiązanych z dokładną
+czynnością, przebiegiem i pomiarami. Ręczna konfiguracja wymaga zużytego
+poświadczenia z audytu. Nie edytuj niepełnych ani niejednoznacznych dowodów;
+zachowaj je do inspekcji. Awaria procesu nie nadpisuje nowszego postępu ani
+zakończonego przebiegu.
 
 Przed końcowym zatwierdzeniem możesz zapisać uzgodnione dane trzema opcjonalnymi poleceniami odczytu z rozdziału 9. Zakończ odczyt przed wyłączeniem debugowania.
 
@@ -219,6 +233,23 @@ pxv device finalize --project-root "$P" --asset "$ASSET" \
   --transport usb --operator "$OPERATOR" --locale pl
 ```
 
+`finalization-inspection` blokuje niedokończone wyłączenie debugowania. Sprawdź telefon i dowody, wykonaj wymagane odzyskiwanie, a następnie [konserwację oraz nowe przygotowanie i akceptację](../../../docs/operators/recovery-and-maintenance.md#recover-incomplete-finalization). Nie ponawiaj wyłączenia ani nie potwierdzaj odbioru. Błędy magazynu/dekodowania nie są zadaniami VPN. Odbiór uwierzytelnia cały pierwotny plan; zmienione lub niepełne dowody go blokują.
+
+Zachowany zamiar blokuje też nowe planowanie, zatwierdzanie planu, odświeżanie,
+wykonanie/wznowienie, poświadczenia, wkład rozszerzeń, Seedvault i kolektory po
+zmianie polityki lub programu. Odnowienie blokady go nie usuwa. Inspekcja, historia,
+anulowanie, typowane odzyskiwanie, rozłączenie i zapisy offline pozostają dostępne;
+jawna konserwacja archiwizuje zamiar przed nowym zatwierdzonym przygotowaniem.
+
+Każde nowe połączenie Seedvault wymaga aktualnego zatwierdzenia: przed pytaniem
+o parowanie i ponownie po pytaniach. Dotyczy to też
+`backup-only` i prób bez zmian. Brakującą, uszkodzoną lub nieaktualną blokadę
+zweryfikuj i jawnie odnów; automat jej nie odnawia. Zmiana początkowej polityki
+podczas pytań zatrzymuje `backup-only` nawet po odnowieniu blokady; zacznij od nowa.
+Rozłączenie i odzyskiwanie wskazanej sesji pozostają dostępne. Historia połączeń
+nie ma limitu 1000 zapisów; błąd uzgadniania zachowuje obowiązek sprzątania do
+jawnego ponowienia, bez zmiany niezwiązanych sesji.
+
 Po finalizacji fizycznie sprawdź, że **debugowanie USB i debugowanie bezprzewodowe są wyłączone**. Potwierdź, że bootloader jest zablokowany, a odblokowanie OEM wyłączone. Potwierdź, że odbiorca przejął telefon, i dopiero wtedy zapisz przekazanie:
 
 ```sh
@@ -228,11 +259,13 @@ pxv handoff export --project-root "$P" --asset "$ASSET" \
   --locale pl --output /bezwzgledna/sciezka/przekazania
 ```
 
-Potwierdzenie odbioru kończy powiązany przebieg przygotowania. Status i historia pokazują `completed` bez instrukcji ponownej akceptacji; dokładne zachowane dowody korygują również starsze raporty. Historyczny odbiór nie wygasa. Przed finalizacją raport gotowości podaje `measurement-freshness` dla niepoprawnych, przyszłych lub starszych niż 15 minut pomiarów oraz `policy-lock` dla niezatwierdzonej polityki. Nie powtarzaj przygotowania wyłącznie w celu odświeżenia pomiarów po zakończonym przekazaniu.
+Odbiór kończy powiązany przebieg jako `completed`, bez instrukcji ponownej akceptacji; dokładne dowody korygują też starsze raporty. Historyczny odbiór nie wygasa. `measurement-freshness` oznacza niepoprawne, przyszłe lub starsze niż 15 minut pomiary, a `policy-lock` niezatwierdzoną politykę. Nie powtarzaj przygotowania wyłącznie dla odświeżenia pomiarów zakończonego przekazania.
 
 Pakiet przekazania zawiera Markdown/HTML na podstawie zachowanego obrazu polityki. Sprawdź go przed udostępnieniem. Ogólne przewodniki PDF są instrukcją, a nie dowodem akceptacji telefonu.
 
 Do każdego telefonu dołącz [kieszonkową instrukcję](quickstart-pl.md), przyjęty raport przekazania i zamkniętą [prywatną wkładkę z danymi dostępu](credentials-pl.md). Sprawdź zgodność identyfikatorów urządzenia. Wkładkę wypełniaj prywatnie poza źródłami instrukcji i zasobami wydania; w razie potrzeby skopiuj strony profili i kont. Prywatnie sprawdź zwykłe blokady, oznacz nieużywane pola oraz wartości początkowe lub ostatnio potwierdzone. Opcjonalne kody destrukcyjne umieść na osobno zamkniętej stronie. Wpisz rzeczywiste kontakty wsparcia i sposoby odzyskiwania oraz uzgodnij przechowywanie danych przez wsparcie. Po odbiorze użytkownik powinien przechowywać wkładkę oddzielnie od telefonu. Zobacz [pakowanie i drukowanie](../../../guides/README.md#pack-every-device).
+
+Po aktualizacji lub archiwizacji raport zachowuje historię operacji. Gdy bieżąca ocena jest niedostępna, zwraca `ready: false`, `readinessStatus: unavailable` i przyczynę; nieprawidłowe dowody wymagają inspekcji. Nie powtarzaj zakończonego przekazania tylko dla odświeżenia pomiarów. Zakończenie operacji częściowej lub rozszerzenia nie jest dowodem odbioru telefonu.
 
 ## 8. Obsługuj flotę z osobnymi wynikami telefonów
 
@@ -327,6 +360,4 @@ pxv policy validate --project-root /prywatna/sciezka/proba-offline
 pxv guide project --project-root /prywatna/sciezka/proba-offline --kind pixel --locale pl
 ```
 
-Inicjalizacja zapisuje blokadę wersji. Programiści mogą też uruchomić testy rejestru i przebiegu z atrapą portu urządzenia. Sprawdza to stronę hosta; nie kwalifikuje flashowania, receptur UI, VPN, odtwarzania ani fizycznego przekazania. Nie zastępuj niedostępnego telefonu testowego podstawowym telefonem użytkownika.
-
-Korzystaj z [listy poleceń](../../../docs/operators/command-reference.md), [automatyzacji i MCP](../../../docs/ai-agents/workflow-and-recovery.md), [obsługi Dockera](../../../docs/operators/host-setup.md), [zasad bezpieczeństwa](../../../SECURITY.md) i [stanu weryfikacji](../../../docs/operators/acceptance.md). Community wyłącza opcjonalne rozszerzenia i eksperymentalną automatyzację Seedvault; ręczna kopia i odtworzenie pozostają osobną, sprawdzaną procedurą telefonu. Historyczne wyniki fizyczne dotyczą wyłącznie zapisanej wersji, a nie bieżącej kompilacji.
+Inicjalizacja zapisuje blokadę. Testy syntetyczne kwalifikują hosta; flashowanie, receptury UI, VPN, odtwarzanie i odbiór sprawdź na osobnym telefonie testowym. Wyniki fizyczne dotyczą tylko zapisanej wersji. Community wyłącza rozszerzenia i automatyzację Seedvault; ręczną kopię i odtwarzanie sprawdź osobno. Zobacz [polecenia](../../../docs/operators/command-reference.md), [automatyzację i MCP](../../../docs/ai-agents/workflow-and-recovery.md), [Docker](../../../docs/operators/host-setup.md), [bezpieczeństwo](../../../SECURITY.md) i [weryfikację](../../../docs/operators/acceptance.md).

@@ -248,6 +248,10 @@ function adapter(runner: FakeRunner): AndroidAdapter {
       versionCode: runner.version,
       signerSha256: 'b'.repeat(64),
     });
+  artifacts.contentIdentity = async () => ({
+    ...(await artifacts.identity('synthetic')),
+    sha256: 'a'.repeat(64),
+  });
   artifacts.withStaged = (artifact, action) => action(artifact);
   artifacts.checkCompatibility = () => Promise.resolve();
   return new AndroidAdapter({ runner, artifacts, adbServer: endpoint });
@@ -333,6 +337,31 @@ describe('per-profile primary PIN scrambling', () => {
 });
 
 describe('observation-scoped shared APK inspection', () => {
+  it('keeps metadata inspection for optional split packages but rejects managed splits without mutation', async () => {
+    const runner = new FakeRunner();
+    const android = adapter(runner);
+    const shell = android.shell.bind(android);
+    android.shell = (selected, args, options) =>
+      args[0] === 'pm' && args[1] === 'path'
+        ? Promise.resolve('package:/data/app/test/base.apk\npackage:/data/app/test/split_config.apk\n')
+        : shell(selected, args, options);
+    expect((await android.installedIdentity(target, user, 'org.example.app')).versionCode).toBe(1);
+    await expect(android.inspect(target, policy)).rejects.toThrow('split APK');
+    await expect(android.inspectSharedEffects(target, ['org.example.app'])).rejects.toThrow('maintenance');
+    expect(runner.mutations).toHaveLength(0);
+  });
+  it('rejects changing package paths while measuring content', async () => {
+    const runner = new FakeRunner();
+    const android = adapter(runner);
+    const shell = android.shell.bind(android);
+    let reads = 0;
+    android.shell = (selected, args, options) =>
+      args[0] === 'pm' && args[1] === 'path'
+        ? Promise.resolve(`package:/data/app/test${reads++}/base.apk\n`)
+        : shell(selected, args, options);
+    await expect(android.inspectSharedEffects(target, ['org.example.app'])).rejects.toThrow('paths changed');
+    expect(runner.mutations).toHaveLength(0);
+  });
   function sharedPolicy(): ExecutionPolicy {
     const configured = structuredClone(policy);
     const secondary = configured.profiles[0];
@@ -605,7 +634,7 @@ describe('identity-bound Android adapter', () => {
       code: 'SHARED_APK_REVIEW_REQUIRED',
     });
     expect(runner.mutations).toHaveLength(0);
-    const reviewed = { ...effect, toVersionCode: 2 };
+    const reviewed = { ...effect, toVersionCode: 2, toSha256: artifact.sha256 };
     runner.extraSerialNo = 100;
     await expect(
       android.install(target, user, artifact, { lease: {}, reviewedDeviceWideEffect: reviewed }),
@@ -613,6 +642,30 @@ describe('identity-bound Android adapter', () => {
     expect(runner.mutations).toHaveLength(0);
     runner.extraSerialNo = 99;
     await android.install(target, user, artifact, { lease: {}, reviewedDeviceWideEffect: reviewed });
+    expect(runner.mutations).toHaveLength(1);
+  });
+  it('requires all-user review for same-version content replacement and verifies installed content', async () => {
+    const runner = new FakeRunner();
+    runner.version = 2;
+    const android = adapter(runner);
+    const artifact = {
+      path: '/reviewed.apk',
+      packageId: 'org.example.app',
+      versionCode: 2,
+      signerSha256: 'b'.repeat(64),
+      sha256: 'c'.repeat(64),
+    };
+    const effect = (await android.inspectSharedEffects(target, [artifact.packageId]))[0]!;
+    await expect(android.install(target, user, artifact, { lease: {} })).rejects.toMatchObject({
+      code: 'SHARED_APK_REVIEW_REQUIRED',
+    });
+    expect(runner.mutations).toHaveLength(0);
+    await expect(
+      android.install(target, user, artifact, {
+        lease: {},
+        reviewedDeviceWideEffect: { ...effect, toVersionCode: 2, toSha256: artifact.sha256 },
+      }),
+    ).rejects.toThrow('does not match');
     expect(runner.mutations).toHaveLength(1);
   });
   it('includes measured runtime permission revocation in the shared observation digest', async () => {

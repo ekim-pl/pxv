@@ -256,6 +256,7 @@ it('backup-only execution never flashes, enrolls or provisions and requires a du
     .split('\n')
     .map((line) => JSON.parse(line) as string[]);
   expect(calls.some((args) => ['install-os', 'provision', 'enroll'].includes(args[1]!))).toBe(false);
+  expect(calls.some((args) => args[0] === 'policy' && args[1] === 'lock')).toBe(false);
   const requestCall = calls.find((args) => args[0] === 'seedvault' && args[1] === 'backup')!;
   const request = JSON.parse(await readFile(requestCall[requestCall.indexOf('--file') + 1]!, 'utf8')) as {
     adapter: { acceptance: { path: string } };

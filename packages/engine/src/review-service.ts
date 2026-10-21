@@ -10,6 +10,7 @@ import type {
   SetupReceiptRef,
   CapabilityEvidenceRef,
   CapabilityProof,
+  RecipeProof,
   ReviewLineage,
 } from './workflow-types.js';
 import type { ObservationReader } from './observation-service.js';
@@ -19,8 +20,11 @@ import type { EvidenceReader } from './evidence-service.js';
 import type { ProjectOwnership, DeviceOwnership } from './ownership.js';
 import type { Journal } from './journal.js';
 import { checkLanguageDelta } from './setup-evidence.js';
-import type { VpnProofVerifier, VpnProofSession } from './vpn-proof-verifier.js';
+import type { CapabilityProofVerifier } from './capability-proof-verifier.js';
 import { pausedVpnAction, checkVpnDelta } from './vpn-evidence.js';
+import { assertFinalizationResolved } from './finalization-guard.js';
+import { validateRecipeResult } from './capability-results.js';
+import { validateEvidence } from './evidence-validation.js';
 export class ReviewService {
   constructor(
     readonly project: ProjectContext,
@@ -33,7 +37,7 @@ export class ReviewService {
     readonly devices: DeviceOwnership,
     readonly journal: Journal,
     readonly clock: () => Date,
-    readonly vpnProofs: VpnProofVerifier,
+    readonly proofs: CapabilityProofVerifier,
   ) {}
   submit(planId: string, reviewSummary: string, operator: string): Promise<RunRecord> {
     return this.projects.run(() => this.submitOwned(planId, reviewSummary, operator), {
@@ -45,6 +49,7 @@ export class ReviewService {
       async () => {
         const run = await this.manualRun(runId);
         const previous = await this.plans.read(run.planId, undefined, true);
+        await assertFinalizationResolved(this.store, previous.target.device.assetId);
         if (previous.operation === 'install-os' || run.cursor >= previous.plan.actions.length)
           throw new Error('Manual checkpoint action is invalid; preserve it for inspection');
         return this.devices.run(previous.target, randomUUID() + '-refresh-device', () =>
@@ -56,6 +61,7 @@ export class ReviewService {
   }
   private async submitOwned(planId: string, reviewSummary: string, operator: string): Promise<RunRecord> {
     const prepared = await this.plans.read(planId, reviewSummary);
+    await assertFinalizationResolved(this.store, prepared.target.device.assetId);
     if (prepared.refreshedFrom) {
       const previous = await this.store.get<RunRecord>('runs', prepared.refreshedFrom.runId);
       if (previous?.status !== 'superseded' || previous.supersededBy !== planId)
@@ -176,39 +182,14 @@ export class ReviewService {
     baseline: DeviceObservation,
   ): Promise<CapabilityEvidenceRef[]> {
     const references = run.capabilityEvidence ?? [];
-    const vpn = this.vpnProofs.session({
+    const session = this.proofs.session({
       planId: previous.plan.id,
       planDigest: previous.plan.digest,
       policyDigest: previous.plan.policyDigest,
       observation: baseline,
     });
-    for (const reference of references)
-      await this.checkCapabilityProof(reference, previous.plan.policyDigest, baseline, vpn);
+    for (const reference of references) await session.assert(reference);
     return references;
-  }
-  private async checkCapabilityProof(
-    reference: CapabilityEvidenceRef,
-    policyDigest: string,
-    baseline: DeviceObservation,
-    vpn: VpnProofSession,
-  ): Promise<void> {
-    if (reference.kind === 'vpn-settings') return vpn.assert(reference);
-    const proof = await this.store.get<{
-      policyDigest: string;
-      configurationDigest: string;
-      status: string;
-      user: AndroidUserIdentity;
-    }>('capability-evidence', reference.evidenceId);
-    const user = baseline.profiles.find((value) => value.profileId === reference.profileId)?.user;
-    if (
-      !proof ||
-      !user ||
-      proof.policyDigest !== policyDigest ||
-      proof.configurationDigest !== reference.configurationDigest ||
-      proof.status !== reference.status ||
-      !sameUser(proof.user, user)
-    )
-      throw new Error('Completed capability evidence changed at the manual checkpoint');
   }
   private async pausedRecipeEvidence(
     run: RunRecord & { cursor: number; manualGate: string },
@@ -218,30 +199,31 @@ export class ReviewService {
     const paused = previous.plan.actions[run.cursor];
     if (run.manualGate !== 'app_setup' || paused?.kind !== 'recipe') return undefined;
     const id = previous.refreshedFrom?.pendingRecipeEvidenceId ?? `${run.id}:recipe:${run.cursor}`;
-    const proof = await this.store.get<{
-      status: string;
-      policyDigest: string;
-      configurationDigest: string;
-      user: AndroidUserIdentity;
-    }>('capability-evidence', id);
+    const proof = await this.store.get<CapabilityProof & RecipeProof & { kind: string }>(
+      'capability-evidence',
+      id,
+    );
     const user = baseline.profiles.find((value) => value.profileId === paused.profileId)?.user;
     if (!this.validPausedRecipe(proof, user, previous.plan.policyDigest, paused.recipe))
       throw new Error('Paused recipe evidence changed; preserve it for inspection');
+    validateRecipeResult(paused.recipe, proof!.result, 'manual-pending');
     return id;
   }
   private validPausedRecipe(
-    proof: CapabilityProof | undefined,
+    proof: (CapabilityProof & RecipeProof & { kind: string }) | undefined,
     user: AndroidUserIdentity | undefined,
     policyDigest: string,
     recipe: RecipePolicy,
   ): boolean {
-    return (
-      !!proof &&
-      !!user &&
-      proof.status === 'manual-pending' &&
-      proof.policyDigest === policyDigest &&
-      proof.configurationDigest === digest(recipe) &&
-      sameUser(proof.user, user)
+    return validateEvidence(
+      () =>
+        !!proof &&
+        !!user &&
+        proof.kind === 'recipe' &&
+        proof.status === 'manual-pending' &&
+        proof.policyDigest === policyDigest &&
+        proof.configurationDigest === digest(recipe) &&
+        sameUser(proof.user, user),
     );
   }
   private async commitRefreshedReview(

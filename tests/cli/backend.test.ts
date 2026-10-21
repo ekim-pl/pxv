@@ -319,10 +319,14 @@ describe('MCP/CLI backend ports and detached execution', () => {
       operator: 'Operator',
     });
     await backend.cancelRun('retained-run');
-    expect(Context.application).toHaveBeenLastCalledWith(engine.project.root, resourceRoot, false, true);
+    expect(Context.application).toHaveBeenLastCalledWith(engine.project.root, resourceRoot, {
+      verifyInstalledExtensions: false,
+    });
     expect(await store.get('cancellation', 'retained-run')).toEqual({ requested: true });
     await backend.recoverDevice(device.assetId, 'retained-run', true);
-    expect(Context.application).toHaveBeenLastCalledWith(engine.project.root, resourceRoot, false, true);
+    expect(Context.application).toHaveBeenLastCalledWith(engine.project.root, resourceRoot, {
+      verifyInstalledExtensions: false,
+    });
     expect(recover).toHaveBeenCalledWith(expect.anything(), 'retained-run');
   });
 
@@ -723,6 +727,57 @@ describe('MCP/CLI backend ports and detached execution', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it.each(['completed', 'superseded', 'cancelled'] as const)(
+    'preserves a competing %s record when startup fails and retains a newer launch claim',
+    async (status) => {
+      const prepared = await engine.prepare({ device, transport: { kind: 'usb', serial: 'PIXEL1' } });
+      const run = await engine.submit(prepared.plan.id, prepared.reviewSummary, 'operator');
+      const changed = { ...run, status, cursor: 1 };
+      const newer = { claimedAt: new Date().toISOString(), attemptToken: 'newer-claim' };
+      detachedSpawn.mockImplementation(() => {
+        const child = new ChildProcess();
+        void (async () => {
+          await store.set('runs', run.id, changed);
+          await store.set('worker-launch', run.id, newer);
+          child.emit('error', new Error('Startup lost'));
+        })();
+        return child;
+      });
+      await expect(
+        agentBackend(engine, resourceRoot, 'launcher.js', true).executePlan(
+          prepared.plan.id,
+          prepared.reviewSummary,
+          'operator',
+        ),
+      ).rejects.toThrow('Startup lost');
+      expect(await store.get('runs', run.id)).toEqual(changed);
+      expect(await store.get('worker-launch', run.id)).toEqual(newer);
+      expect(
+        (await store.events(run.id)).some(
+          ({ event }) => (event as { type: string }).type === 'worker-failed',
+        ),
+      ).toBe(false);
+    },
+  );
+  it('records a synchronous spawn failure with its audit and clears only its own claim', async () => {
+    const prepared = await engine.prepare({ device, transport: { kind: 'usb', serial: 'PIXEL1' } });
+    const run = await engine.submit(prepared.plan.id, prepared.reviewSummary, 'operator');
+    const error = new Error('spawn failed synchronously');
+    detachedSpawn.mockImplementation(() => {
+      throw error;
+    });
+    await expect(
+      agentBackend(engine, resourceRoot, 'launcher.js', true).executePlan(
+        prepared.plan.id,
+        prepared.reviewSummary,
+        'operator',
+      ),
+    ).rejects.toBe(error);
+    expect(await store.get('runs', run.id)).toMatchObject({ status: 'needs-inspection' });
+    expect(await store.get('worker-launch', run.id)).toBeUndefined();
+    expect((await store.events(run.id)).at(-1)?.event).toMatchObject({ type: 'worker-failed' });
   });
 });
 

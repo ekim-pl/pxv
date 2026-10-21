@@ -127,7 +127,7 @@ pnpm build:preview
 ```
 
 Ordinary preview builds do not publish or replace installations. Add optional formats
-explicitly and follow the [publication checklist]() for
+explicitly and follow the [publication checklist](#release-procedure) for
 signature, exact-artifact and live acceptance requirements. Keep extension sources,
 registry authentication, customer inventories, credentials and backup data outside
 Community sources and release artifacts.

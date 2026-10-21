@@ -1,6 +1,6 @@
 import { assertCommandFeature } from './command-registry.js';
 import { parseDocument, validateProject, type ExtensionLock } from '@pxv/contracts';
-import { containedPath } from '@pxv/engine';
+import { containedPath, assertFinalizationResolved } from '@pxv/engine';
 import { ExtensionManager, type ExtensionSource } from '@pxv/extensions';
 import { commitProjectFile, readBounded } from '@pxv/runtime';
 import { join, resolve } from 'node:path';
@@ -84,14 +84,15 @@ async function invoke(
   const input: unknown = values['input-file']
     ? parseDocument((await readBounded(value('input-file'), 1024 * 1024)).toString('utf8'))
     : {};
-  const actions =
-    command === 'adapter'
-      ? await manager.invokeAdapter(lock, value('contribution'), input)
-      : await manager.invoke(lock, value('command'), input);
   const app = await application(projectRoot, resources);
   try {
     const target = targets()[0];
     if (!target) throw new Error('Select an asset');
+    await assertFinalizationResolved(app.store, target.device.assetId);
+    const actions =
+      command === 'adapter'
+        ? await manager.invokeAdapter(lock, value('contribution'), input)
+        : await manager.invoke(lock, value('command'), input);
     const prepared = await app.engine.prepareExtension(target, actions);
     output({
       planId: prepared.plan.id,

@@ -362,7 +362,12 @@ describe('scoped recipe, network and recovery evidence', () => {
     expect((await executeWithWitnesses(engine, run.id)).error).toContain('incomplete');
     const measured = port.observation.profiles[0];
     if (!measured) throw new Error('Fixture measured profile missing');
-    measured.packages.push({ packageId: 'org.pxv.probe', versionCode: 1, signerSha256: hashB });
+    measured.packages.push({
+      packageId: 'org.pxv.probe',
+      versionCode: 1,
+      signerSha256: hashB,
+      sha256: hashA,
+    });
     await expect(engine.prepare(target)).rejects.toThrow('already installed');
   });
 

@@ -1,3 +1,4 @@
+import { validateRecipeResult, validateProbeResult } from './capability-results.js';
 import {
   digest,
   evaluateObservation,
@@ -11,8 +12,6 @@ import type {
   AndroidUserIdentity,
   DeviceObservation,
   ProfilePolicy,
-  RecipePolicy,
-  NetworkProbePolicy,
   OperatorAttestation,
   SelectedTarget,
 } from '@pxv/contracts';
@@ -30,8 +29,6 @@ import type {
   ExecutionContext,
   RecipeProof,
   RecipeExecutionResult,
-  ProbeObservation,
-  ProbeExecutionResult,
   Operation,
   VpnSettingsProof,
 } from './workflow-types.js';
@@ -46,6 +43,11 @@ import type { CredentialDefaultHistory, DefaultCredentialAction } from './creden
 import { runPauseReason, withRunPauseReason } from './run-state.js';
 import { invalidateRegistryBindings } from './phone-registry.js';
 import { pausedVpnAction, checkVpnDelta, vpnProofDigest } from './vpn-evidence.js';
+import {
+  assertFinalizationResolved,
+  assertFinalizationState,
+  hasFinalizationIntent,
+} from './finalization-guard.js';
 export class ExecutionService {
   constructor(
     readonly project: ProjectContext,
@@ -161,6 +163,7 @@ export class ExecutionService {
     return state;
   }
   private async checkpoint(active: ActiveExecution, type: string, gate?: string): Promise<void> {
+    assertFinalizationState(active.workflowExpected);
     const state = this.workflowState(active.target, active.prepared, active.observation, active.run, gate);
     await this.journal.save(
       active.run,
@@ -184,6 +187,7 @@ export class ExecutionService {
       return withRunPauseReason(run, historical?.operation);
     }
     const prepared = await this.plans.read(run.planId);
+    await assertFinalizationResolved(this.store, prepared.target.device.assetId);
     const control = new ExecutionControl(this.store, runId, externalSignal);
     try {
       await control.check();
@@ -208,7 +212,8 @@ export class ExecutionService {
     const prepared = await this.plans.read(run.planId, undefined, true);
     const assetId = prepared.target.device.assetId;
     const state = await this.store.get<WorkflowState>('workflow', assetId);
-    if (!state || state.planDigest !== prepared.plan.digest) return this.journal.save(run, run.status);
+    if (!state || state.planDigest !== prepared.plan.digest || hasFinalizationIntent(state))
+      return this.journal.save(run, run.status);
     await this.journal.save(
       run,
       run.status,
@@ -254,6 +259,7 @@ export class ExecutionService {
     lease: DeviceLease,
   ): Promise<void> {
     const target = prepared.target;
+    await assertFinalizationResolved(this.store, target.device.assetId);
     const scope = new ResourceScope(this.store, target.device.canonicalSerial, run.id);
     if ((await scope.list()).some((value) => value.status !== 'resolved'))
       throw new Error(
@@ -571,6 +577,7 @@ export class ExecutionService {
     });
   }
   private async credentialDefaultCheckpoint(active: ActiveExecution, duress: boolean): Promise<void> {
+    assertFinalizationState(active.workflowExpected);
     const assetId = active.target.device.assetId;
     const previous = await this.store.get('attestations', assetId);
     const checks = ['duress', 'operator_signoff', 'recipient_acceptance'];
@@ -610,7 +617,11 @@ export class ExecutionService {
     await this.artifacts.validateBeforeExecution?.(action.artifact, active.target, active.control.signal);
     await this.port.install(active.target, user, action.artifact, {
       ...active.context,
-      reviewedDeviceWideEffect: { ...effect, toVersionCode: action.artifact.versionCode },
+      reviewedDeviceWideEffect: {
+        ...effect,
+        toVersionCode: action.artifact.versionCode,
+        toSha256: action.artifact.sha256,
+      },
     });
     active.effects = this.observations.nextEffects(active.effects, action.artifact, user);
     if (!(await this.effectsMatch(active)))
@@ -703,25 +714,15 @@ export class ExecutionService {
     if (previous?.status === 'manual-pending')
       return this.completeManualRecipe(active, action, index, profile, user, live, previous);
     const result = await this.port.runRecipe(active.target, user, action.recipe, active.context);
-    this.checkRecipeResult(action.recipe, result);
     if (result.status === 'manual-pending') {
       await this.writeRecipeEvidence(active, action, index, profile, user, result, 'manual-pending');
       active.observation = await this.observations.observe(active.target, active.control.signal);
       return this.pauseExecution(active, index, 'app_setup', active.observation, result.instructions);
     }
-    if (result.postconditions !== action.recipe.postconditions.length)
-      throw new Error('Recipe postcondition evidence is incomplete');
     await this.writeRecipeEvidence(active, action, index, profile, user, result, 'measured');
     return true;
   }
-  private checkRecipeResult(recipe: RecipePolicy, result: RecipeExecutionResult): void {
-    if (
-      result.capability !== 'app-setup' ||
-      result.recipeDigest !== digest(recipe) ||
-      !['measured', 'manual-pending'].includes(result.status)
-    )
-      throw new Error('Recipe adapter returned evidence for a different configuration');
-  }
+
   private async completeManualRecipe(
     active: ActiveExecution,
     action: Extract<Action, { kind: 'recipe' }>,
@@ -731,6 +732,7 @@ export class ExecutionService {
     live: DeviceObservation,
     previous: RecipeProof,
   ): Promise<boolean> {
+    validateRecipeResult(action.recipe, previous.result, 'manual-pending');
     if (previous.configurationDigest !== digest(action.recipe) || !sameUser(previous.user, user))
       throw new Error('Recipe checkpoint identity changed');
     const receipt = await this.currentReceipt(active, 'app_setup', live);
@@ -749,6 +751,7 @@ export class ExecutionService {
     result: RecipeExecutionResult,
     status: 'measured' | 'manual-completed' | 'manual-pending',
   ): Promise<void> {
+    validateRecipeResult(action.recipe, result, status);
     const evidenceId = `${active.run.id}:recipe:${index}`;
     const configurationDigest = digest(action.recipe);
     await this.store.set('capability-evidence', evidenceId, {
@@ -781,42 +784,6 @@ export class ExecutionService {
       { kind: 'recipe', profileId: profile.id, configurationDigest, evidenceId, status },
     ];
   }
-  private probeRoute(value: ProbeObservation, requireVpn: boolean): boolean {
-    return (
-      Number.isSafeInteger(value.uid) &&
-      value.uid > 0 &&
-      value.requestSucceeded &&
-      value.connectionObserved &&
-      (!requireVpn || value.vpnActive) &&
-      typeof value.egressIp === 'string' &&
-      value.egressIp.length > 0
-    );
-  }
-  private validProbeFailure(
-    failure: ProbeExecutionResult['failures'][number],
-    normal: ProbeObservation,
-    probe: NetworkProbePolicy,
-    index: number,
-  ): boolean {
-    return (
-      failure.stoppedPackage === probe.failurePackages[index] &&
-      failure.stopped.uid === normal.uid &&
-      failure.recovered.uid === normal.uid &&
-      !failure.stopped.requestSucceeded &&
-      !failure.stopped.connectionObserved &&
-      !!failure.stopped.errorType &&
-      this.probeRoute(failure.recovered, probe.requireVpn)
-    );
-  }
-  private checkProbeResult(probe: NetworkProbePolicy, result: ProbeExecutionResult): void {
-    if (
-      result.scope !== 'probe-app-uid-https-only' ||
-      !this.probeRoute(result.normal, probe.requireVpn) ||
-      result.failures.length !== probe.failurePackages.length ||
-      result.failures.some((failure, index) => !this.validProbeFailure(failure, result.normal, probe, index))
-    )
-      throw new Error('Network probe evidence is incomplete or outside the requested helper UID scope');
-  }
   private async executeProbe(
     active: ActiveExecution,
     action: Extract<Action, { kind: 'network-probe' }>,
@@ -836,9 +803,13 @@ export class ExecutionService {
     );
     const result = await this.port.runProbe(active.target, user, action.probe, {
       ...active.context,
-      reviewedDeviceWideEffect: { ...effect, toVersionCode: action.probe.artifact.versionCode },
+      reviewedDeviceWideEffect: {
+        ...effect,
+        toVersionCode: action.probe.artifact.versionCode,
+        toSha256: action.probe.artifact.sha256,
+      },
     });
-    this.checkProbeResult(action.probe, result);
+    validateProbeResult(action.probe, result, user);
     if (
       !(await this.effectsMatch(active)) ||
       (await active.scope.list()).some((value) => !prior.has(value.id) && value.status !== 'resolved')

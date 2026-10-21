@@ -1,6 +1,7 @@
 import { toPolicyDocument } from '@pxv/contracts';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 import { afterEach, beforeEach, expect, it, vi, type Mock } from './../test-api.js';
 import {
   connectSeedvaultEndpoint,
@@ -8,6 +9,7 @@ import {
   loadProject,
   saveInventory,
   seedvaultConnections,
+  writePolicyLock,
   type ProjectContext,
   type SeedvaultConnectionPort,
 } from '@pxv/engine';
@@ -33,6 +35,7 @@ beforeEach(async () => {
   const created = await createProject(join(root, 'project'), product, toPolicyDocument(basePolicy()), code);
   await saveInventory(created, { schemaVersion: 1, devices: [device] });
   project = await loadProject(created.root, product, code);
+  await writePolicyLock(project);
   store = await SqliteStore.open(join(root, 'connections.sqlite3'));
   connected = vi.fn().mockResolvedValue(undefined);
   disconnected = vi.fn().mockResolvedValue(undefined);
@@ -48,6 +51,59 @@ afterEach(async () => {
   await rm(root, { recursive: true, force: true });
 });
 const target = () => ({ device, transport: device.transports[0]! });
+for (const fault of ['missing', 'corrupt', 'stale', 'replaced'])
+  it(`rejects ${fault} approval before connection records or pairing, while disconnect remains available`, async () => {
+    const session = await SeedvaultConnectionSession.begin(store, target(), { endpoint });
+    const path = join(project.root, 'policy.lock.json');
+    if (fault === 'missing') await rm(path);
+    else if (fault === 'corrupt') await writeFile(path, '{invalid');
+    else {
+      const value = JSON.parse(await readFile(path, 'utf8')) as { digest: string };
+      if (fault === 'stale')
+        await writeFile(join(project.codeRoot!, 'packages/core/index.js'), 'export const version=2;');
+      else await writeFile(path, JSON.stringify({ ...value, digest: 'c'.repeat(64) }));
+      if (fault === 'stale') project = await loadProject(project.root, product, project.codeRoot);
+    }
+    const pair = vi.fn<SeedvaultConnectionPort['pair']>().mockResolvedValue(undefined);
+    port.pair = pair;
+    await expect(
+      connectSeedvaultEndpoint(
+        project,
+        target(),
+        { endpoint, pairEndpoint: '192.0.2.10:39112', pairingCode: '123456' },
+        port,
+        join(root, 'control'),
+        store,
+      ),
+    ).rejects.toThrow('explicitly renew policy lock');
+    expect(pair).not.toHaveBeenCalled();
+    expect(connected).not.toHaveBeenCalled();
+    expect(await seedvaultConnections(store, target())).toHaveLength(1);
+    await connectSeedvaultEndpoint(
+      project,
+      target(),
+      { endpoint, disconnect: true, recoverOperationId: session.operationId },
+      port,
+      join(root, 'control'),
+      store,
+    );
+    expect(disconnected).toHaveBeenCalledTimes(1);
+  });
+async function retainedHistory(session: SeedvaultConnectionSession, count: number, matching = [count - 1]) {
+  const record = await store.get<Record<string, unknown>>('seedvault-connections', session.operationId);
+  const changes = Array.from({ length: count }, (_, i) => ({
+    kind: 'set' as const,
+    collection: 'seedvault-connections',
+    key: `history-${String(i).padStart(5, '0')}`,
+    value: {
+      ...record,
+      operationId: `history-${String(i).padStart(5, '0')}`,
+      endpoint: matching.includes(i) ? endpoint : '192.0.2.11:39111',
+    },
+  }));
+  for (let offset = 0; offset < changes.length; offset += 200)
+    await store.transition({ expected: [], changes: changes.slice(offset, offset + 200), events: [] });
+}
 it('measures the new endpoint under native ownership before atomically enrolling it', async () => {
   port.connect = vi.fn().mockImplementation((selected, _endpoint, options) => {
     expect(selected).toMatchObject({
@@ -141,7 +197,7 @@ it('recovers a failed new endpoint using only its durable operation, without enr
   ).toMatchObject({ cleanupRequired: false, status: 'disconnected' });
   expect(disconnected).toHaveBeenCalledTimes(2);
 });
-it('cleans a connection that failed before mutation and refuses truncated session inspection', async () => {
+it('cleans a connection that failed before mutation', async () => {
   const session = await SeedvaultConnectionSession.begin(store, target(), { endpoint });
   await expect(
     connectSeedvaultEndpoint(
@@ -153,9 +209,151 @@ it('cleans a connection that failed before mutation and refuses truncated sessio
       store,
     ),
   ).resolves.toEqual({ connected: false, endpoint });
-  const row = (await store.entries('seedvault-connections'))[0]!;
-  vi.spyOn(store, 'entries').mockResolvedValueOnce(Array.from({ length: 1000 }, () => row));
-  await expect(seedvaultConnections(store, target())).rejects.toThrow('inspection limit');
+  expect(await seedvaultConnections(store, target())).toHaveLength(1);
+});
+for (const count of [999, 1000, 1001])
+  it(`reconciles connection history across ${count} records without touching unrelated sessions`, async () => {
+    const session = await SeedvaultConnectionSession.begin(store, target(), { endpoint, disconnect: true });
+    await retainedHistory(session, count);
+    expect(await seedvaultConnections(store, target())).toHaveLength(count + 1);
+    await session.complete(true);
+    expect(
+      await store.get('seedvault-connections', `history-${String(count - 1).padStart(5, '0')}`),
+    ).toMatchObject({ status: 'disconnected', cleanupRequired: false });
+    expect(await store.get('seedvault-connections', 'history-00000')).toMatchObject({
+      cleanupRequired: true,
+    });
+    expect(await store.get('seedvault-connections', session.operationId)).toMatchObject({
+      status: 'disconnected',
+      cleanupRequired: false,
+    });
+  });
+
+it('retains partial cleanup and retries safely after a later history-page failure', async () => {
+  const session = await SeedvaultConnectionSession.begin(store, target(), { endpoint, disconnect: true });
+  await retainedHistory(session, 1001, [0, 1000]);
+  const pages = store.entriesPage.bind(store);
+  const spy = vi
+    .spyOn(store, 'entriesPage')
+    .mockImplementation((collection, options) =>
+      options?.cursor ? Promise.reject(new Error('Later page unavailable')) : pages(collection, options),
+    );
+  await expect(session.complete(true)).rejects.toThrow('Later page unavailable');
+  expect(await store.get('seedvault-connections', 'history-00000')).toMatchObject({ cleanupRequired: false });
+  expect(await store.get('seedvault-connections', 'history-01000')).toMatchObject({ cleanupRequired: true });
+  expect(await store.get('seedvault-connections', session.operationId)).toMatchObject({
+    cleanupRequired: true,
+  });
+  spy.mockRestore();
+  await session.complete(true);
+  expect(await store.get('seedvault-connections', 'history-01000')).toMatchObject({ cleanupRequired: false });
+  expect(await store.get('seedvault-connections', session.operationId)).toMatchObject({
+    cleanupRequired: false,
+  });
+  expect(await store.events('history-00000')).toHaveLength(1);
+});
+
+it('rolls back reconciled records when their audit insertion fails', async () => {
+  const prior = await SeedvaultConnectionSession.begin(store, target(), { endpoint });
+  const session = await SeedvaultConnectionSession.begin(store, target(), { endpoint, disconnect: true });
+  const database = new DatabaseSync(join(root, 'connections.sqlite3'));
+  try {
+    database.exec(
+      "CREATE TRIGGER cleanup_fault BEFORE INSERT ON events WHEN json_extract(NEW.value,'$.status')='disconnected' BEGIN SELECT RAISE(ABORT,'connection-audit-fault'); END",
+    );
+    await expect(session.complete(true)).rejects.toThrow('connection-audit-fault');
+    for (const id of [prior.operationId, session.operationId])
+      expect(await store.get('seedvault-connections', id)).toMatchObject({ cleanupRequired: true });
+    expect(await store.events(prior.operationId)).toHaveLength(1);
+    database.exec('DROP TRIGGER cleanup_fault');
+    await session.complete(true);
+    expect((await seedvaultConnections(store, target())).every((value) => !value.cleanupRequired)).toBe(true);
+  } finally {
+    database.close();
+  }
+});
+
+for (const failure of ['page', 'audit', 'conflict'])
+  it(`retains initiating cleanup after ${failure} reconciliation failure and supports explicit retry`, async () => {
+    const prior = await SeedvaultConnectionSession.begin(store, target(), { endpoint });
+    const session = await SeedvaultConnectionSession.begin(store, target(), { endpoint, disconnect: true });
+    const transition = store.transition.bind(store);
+    if (failure === 'page')
+      vi.spyOn(store, 'entriesPage').mockRejectedValueOnce(new Error('Later page unavailable'));
+    else
+      vi.spyOn(store, 'transition').mockImplementationOnce((input) => {
+        expect(input.events[0]?.runId).toBe(prior.operationId);
+        return failure === 'audit' ? Promise.reject(new Error('Audit unavailable')) : Promise.resolve(false);
+      });
+    await expect(session.complete(true)).rejects.toThrow();
+    expect(await store.get('seedvault-connections', session.operationId)).toMatchObject({
+      cleanupRequired: true,
+    });
+    expect(await store.get('seedvault-connections', prior.operationId)).toMatchObject({
+      cleanupRequired: true,
+    });
+    if (failure !== 'page') vi.spyOn(store, 'transition').mockImplementation(transition);
+    await session.complete(true);
+    expect((await seedvaultConnections(store, target())).every((value) => !value.cleanupRequired)).toBe(true);
+  });
+
+it('authorizes exact recovery directly before traversing cleanup history', async () => {
+  const session = await SeedvaultConnectionSession.begin(store, target(), { endpoint });
+  vi.spyOn(store, 'entriesPage').mockRejectedValueOnce(new Error('History unavailable'));
+  await expect(
+    connectSeedvaultEndpoint(
+      project,
+      target(),
+      { endpoint, disconnect: true, recoverOperationId: session.operationId },
+      port,
+      join(root, 'control'),
+      store,
+    ),
+  ).rejects.toThrow('History unavailable');
+  expect(disconnected).toHaveBeenCalledTimes(1);
+  expect(await store.get('seedvault-connections', session.operationId)).toMatchObject({
+    cleanupRequired: true,
+  });
+  await connectSeedvaultEndpoint(
+    project,
+    target(),
+    { endpoint, disconnect: true, recoverOperationId: session.operationId },
+    port,
+    join(root, 'control'),
+    store,
+  );
+  expect(await store.get('seedvault-connections', session.operationId)).toMatchObject({
+    cleanupRequired: false,
+  });
+});
+it('blocks new connections under older shutdown intent while allowing exact disconnect recovery', async () => {
+  const pair = vi.fn<SeedvaultConnectionPort['pair']>().mockResolvedValue(undefined);
+  port.pair = pair;
+  const session = await SeedvaultConnectionSession.begin(store, target(), { endpoint });
+  const intent = { policyDigest: 'original', pending: ['debugging-shutdown'] };
+  await store.set('workflow', device.assetId, intent);
+  await expect(
+    connectSeedvaultEndpoint(
+      project,
+      target(),
+      { endpoint, pairEndpoint: '192.0.2.10:39112', pairingCode: '123456' },
+      port,
+      join(root, 'control'),
+      store,
+    ),
+  ).rejects.toThrow('finalization-inspection');
+  expect(pair).not.toHaveBeenCalled();
+  expect(connected).not.toHaveBeenCalled();
+  await connectSeedvaultEndpoint(
+    project,
+    target(),
+    { endpoint, disconnect: true, recoverOperationId: session.operationId },
+    port,
+    join(root, 'control'),
+    store,
+  );
+  expect(disconnected).toHaveBeenCalledTimes(1);
+  expect(await store.get('workflow', device.assetId)).toEqual(intent);
 });
 it('does not inherit another operation reservation on the same physical phone and endpoint', async () => {
   const session = await SeedvaultConnectionSession.begin(store, target(), { endpoint });

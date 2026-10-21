@@ -1,6 +1,7 @@
 import { resolveSelection, validateProject } from '@pxv/contracts';
 import {
   containedPath,
+  assertFinalizationResolved,
   recordLifecycle,
   type PreparedOperation,
   type RunRecord,
@@ -10,10 +11,12 @@ import { ExtensionManager } from '@pxv/extensions';
 import type { AgentBackend } from '@pxv/mcp';
 import { commitProjectFile } from '@pxv/runtime';
 import { spawn } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
+import { recordWorkerFailure, releaseWorkerClaim, type WorkerLaunchClaim } from '@pxv/engine';
 import { readFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import { application, redact } from './context.js';
+import { application, redact, type ApplicationOptions } from './context.js';
 import { inspectHost } from './host.js';
 
 function extensionManager(registry?: string): ExtensionManager {
@@ -162,33 +165,50 @@ async function launchWorker(
   resources: string,
   launcher: string,
   run: RunRecord,
+  claim: WorkerLaunchClaim,
 ): Promise<void> {
-  const env = workerEnvironment();
-  const child = spawn(
-    process.execPath,
-    [
-      launcher,
-      'internal-worker',
-      '--project-root',
-      engine.project.root,
-      '--resource-root',
-      resources,
-      '--run',
-      run.id,
-    ],
-    { detached: true, stdio: ['ignore', 'ignore', 'ignore', 'ipc'], env },
-  );
+  const env = { ...workerEnvironment(), PXV_WORKER_ATTEMPT: claim.attemptToken };
   try {
+    const child = spawn(
+      process.execPath,
+      [
+        launcher,
+        'internal-worker',
+        '--project-root',
+        engine.project.root,
+        '--resource-root',
+        resources,
+        '--run',
+        run.id,
+      ],
+      { detached: true, stdio: ['ignore', 'ignore', 'ignore', 'ipc'], env },
+    );
     await acknowledgeStartup(child, run.id);
+    child.unref();
   } catch (error) {
-    await engine.store.set('runs', run.id, {
-      ...run,
-      status: 'needs-inspection',
-      error: 'Detached worker startup failed; inspect before a fresh review',
-    });
+    const errors = [error];
+    try {
+      await recordWorkerFailure(
+        engine.store,
+        run,
+        claim,
+        'Detached worker startup failed; inspect before a fresh review',
+      );
+    } catch (secondary) {
+      errors.push(secondary);
+    }
+    try {
+      await releaseWorkerClaim(engine.store, run.id, claim);
+    } catch (secondary) {
+      errors.push(secondary);
+    }
+    if (errors.length > 1)
+      throw new AggregateError(
+        errors,
+        'Detached worker startup failed; secondary evidence or cleanup failure',
+      );
     throw error;
   }
-  child.unref();
 }
 
 function readBackend(
@@ -247,11 +267,10 @@ function workflowBackend(
       const run = await engine.submit(planId, reviewSummary, operator);
       const retained = await engine.store.get<RunRecord & { manualGate?: string }>('runs', run.id);
       if (run.status === 'queued' || (run.status === 'pending' && retained?.manualGate)) {
-        const claimed = await engine.store.compareAndSet('worker-launch', run.id, undefined, {
-          claimedAt: new Date().toISOString(),
-        });
+        const claim = { claimedAt: new Date().toISOString(), attemptToken: randomUUID() };
+        const claimed = await engine.store.compareAndSet('worker-launch', run.id, undefined, claim);
         if (!claimed) return publicValue(await engine.describeRun(run));
-        await launchWorker(engine, resources, launcher, run);
+        await launchWorker(engine, resources, launcher, run, claim);
       }
       return publicValue(await engine.describeRun(run));
     },
@@ -311,12 +330,14 @@ function readExtensions(
     async extensionAdapter(assetId, id, contribution, input) {
       requireMutation();
       requireExtensions(engine);
+      await assertFinalizationResolved(engine.store, assetId);
       const actions = await manager().invokeAdapter(pinned(id), contribution, input);
       return review(await engine.prepareExtension(select(assetId), actions));
     },
     async extensionCommand(assetId, id, command, input) {
       requireMutation();
       requireExtensions(engine);
+      await assertFinalizationResolved(engine.store, assetId);
       const actions = await manager().invoke(pinned(id), command, input);
       return review(await engine.prepareExtension(select(assetId), actions));
     },
@@ -388,7 +409,7 @@ export function agentBackend(
   };
 }
 
-/** A long-lived server reloads executable identity, policy and extension integrity for every tool. */
+/** Reload each tool context; only operations requiring installed code verify extensions. */
 export function liveAgentBackend(
   root: string,
   resources: string,
@@ -397,58 +418,57 @@ export function liveAgentBackend(
 ): AgentBackend {
   const using = async <T>(
     action: (backend: AgentBackend) => Promise<T>,
-    readOnly = false,
-    verifyInstalled = true,
-    recovery = false,
+    options: ApplicationOptions = {},
   ): Promise<T> => {
-    const app = recovery
-      ? await application(root, resources, readOnly, true)
-      : await application(root, resources, readOnly);
+    const app = await application(root, resources, options);
     try {
-      if (readOnly && verifyInstalled && app.engine.project.product.features?.extensions !== false)
-        for (const extension of app.engine.project.config.extensions)
-          await extensionManager().inspect(extension);
       return await action(agentBackend(app.engine, resources, launcher, allowMutations));
     } finally {
       await app.store.close();
     }
   };
   return {
-    inspectHost: () => using((backend) => backend.inspectHost(), true),
-    listDevices: () => using((backend) => backend.listDevices(), true),
-    inspectDevice: (assetId) => using((backend) => backend.inspectDevice(assetId), true),
+    inspectHost: () => using((backend) => backend.inspectHost(), { readOnly: true }),
+    listDevices: () => using((backend) => backend.listDevices(), { readOnly: true }),
+    inspectDevice: (assetId) => using((backend) => backend.inspectDevice(assetId), { readOnly: true }),
     prepareOperation: (assetId, operation) =>
       using((backend) => backend.prepareOperation(assetId, operation)),
     executePlan: (planId, summary, operator) =>
       using((backend) => backend.executePlan(planId, summary, operator)),
-    getRun: (runId, after) => using((backend) => backend.getRun(runId, after), true),
-    listRuns: (options) => using((backend) => backend.listRuns(options), true),
-    cancelRun: (runId) => using((backend) => backend.cancelRun(runId), false, false, true),
+    getRun: (runId, after) => using((backend) => backend.getRun(runId, after), { readOnly: true }),
+    listRuns: (options) => using((backend) => backend.listRuns(options), { readOnly: true }),
+    cancelRun: (runId) => using((backend) => backend.cancelRun(runId), { verifyInstalledExtensions: false }),
     attestDevice: (assetId, check, operator, note, evidence) =>
       using((backend) => backend.attestDevice(assetId, check, operator, note, evidence)),
     finalizeDevice: (assetId, operator, locale) =>
       using((backend) => backend.finalizeDevice(assetId, operator, locale)),
     confirmCustody: (assetId, recipient, debuggingOff) =>
-      using((backend) => backend.confirmCustody(assetId, recipient, debuggingOff)),
+      using((backend) => backend.confirmCustody(assetId, recipient, debuggingOff), {
+        verifyInstalledExtensions: false,
+      }),
     recoverDevice: (assetId, runId, inspected) =>
-      using((backend) => backend.recoverDevice(assetId, runId, inspected), false, false, true),
-    recordLifecycle: (input) => using((backend) => backend.recordLifecycle(input)),
+      using((backend) => backend.recoverDevice(assetId, runId, inspected), {
+        verifyInstalledExtensions: false,
+      }),
+    recordLifecycle: (input) =>
+      using((backend) => backend.recordLifecycle(input), { verifyInstalledExtensions: false }),
     refreshReview: (runId) => using((backend) => backend.refreshReview(runId)),
-    extensionList: () => using((backend) => backend.extensionList(), true, false),
-    extensionInspect: (id) => using((backend) => backend.extensionInspect(id), true, false),
+    extensionList: () => using((backend) => backend.extensionList(), { readOnly: true }),
+    extensionInspect: (id) => using((backend) => backend.extensionInspect(id), { readOnly: true }),
     extensionInstall: (source, reviewed, registry) =>
-      using((backend) => backend.extensionInstall(source, reviewed, registry), true, false),
+      using((backend) => backend.extensionInstall(source, reviewed, registry), { readOnly: true }),
     extensionUpdate: (id, source, reviewed, registry) =>
-      using((backend) => backend.extensionUpdate(id, source, reviewed, registry), true, false),
-    extensionRemove: (id, reviewed) => using((backend) => backend.extensionRemove(id, reviewed), true, false),
+      using((backend) => backend.extensionUpdate(id, source, reviewed, registry), { readOnly: true }),
+    extensionRemove: (id, reviewed) =>
+      using((backend) => backend.extensionRemove(id, reviewed), { readOnly: true }),
     extensionPolicy: (id, contribution, reviewed) =>
-      using((backend) => backend.extensionPolicy(id, contribution, reviewed), true, false),
+      using((backend) => backend.extensionPolicy(id, contribution, reviewed), { readOnly: true }),
     extensionGuide: (id, contribution) =>
-      using((backend) => backend.extensionGuide(id, contribution), true, false),
+      using((backend) => backend.extensionGuide(id, contribution), { readOnly: true }),
     extensionAdapter: (assetId, id, contribution, input) =>
       using((backend) => backend.extensionAdapter(assetId, id, contribution, input)),
     extensionCommand: (assetId, id, command, input) =>
       using((backend) => backend.extensionCommand(assetId, id, command, input)),
-    guide: (name) => using((backend) => backend.guide(name), true),
+    guide: (name) => using((backend) => backend.guide(name), { readOnly: true }),
   };
 }

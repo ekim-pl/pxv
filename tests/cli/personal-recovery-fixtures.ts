@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import {
   toPolicyDocument,
   digest,
+  resolvePolicy,
   type ExecutionPolicy,
   type SeedvaultAdapterDefinition,
 } from '@pxv/contracts';
@@ -65,7 +66,7 @@ export async function personalFixture() {
   await writeFile(join(projectRoot, 'policy.json'), JSON.stringify(toPolicyDocument(selected)));
   await writeFile(
     join(projectRoot, 'policy.lock.json'),
-    JSON.stringify({ ...identity, project, policy: selected }),
+    JSON.stringify(resolvePolicy(selected, project, product, identity.engineDigest)),
   );
   await writeFile(
     join(projectRoot, 'inventory.json'),

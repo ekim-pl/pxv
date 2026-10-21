@@ -12,7 +12,7 @@ before submission, refresh, execution/resume, attestation and finalization.
 Review the baseline and run `policy lock` explicitly when renewal is needed.
 Executable upgrades also require a renewed lock and fresh operational reviews.
 Inspection/history, cancellation, typed recovery, lifecycle recording, offline
-registry/export and custody confirmation remain available without a current lock.
+registry/export and custody confirmation remain available without a current lock or installed extension files. After finalization, custody uses the original validated handoff even after executable, policy or configuration changes. An explicit lifecycle event invalidates active handoff eligibility; archived receipts cannot be accepted again.
 
 ## Choose the policy command
 
@@ -316,9 +316,18 @@ For an APK with a verified signing-key rotation lineage, `signerSha256` identifi
 the current certificate (the unbounded SDK range in Android `apksigner` output),
 not a historical compatibility certificate. Multiple independent signers are rejected.
 
+Installed policy-managed packages and replacements must be standalone APKs. PXV
+pulls and verifies package, version, signer and SHA-256 from the same bytes; an exact
+content match is required to skip installation. Different content at the same
+version/signer produces a reviewed reinstall with all-user effects. Split packages
+require explicit maintenance remediation using a reviewed standalone artifact;
+PXV never uninstalls them automatically. Missing/mismatched current content hashes
+block readiness, attestation and finalization. Older retained handoffs remain
+historical evidence and receive no invented content hashes.
+
 Per-profile settings, permission grants and VPN policy remain explicit. A non-null VPN package requires `alwaysOn: true`; disabling always-on requires `packageId: null`. Lockdown requires always-on VPN. Probe endpoints support exact HTTPS query strings, and expected egress CIDRs must have valid prefixes and no host bits or IPv6 zone scopes. Invalid combinations are rejected during validation. Configure
 device-wide `global` settings only in `deviceSettings`; profile settings cannot use
-that namespace. See [network policy]() for always-on VPN,
+that namespace. See [network policy](#network-policies-and-evidence) for always-on VPN,
 lockdown and helper-based egress checks.
 
 Recipes bind the exact app version, signer and OS fingerprint, with explicit
@@ -424,12 +433,18 @@ these declarations before device commands; retained observations remain readable
 
 Each provisioning run includes a witnessed `vpn_settings` checkpoint for every
 profile. Saved VPN configuration is read back; PXV does not enable live enforcement
-by writing secure settings. See [VPN verification](). Probe
+by writing secure settings. See [VPN verification](#network-policies-and-evidence). Probe
 endpoints reject empty user-info (`https://@host`) and empty fragments (`https://host/#`)
 as well as populated credentials/fragments and raw whitespace or controls. Accepted
 query strings, including `%23` and `@` in parameter values, remain byte-exact.
 
 ## Network policies and evidence
+
+Current acceptance validates complete retained probe results: the selected user's
+helper UID, approved egress CIDRs and every requested blocked/recovered test. Recipe
+results require exact postconditions or consumed audit-backed app-setup confirmation.
+Both require an authenticated source action, execution checkpoint and refresh lineage.
+Incomplete older evidence remains inspectable but cannot establish current readiness.
 
 Network configuration belongs to a specific profile and application UID. The policy can declare a VPN package, always-on state, lockdown and a signed helper probe. Profile isolation is not proof that every app follows a particular route.
 

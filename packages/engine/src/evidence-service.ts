@@ -4,11 +4,9 @@ import {
   observationDigest,
   requiredAttestations,
   validateAttestation,
-  validateObservation,
-  sameAndroidUser as sameUser,
   vpnSettingsRequirement,
 } from '@pxv/contracts';
-import type { SelectedTarget, OperatorAttestation, ProfilePolicy, AndroidUserIdentity } from '@pxv/contracts';
+import type { SelectedTarget, OperatorAttestation, ProfilePolicy } from '@pxv/contracts';
 import type { Store, DeviceLease } from '@pxv/runtime';
 import type { ProjectContext } from './project.js';
 import { ResourceScope } from './recovery.js';
@@ -16,8 +14,25 @@ import type { ObservationReader } from './observation-service.js';
 import type { DeviceOwnership } from './ownership.js';
 import type { WorkflowState, CapabilityRequirement, BoundEmulatorEvidence } from './workflow-types.js';
 import { normalReceiptMatches } from './setup-evidence.js';
+import { validateStoredWorkflow } from './stored-workflow.js';
+import { hasFinalizationIntent } from './finalization-guard.js';
 import { policyLockStatus } from './policy-lock.js';
-import type { VpnProofVerifier, VpnProofSession } from './vpn-proof-verifier.js';
+import type { CapabilityProofVerifier, CapabilityProofSession } from './capability-proof-verifier.js';
+interface Readiness {
+  ready: boolean;
+  missing: string[];
+  state: WorkflowState;
+}
+type UnavailableReason = 'missing-workflow' | 'baseline-changed' | 'invalid-workflow';
+export type ReadinessAssessment =
+  | (Readiness & { readinessStatus: 'available' })
+  | {
+      readinessStatus: 'unavailable';
+      readinessUnavailableReason: UnavailableReason;
+      ready: false;
+      missing: string[];
+      state?: never;
+    };
 export interface EvidenceReader {
   state(assetId: string): Promise<WorkflowState>;
   requireFresh(state: WorkflowState): void;
@@ -35,7 +50,7 @@ export class EvidenceService implements EvidenceReader {
     readonly observations: ObservationReader,
     readonly ownership: DeviceOwnership,
     readonly clock: () => Date,
-    readonly vpnProofs: VpnProofVerifier,
+    readonly proofs: CapabilityProofVerifier,
   ) {}
   async receipts(assetId: string): Promise<OperatorAttestation[]> {
     return this.parseReceipts(await this.store.get<unknown>('attestations', assetId));
@@ -46,20 +61,9 @@ export class EvidenceService implements EvidenceReader {
     return value.map(validateAttestation);
   }
   async state(assetId: string): Promise<WorkflowState> {
-    const state = await this.store.get<WorkflowState>('workflow', assetId);
-    if (
-      !state ||
-      state.schemaVersion !== 1 ||
-      state.assetId !== assetId ||
-      state.policyDigest !== this.project.resolved.digest ||
-      !/^[a-f0-9]{64}$/u.test(state.planDigest) ||
-      !Array.isArray(state.pending) ||
-      state.pending.some((value) => typeof value !== 'string') ||
-      typeof state.languageReady !== 'boolean' ||
-      !['pending', 'failed', 'verified', 'shutdown-requested', 'completed-custody'].includes(state.status)
-    )
+    const state = validateStoredWorkflow(await this.store.get('workflow', assetId), assetId);
+    if (state.policyDigest !== this.project.resolved.digest)
       throw new Error('Fresh provisioning evidence is required');
-    validateObservation(state.observation);
     return state;
   }
   private measurementFresh(state: WorkflowState): boolean {
@@ -75,6 +79,36 @@ export class EvidenceService implements EvidenceReader {
   ): Promise<{ ready: boolean; missing: string[]; state: WorkflowState }> {
     this.observations.assertTarget(target);
     const state = await this.state(target.device.assetId);
+    return this.evaluateReadiness(target, state, ownLease);
+  }
+  async reportReadiness(target: SelectedTarget): Promise<ReadinessAssessment> {
+    this.observations.assertTarget(target);
+    const stored = await this.store.get('workflow', target.device.assetId);
+    if (stored === undefined) return this.unavailableReadiness('missing-workflow');
+    let state: WorkflowState;
+    try {
+      state = validateStoredWorkflow(stored, target.device.assetId);
+    } catch {
+      return this.unavailableReadiness('invalid-workflow');
+    }
+    if (state.policyDigest !== this.project.resolved.digest)
+      return this.unavailableReadiness('baseline-changed', hasFinalizationIntent(state));
+    return { ...(await this.evaluateReadiness(target, state)), readinessStatus: 'available' };
+  }
+  private async unavailableReadiness(
+    reason: UnavailableReason,
+    finalization = false,
+  ): Promise<ReadinessAssessment> {
+    const missing = ['readiness-unavailable'];
+    if (finalization) missing.push('finalization-inspection');
+    if ((await policyLockStatus(this.project)) !== 'current') missing.push('policy-lock');
+    return { readinessStatus: 'unavailable', readinessUnavailableReason: reason, ready: false, missing };
+  }
+  private async evaluateReadiness(
+    target: SelectedTarget,
+    state: WorkflowState,
+    ownLease?: DeviceLease,
+  ): Promise<Readiness> {
     const receipts = await this.receipts(target.device.assetId);
     const missing = requiredAttestations(this.project.policy, target.device.kind).filter(
       (check) => !receipts.some((receipt) => this.receiptReady(check, receipt, state)),
@@ -82,6 +116,7 @@ export class EvidenceService implements EvidenceReader {
     if (!this.measurementFresh(state)) missing.push('measurement-freshness');
     if ((await policyLockStatus(this.project)) !== 'current') missing.push('policy-lock');
     if (state.status === 'failed') missing.push('execution-inspection');
+    if (state.pending.includes('debugging-shutdown')) missing.push('finalization-inspection');
     missing.push(
       ...(await this.missingResources(target, ownLease)),
       ...(await this.missingCapabilities(state)),
@@ -141,7 +176,7 @@ export class EvidenceService implements EvidenceReader {
   }
   private async missingCapabilities(state: WorkflowState): Promise<string[]> {
     const missing: string[] = [];
-    const vpn = this.vpnProofs.session(state);
+    const vpn = this.proofs.session(state);
     for (const profile of this.project.policy.profiles)
       for (const requirement of this.capabilityRequirements(profile)) {
         if (!(await this.capabilityReady(profile, requirement, state, vpn))) missing.push(requirement.label);
@@ -152,7 +187,7 @@ export class EvidenceService implements EvidenceReader {
     profile: ProfilePolicy,
     requirement: CapabilityRequirement,
     state: WorkflowState,
-    vpn: VpnProofSession,
+    vpn: CapabilityProofSession,
   ): Promise<boolean> {
     const reference = state.capabilityEvidence?.find(
       (value) =>
@@ -161,22 +196,7 @@ export class EvidenceService implements EvidenceReader {
         value.configurationDigest === requirement.configurationDigest,
     );
     if (!reference) return false;
-    if (requirement.kind === 'vpn-settings') return vpn.valid(reference);
-    const proof = await this.store.get<{
-      policyDigest: string;
-      configurationDigest: string;
-      user: AndroidUserIdentity;
-      status: string;
-    }>('capability-evidence', reference.evidenceId);
-    const user = state.observation.profiles.find((value) => value.profileId === profile.id)?.user;
-    return (
-      !!proof &&
-      !!user &&
-      proof.policyDigest === state.policyDigest &&
-      proof.configurationDigest === requirement.configurationDigest &&
-      ['measured', 'manual-completed'].includes(proof.status) &&
-      sameUser(proof.user, user)
-    );
+    return vpn.valid(reference);
   }
   private async emulatorReady(target: SelectedTarget, state: WorkflowState): Promise<boolean> {
     const proof = await this.store.get<BoundEmulatorEvidence>('emulator-provenance', target.device.assetId);

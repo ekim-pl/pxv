@@ -5,6 +5,7 @@ import { access, lstat, mkdir, open } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { createInterface } from 'node:readline';
+import { StringDecoder } from 'node:string_decoder';
 import type { Duplex } from 'node:stream';
 import { fileURLToPath } from 'node:url';
 
@@ -57,6 +58,8 @@ async function runInspection(args: string[], options: CommandOptions): Promise<C
       });
       let stdout = '';
       let stderr = '';
+      const stdoutDecoder = new StringDecoder('utf8'),
+        stderrDecoder = new StringDecoder('utf8');
       let total = 0;
       let interrupted = false;
       let killTimer: ReturnType<typeof setTimeout> | undefined;
@@ -82,8 +85,8 @@ async function runInspection(args: string[], options: CommandOptions): Promise<C
           kill();
           return;
         }
-        if (target === 'stdout') stdout += chunk.toString('utf8');
-        else stderr += chunk.toString('utf8');
+        if (target === 'stdout') stdout += stdoutDecoder.write(chunk);
+        else stderr += stderrDecoder.write(chunk);
       };
       child.stdout?.on('data', (chunk: Buffer) => collect('stdout', chunk));
       child.stderr?.on('data', (chunk: Buffer) => collect('stderr', chunk));
@@ -104,6 +107,8 @@ async function runInspection(args: string[], options: CommandOptions): Promise<C
       });
       child.once('close', (code) => {
         cleanup();
+        stdout += stdoutDecoder.end();
+        stderr += stderrDecoder.end();
         resolveResult({ code: interrupted ? 124 : (code ?? 128), stdout, stderr });
       });
     });

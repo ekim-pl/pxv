@@ -1,12 +1,15 @@
-import { canonicalJson, validatePlan, validateObservation } from '@pxv/contracts';
+import { canonicalJson, validatePlan } from '@pxv/contracts';
 import type { Action, SelectedTarget, DeviceObservation, SharedApkEffect } from '@pxv/contracts';
 import type { Store } from '@pxv/runtime';
 import type { ProjectContext } from './project.js';
 import type { PreparedOperation, Operation, OsSnapshot, ReviewLineage } from './workflow-types.js';
 import type { ObservationReader } from './observation-service.js';
-import { preparedDigest, summaryData, canonicalEffects } from './reviewed-plan.js';
+import { preparedDigest, summaryData } from './reviewed-plan.js';
+import { validatePreparedEvidence } from './prepared-evidence.js';
+import { EvidenceValidationError, validateEvidence } from './evidence-validation.js';
 import { planGeneration, assertPlanGeneration } from './plan-generation.js';
 import { assertApprovedProject } from './policy-lock.js';
+import { assertFinalizationResolved } from './finalization-guard.js';
 export interface PreparedDraft {
   id: string;
   target: SelectedTarget;
@@ -38,6 +41,7 @@ export class PlanRepository implements PlanWriter {
   }
   async persist(input: PreparedDraft): Promise<PreparedOperation> {
     await assertApprovedProject(this.project);
+    await assertFinalizationResolved(this.store, input.target.device.assetId);
     await assertPlanGeneration(this.store, input.target.device.assetId, input.lifecycleGeneration);
     const body = {
       schemaVersion: 1 as const,
@@ -72,35 +76,20 @@ export class PlanRepository implements PlanWriter {
   }
   async read(id: string, summary?: string, allowExpired = false): Promise<PreparedOperation> {
     const value = await this.store.get<PreparedOperation>('plans', id);
-    if (!value) throw new Error('Reviewed plan does not exist');
-    this.validatePreparedEvidence(value);
+    if (!value) throw new EvidenceValidationError('Reviewed plan does not exist');
+    validatePreparedEvidence(value, this.project.config.extensions);
+    if (value.plan.id !== id) throw new EvidenceValidationError('Reviewed plan identifier changed');
+    validateEvidence(() => this.observations.assertTarget(value.target));
     await assertPlanGeneration(this.store, value.target.device.assetId, value.lifecycleGeneration);
     if (
       value.plan.projectId !== this.project.config.id ||
       value.plan.policyDigest !== this.project.resolved.digest
     )
-      throw new Error('Project policy or extensions changed; prepare a new plan');
+      throw new EvidenceValidationError('Project policy or extensions changed; prepare a new plan');
     if (summary !== undefined && value.reviewSummary !== summary)
-      throw new Error('Approval must match the exact reviewed summary');
+      throw new EvidenceValidationError('Approval must match the exact reviewed summary');
     if (!allowExpired && Date.parse(value.expiresAt) < this.clock().getTime())
-      throw new Error('Reviewed plan expired; prepare again');
+      throw new EvidenceValidationError('Reviewed plan expired; prepare again');
     return value;
-  }
-  private validatePreparedEvidence(value: PreparedOperation): void {
-    validatePlan(value.plan);
-    validateObservation(value.baseline);
-    this.observations.assertTarget(value.target);
-    canonicalEffects(value.sharedEffects);
-    if (
-      value.schemaVersion !== 1 ||
-      !['create-users', 'deploy-apps', 'provision', 'install-os', 'extension'].includes(value.operation) ||
-      !Number.isFinite(Date.parse(value.expiresAt))
-    )
-      throw new Error('Malformed reviewed plan retained for inspection');
-    if (
-      value.plan.digest !== preparedDigest(value, this.project.config.extensions) ||
-      value.reviewSummary !== canonicalJson({ ...summaryData(value), planDigest: value.plan.digest })
-    )
-      throw new Error('Stored reviewed plan changed; preserve it for inspection');
   }
 }

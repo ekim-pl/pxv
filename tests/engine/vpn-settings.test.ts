@@ -13,6 +13,8 @@ import type {
 } from '../../packages/engine/src/workflow-types.js';
 import { validVpnProof, vpnProofDigest } from '../../packages/engine/src/vpn-evidence.js';
 import { SqliteStore } from '@pxv/runtime';
+import { DatabaseSync } from 'node:sqlite';
+import { EvidenceValidationError } from '../../packages/engine/src/evidence-validation.js';
 import { basePolicy, MemoryPort } from './fixtures.js';
 import { device, product } from '../contracts/fixtures.js';
 
@@ -270,7 +272,7 @@ async function verifierSession(overrides = new Map<string, PreparedOperation>())
   const state = await engine.state(device.assetId);
   const read = vi.fn(async (id: string) => {
     const value = overrides.get(id) ?? (await store.get<PreparedOperation>('plans', id));
-    if (!value) throw new Error('Missing plan');
+    if (!value) throw new EvidenceValidationError('Missing plan');
     return value;
   });
   const verifier = new VpnProofVerifier(engine.project, store, { read });
@@ -317,6 +319,89 @@ it('checks source action and plan bindings independently of the retained-plan re
   delete noPlan.planId;
   expect(await f.verifier.session(noPlan).valid(reference)).toBe(false);
   expect(await f.verifier.session({ ...f.state, planDigest: 'b'.repeat(64) }).valid(reference)).toBe(false);
+});
+
+for (const collection of ['capability-evidence', 'plans', 'runs', 'plan-generations'])
+  it(`propagates ${collection} read failures through readiness, reports and review refresh`, async () => {
+    const { run } = await start();
+    await confirm(run.id);
+    const get = store.get.bind(store);
+    const failure = new Error(`Injected ${collection} read failure`);
+    const spy = vi
+      .spyOn(store, 'get')
+      .mockImplementation((name, key) => (name === collection ? Promise.reject(failure) : get(name, key)));
+    try {
+      await expect(engine.readiness(target)).rejects.toBe(failure);
+      await expect(engine.deviceStatus(target)).rejects.toBe(failure);
+      await expect(engine.refreshReview(run.id)).rejects.toBe(failure);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+it('propagates failures on later audit pages without returning a VPN blocker', async () => {
+  for (let index = 0; index < 110; index++)
+    await store.appendEvent(`asset:${device.assetId}`, { type: 'note' });
+  const { run } = await start();
+  await confirm(run.id);
+  const events = store.events.bind(store);
+  const failure = new Error('Later audit page unavailable');
+  const spy = vi
+    .spyOn(store, 'events')
+    .mockImplementation((id, after = 0, limit) =>
+      after > 0 ? Promise.reject(failure) : events(id, after, limit),
+    );
+  try {
+    await expect(engine.deviceStatus(target)).rejects.toBe(failure);
+    await expect(engine.refreshReview(run.id)).rejects.toBe(failure);
+  } finally {
+    spy.mockRestore();
+  }
+});
+
+it('propagates malformed stored JSON and a closed worker instead of classifying them as invalid VPN evidence', async () => {
+  const { run } = await start();
+  await confirm(run.id);
+  const state = await engine.state(device.assetId);
+  const reference = state.capabilityEvidence![0]!;
+  const database = new DatabaseSync(join(root, 'state.sqlite'));
+  try {
+    database
+      .prepare("UPDATE records SET value=? WHERE collection='capability-evidence' AND key=?")
+      .run('{invalid-json', reference.evidenceId);
+    await expect(engine.deviceStatus(target)).rejects.toThrow('Malformed stored JSON capability-evidence');
+  } finally {
+    database.close();
+  }
+  const session = new VpnProofVerifier(engine.project, store, { read: (id) => engine.plan(id) }).session(
+    state,
+  );
+  await store.close();
+  await expect(session.valid(reference)).rejects.toThrow('Storage worker is closed');
+});
+
+it('keeps stale lifecycle and malformed run evidence as normal VPN blockers', async () => {
+  const { run } = await start();
+  await confirm(run.id);
+  const original = await store.get<RunRecord>('runs', run.id);
+  for (const completedSetup of [false, [null]]) {
+    await store.set('runs', run.id, { ...original, completedSetup });
+    expect((await engine.readiness(target)).missing).toContain('vpn-settings:admin');
+  }
+  await store.set('runs', run.id, original);
+  for (const generation of ['malformed', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa']) {
+    await store.set('plan-generations', device.assetId, generation);
+    expect((await engine.readiness(target)).missing).toContain('vpn-settings:admin');
+  }
+});
+
+it('propagates unexpected retained-plan reader errors unchanged', async () => {
+  const { run } = await start();
+  await confirm(run.id);
+  const f = await verifierSession();
+  const failure = new TypeError('Unexpected plan reader failure');
+  f.read.mockRejectedValueOnce(failure);
+  await expect(f.session.valid(f.state.capabilityEvidence![0]!)).rejects.toBe(failure);
 });
 it('paginates and caches attestation audit history, retaining earlier profile receipts', async () => {
   for (let index = 0; index < 110; index++)

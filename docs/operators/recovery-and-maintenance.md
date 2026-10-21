@@ -23,7 +23,7 @@ The reusable reference is the reviewed policy, assets, configurations and exact 
 | Phone data restore             | The selected OS backup service and each app's supported export/import or account recovery | Only the data and behavior actually restored and checked                                           |
 | Operator project/host recovery | Preserve current evidence and inspect a consistent private backup with a maintainer       | Historical state is available for reconciliation; old approvals do not establish current readiness |
 
-In an explicitly Seedvault-enabled product, the typed `seedvault inspect|backup|restore` workflow and [personal recovery tooling](#personal-recovery-tool) supervise qualified exact-build Seedvault UI operations across profiles. Community disables new Seedvault operations, and no production adapter is currently qualified. Read [adapter acceptance and recovery limits](). PXV has no general phone cloning or project-state import command. A policy's `backup` requirement measures whether backup is enabled and which transport is selected. The `backup_recovery` check records a witnessed representative restore. Neither observation proves that every app, profile or future backup is recoverable. Android apps may use separate backup APIs and exclusions; see [Android Auto Backup](https://developer.android.com/identity/data/autobackup) and verify the exact app and transport before making a coverage claim.
+In an explicitly Seedvault-enabled product, the typed `seedvault inspect|backup|restore` workflow and [personal recovery tooling](#personal-recovery-tool) supervise qualified exact-build Seedvault UI operations across profiles. Community disables new Seedvault operations, and no production adapter is currently qualified. Read [adapter acceptance and recovery limits](#qualified-adapter-format). PXV has no general phone cloning or project-state import command. A policy's `backup` requirement measures whether backup is enabled and which transport is selected. The `backup_recovery` check records a witnessed representative restore. Neither observation proves that every app, profile or future backup is recoverable. Android apps may use separate backup APIs and exclusions; see [Android Auto Backup](https://developer.android.com/identity/data/autobackup) and verify the exact app and transport before making a coverage claim.
 
 For an identified master, use the existing CLI on one enrolled asset at a time. Keep the project, request, adapter evidence, backup destination and report in the access-controlled set for that role:
 
@@ -223,6 +223,23 @@ The `--inspected` assertion is an operator confirmation, not a bypass. Recovery 
 
 Never remove a database, lock, reservation or receipt, change control roots, invent an inventory identity or restore an older database to make a blocked device appear available. A host reboot does not automatically resolve device obligations. Recovery does not replay provisioning, undo accounts/APK effects or restore phone data. After successful cleanup of a failed/interrupted run, inspect again and prepare a fresh review for the remaining work.
 
+## Recover incomplete finalization
+
+`finalization-inspection` means PXV retained a `debugging-shutdown` intent but did not commit the handoff. Shutdown may already have disabled debugging. The intent, previous observations and audit evidence remain available; neither a successful physical shutdown nor typed cleanup creates a missing handoff receipt.
+
+This blocks preparation, submission, refresh, execution/resume, attestation and new
+extension, Seedvault and collector work, even after executable/policy/configuration
+changes or lock renewal. Reports retain the blocker alongside unavailable readiness
+for an older baseline. Inspection, history, cancellation, typed recovery, disconnect
+and offline records remain accessible. New provisioning cannot overwrite the intent.
+
+1. Inspect the phone's actual USB/Wireless debugging state and retained error, shutdown intent, audit records and native reservations. Do not repeat finalization or claim custody.
+2. Complete any required inspected typed recovery using the original affected operation ID and transport, as above. Preserve reservations and receipts until cleanup is proven.
+3. Arrange a deliberate maintenance visit with the recipient. Temporarily authorize debugging through the agreed physical procedure if needed, and record `lifecycle maintenance` with the actual asset, operator and non-secret note. This archives and invalidates the incomplete operational evidence.
+4. Validate and explicitly renew the policy lock if its baseline changed. Prepare, review and execute a new provisioning plan, complete current checks and fresh acceptance, then finalize and confirm physical shutdown and custody separately.
+
+Do not edit SQLite, restore older records or clear the intent/control directory to bypass inspection. A storage/worker/JSON decoding error needs investigation of the operator store; it is not a request to repeat phone provisioning. A successful existing handoff continues to use its original validated snapshot, including full prepared-plan integrity, for custody after later baseline changes.
+
 ## Review policy app changes during maintenance
 
 Preserve the accepted policy, project evidence and agreed phone-data backups before
@@ -391,6 +408,17 @@ mounted drive and trusted local network. Each exact dry-run review is displayed 
 submitted only after explicit confirmation; interruption retains inspectable state
 and never automatically repeats flashing.
 
+Backup-only preflight, including `--dry-run`, requires a current authentic policy
+lock before connecting or pairing. Missing, corrupt or stale approval requires
+`policy validate` and explicit `policy lock` renewal, including after executable
+upgrades. The tool never renews existing approval or changes lock bytes on rejection.
+
+All new `seedvault connect` calls require current approval, including connection
+dry runs. PXV checks before the pairing-code prompt and again under project ownership
+before pairing/connecting. Backup-only work also rechecks after the physical checkpoint;
+a changed baseline requires restarting the workflow even if its new lock is approved.
+Disconnect and exact-session cleanup remain available without lock renewal.
+
 The required private coverage file includes every policy profile and its important
 apps, file scope and exclusions. An owner-only example is:
 
@@ -435,7 +463,7 @@ publishing a complete master. The tool does not copy project SQLite state, previ
 approvals, inventory, registry credentials, recovery words or helper signing keys.
 It refuses installed extensions and staged-file recipes; those need separately
 reviewed installation/private inputs. Back up operator projects and the encrypted
-registry separately as described in [recovery]().
+registry separately as described in [recovery](#back-up-operator-projects-and-host-evidence).
 
 Fresh creation finalizes only with `--finalize`; recovery finalizes by default unless
 `--no-finalize` is explicit. `--locale en|pl` selects finalization language. Finalization
@@ -470,6 +498,16 @@ To qualify a recipe:
 
 ## Interrupted jobs and connection cleanup
 
+Worker failures preserve newer run progress and completed statuses. An unchanged
+queued/manual run may receive an audited inspection status; launch cleanup releases
+only its exact attempt claim. Retain the original and any secondary storage/disposal
+errors, inspect run history and native fences, and use explicit recovery where needed.
+
+Recipe/probe blockers may identify incomplete results, missing execution checkpoints
+or source/refresh lineage that cannot be authenticated. Assisted recipe completion
+also requires its consumed app-setup witness in audit history. Preserve these records
+and prepare newly reviewed work after inspection; do not edit proofs to claim success.
+
 ADB loss is not proof that an Android job stopped. Durable obligations retain the operation's Android job and previous foreground user. Cleanup checks the exact user, public idle state, mutating services and that user's registered Seedvault jobs before restoring the previous foreground. Unknown scheduling output or queued work remains pending. Scheduled periodic backups may need to be disabled privately through supported UI before the drive can safely move. PXV never force-stops Seedvault to manufacture completion.
 
 Use ordinary inspected `device recover` for a backup/restore run, retaining its original project, operation ID and transport. Preserve unknown or reused-user obligations. A failed wireless connection has a separate socket-session record, including attempts that failed before inventory enrollment:
@@ -482,6 +520,13 @@ pxv seedvault disconnect --project-root "$P" --asset "$ASSET" \
 ```
 
 This cleanup selects the recorded endpoint and native recovery lineage; it disconnects only that host socket and can be retried after a failed cleanup. It does not restart a remote backup, kill the ADB server, revoke unrelated hosts or remove phone-side pairing trust. Remove this session's newly paired host privately and turn Wireless debugging off. Reconnect direct USB for finalization, then physically verify both debugging modes are off. The same person supplies operator and recipient acceptance.
+
+Connection reports traverse the full retained history without a 1,000-record ceiling.
+Exact-session recovery reads its record directly; an enrolled endpoint needs no
+history scan to authorize disconnect. Prior matching sessions are reconciled with
+their audit events before the initiating session loses its cleanup requirement.
+Storage/audit errors or competing writes retain that requirement for explicit retry;
+partial reconciliation preserves unrelated records and deletes no history.
 
 ## What a master establishes
 

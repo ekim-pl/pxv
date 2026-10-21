@@ -110,6 +110,7 @@ export class MemoryPort implements WorkflowPort {
         if (installed.packageId === artifact.packageId) {
           installed.versionCode = artifact.versionCode;
           installed.signerSha256 = artifact.signerSha256;
+          installed.sha256 = artifact.sha256;
         }
     const profile = this.profile(user);
     profile.packages = [
@@ -118,6 +119,7 @@ export class MemoryPort implements WorkflowPort {
         packageId: artifact.packageId,
         versionCode: artifact.versionCode,
         signerSha256: artifact.signerSha256,
+        sha256: artifact.sha256,
       },
     ];
     return Promise.resolve();
@@ -193,6 +195,7 @@ export class MemoryPort implements WorkflowPort {
               user: profile.user,
               versionCode: item.versionCode,
               signerSha256: item.signerSha256,
+              ...(item.sha256 ? { sha256: item.sha256 } : {}),
             })),
         ),
       })),

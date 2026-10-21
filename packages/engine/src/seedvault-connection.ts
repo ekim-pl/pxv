@@ -5,6 +5,7 @@ import type { ProjectContext } from './project.js';
 import { assertProjectFresh, containedPath } from './project.js';
 import { NativeDeviceOwnership, NativeProjectOwnership } from './ownership.js';
 import { SeedvaultConnectionSession, seedvaultConnections } from './seedvault-sessions.js';
+import { assertFinalizationResolved } from './finalization-guard.js';
 
 interface ConnectionOptions {
   lease: DeviceLease;
@@ -50,37 +51,42 @@ export async function connectSeedvaultEndpoint(
     devices: project.inventory.devices.map((value) => (value.assetId === device.assetId ? device : value)),
   });
   const selected = { device, transport };
-  return new NativeProjectOwnership(project, controlRoot).run(async () => {
-    await assertDisconnect(store, target, request);
-    if (request.pairEndpoint && !request.pairingCode) throw new Error('Pairing code is required privately');
-    const session = await SeedvaultConnectionSession.begin(store, target, request);
-    const ownership = new NativeDeviceOwnership(controlRoot);
-    const reservation = request.recoverOperationId
-      ? await connectionReservation(ownership, selected, session)
-      : undefined;
-    const execute = reservation ? ownership.recover.bind(ownership) : ownership.run.bind(ownership);
-    const operationId =
-      reservation ?? (request.recoverOperationId ? `seedvault-cleanup-${randomUUID()}` : session.operationId);
-    const result = await execute(selected, operationId, async (lease) => {
-      if (request.recoverOperationId) await session.recovering(lease.operationId);
-      const options = { lease, ...(signal ? { signal } : {}) };
-      if (request.disconnect) await port.disconnect(request.endpoint, options);
-      else {
-        if (request.pairEndpoint && request.pairingCode)
-          await port.pair(request.pairEndpoint, request.pairingCode, options);
-        await port.connect(selected, request.endpoint, options);
-        await assertProjectFresh(project);
-        await atomicWritePrivate(
-          await containedPath(project.root, project.config.inventoryFile),
-          JSON.stringify(inventory, null, 2),
-        );
-      }
-      return { connected: !request.disconnect, endpoint: request.endpoint };
-    });
-    // A successful callback alone does not prove native release completed.
-    await session.complete(Boolean(request.disconnect));
-    return result;
-  });
+  return new NativeProjectOwnership(project, controlRoot).run(
+    async () => {
+      if (!request.disconnect) await assertFinalizationResolved(store, target.device.assetId);
+      await assertDisconnect(store, target, request);
+      if (request.pairEndpoint && !request.pairingCode) throw new Error('Pairing code is required privately');
+      const session = await SeedvaultConnectionSession.begin(store, target, request);
+      const ownership = new NativeDeviceOwnership(controlRoot);
+      const reservation = request.recoverOperationId
+        ? await connectionReservation(ownership, selected, session)
+        : undefined;
+      const execute = reservation ? ownership.recover.bind(ownership) : ownership.run.bind(ownership);
+      const operationId =
+        reservation ??
+        (request.recoverOperationId ? `seedvault-cleanup-${randomUUID()}` : session.operationId);
+      const result = await execute(selected, operationId, async (lease) => {
+        if (request.recoverOperationId) await session.recovering(lease.operationId);
+        const options = { lease, ...(signal ? { signal } : {}) };
+        if (request.disconnect) await port.disconnect(request.endpoint, options);
+        else {
+          if (request.pairEndpoint && request.pairingCode)
+            await port.pair(request.pairEndpoint, request.pairingCode, options);
+          await port.connect(selected, request.endpoint, options);
+          await assertProjectFresh(project);
+          await atomicWritePrivate(
+            await containedPath(project.root, project.config.inventoryFile),
+            JSON.stringify(inventory, null, 2),
+          );
+        }
+        return { connected: !request.disconnect, endpoint: request.endpoint };
+      });
+      // A successful callback alone does not prove native release completed.
+      await session.complete(Boolean(request.disconnect));
+      return result;
+    },
+    { requirePolicyLock: !request.disconnect },
+  );
 }
 async function connectionReservation(
   ownership: NativeDeviceOwnership,
@@ -105,9 +111,11 @@ async function assertDisconnect(
   request: SeedvaultConnectionRequest,
 ): Promise<void> {
   if (!request.disconnect) return;
+  if (request.recoverOperationId) return; // begin() authenticates the exact session before any phone/socket operation.
   const enrolled = target.device.transports.some(
     (value) => value.kind === 'wifi' && value.serial === request.endpoint,
   );
+  if (enrolled) return;
   const recorded = (await seedvaultConnections(store, target)).some(
     (value) => value.endpoint === request.endpoint,
   );

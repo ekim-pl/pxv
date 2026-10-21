@@ -3,10 +3,11 @@ import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { createInterface } from 'node:readline/promises';
+import { StringDecoder } from 'node:string_decoder';
 import { setTimeout as delay } from 'node:timers/promises';
 import { privateJson } from './personal-files.mjs';
 
-/** @typedef {{bin:string,root:string,project:string,asset:string,operator:string,prompt:(question:string)=>Promise<string>,signal:AbortSignal,adapter?:any}} Session */
+/** @typedef {{bin:string,root:string,project:string,asset:string,operator:string,prompt:(question:string)=>Promise<string>,signal:AbortSignal,adapter?:any,backupApproval?:string}} Session */
 /** @returns {{ask:(question:string)=>Promise<string>,close:()=>void}} */
 export function terminal() {
   const input = createInterface({ input: process.stdin, output: process.stdout });
@@ -35,6 +36,8 @@ export async function invoke(session, args) {
     let stdout = '',
       stderr = '',
       size = 0;
+    const stdoutDecoder = new StringDecoder('utf8'),
+      stderrDecoder = new StringDecoder('utf8');
     /** @param {string} kind @param {Buffer} chunk */
     const collect = (kind, chunk) => {
       size += chunk.length;
@@ -42,14 +45,20 @@ export async function invoke(session, args) {
         child.kill('SIGTERM');
         return;
       }
-      if (kind === 'out') stdout += chunk.toString('utf8');
-      else stderr += chunk.toString('utf8');
+      if (kind === 'out') stdout += stdoutDecoder.write(chunk);
+      else stderr += stderrDecoder.write(chunk);
     };
     child.stdout.on('data', (chunk) => collect('out', chunk));
     child.stderr.on('data', (chunk) => collect('err', chunk));
     if (args.includes('--pair-endpoint')) child.stderr.on('data', (chunk) => process.stderr.write(chunk));
     child.once('error', reject);
-    child.once('close', (code) => resolveResult({ code: code ?? 130, stdout, stderr }));
+    child.once('close', (code) =>
+      resolveResult({
+        code: code ?? 130,
+        stdout: stdout + stdoutDecoder.end(),
+        stderr: stderr + stderrDecoder.end(),
+      }),
+    );
   });
 }
 /** @param {Session} session @param {string[]} args @returns {Promise<any>} */

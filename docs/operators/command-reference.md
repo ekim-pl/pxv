@@ -49,3 +49,21 @@ finalization, attestation, recovery and other commands without a preview mode.
 Common exit outcomes: 0 means the requested command completed; 3 indicates a failed/inspection-required execution; 4 indicates pending work or an unmet readiness/tool check; 130 indicates cancellation. `agent resume` uses the resulting run's exit outcome, including 4 when it pauses again. Unexpected input/errors return a nonzero launcher result. Inspect the `--json` result and retained run status rather than inferring readiness from process exit alone.
 
 Repository maintainer commands are separate from the installed phone CLI: `pnpm check` runs static gates, `pnpm test:coverage` enforces complete per-module coverage, and `pnpm quality` aggregates static/native/coverage/helper checks and reports. Run `pnpm quality:setup` explicitly for pinned analysis tools. See [testing](../developers/testing.md); ordinary checks/builds never publish or install the product globally.
+
+`finalization-inspection` means a debugging-shutdown intent has no committed handoff. Inspect and use the [recovery procedure](recovery-and-maintenance.md#recover-incomplete-finalization); repeating finalization is blocked. Storage/decoding failures are errors, not missing VPN checks. Custody authenticates the full retained prepared plan against the original snapshot.
+
+The shutdown intent also blocks new plans, submission, refresh, execution/resume,
+attestation and optional device changes across baseline changes until explicit
+lifecycle maintenance. Current managed APK observations require standalone content
+hashes; same-version content mismatches require reviewed reinstalls, splits require
+maintenance. Backup-only automation verifies current approval even on dry runs and
+never renews locks. Seedvault connection reports traverse all retained pages; failed
+disconnect reconciliation retains cleanup for explicit retry.
+
+New `seedvault connect` calls require current approval before pairing/connecting,
+including dry runs; approval is rechecked after prompts under ownership. Disconnect
+remains available. Recipe/probe blockers include incomplete results and unauthenticated
+source/checkpoint history. Worker failures retain competing run progress and release
+only the exact launch attempt's claim; inspect all reported storage/disposal errors.
+
+`device report` and `fleet report` show stored evidence and historical runs. An unavailable current assessment returns `readinessStatus: unavailable`, `readinessUnavailableReason`, `ready: false` and `readiness-unavailable`, omitting `state`. Retained history and offline custody/lifecycle operations do not require installed extensions; execution checks remain enforced. `handoff accept` validates the original finalized snapshot across later baseline changes, until lifecycle invalidation.

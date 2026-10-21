@@ -8,12 +8,16 @@ import {
   validatePlan,
   verifyResolvedPolicy,
   type HandoffRecord,
+  type AcceptedHandoffSnapshot,
   type ReviewedPlan,
   type RunEvent,
   type SelectedTarget,
+  type ResolvedPolicy,
 } from '@pxv/contracts';
-import type { Store } from '@pxv/runtime';
+import type { Store, ExpectedRecord } from '@pxv/runtime';
 import type { Operation, RunRecord, WorkflowState } from './workflow-types.js';
+import { validatePreparedEvidence } from './prepared-evidence.js';
+import { EvidenceValidationError } from './evidence-validation.js';
 
 interface CustodyPlan {
   plan: ReviewedPlan;
@@ -23,6 +27,7 @@ interface CustodyPlan {
 interface Binding {
   state: WorkflowState;
   record: HandoffRecord;
+  resolved: ResolvedPolicy;
 }
 
 function inspectBinding(state: WorkflowState, receipt: unknown, snapshot: unknown): Binding {
@@ -37,11 +42,11 @@ function inspectBinding(state: WorkflowState, receipt: unknown, snapshot: unknow
     record.observationDigest !== observationDigest(observation)
   )
     throw new Error('Custody workflow identity differs from its handoff');
-  assertSnapshot(state.assetId, record, snapshot);
-  return { state, record };
+  const resolved = assertSnapshot(state.assetId, record, snapshot);
+  return { state, record, resolved };
 }
 
-function assertSnapshot(assetId: string, record: HandoffRecord, snapshot: unknown): void {
+function assertSnapshot(assetId: string, record: HandoffRecord, snapshot: unknown): ResolvedPolicy {
   const accepted = validateAcceptedHandoffSnapshot(snapshot);
   const resolved = verifyResolvedPolicy(accepted.resolvedPolicy);
   if (
@@ -51,12 +56,13 @@ function assertSnapshot(assetId: string, record: HandoffRecord, snapshot: unknow
     resolved.project.id !== record.projectId
   )
     throw new Error('Custody snapshot identity differs from its handoff');
+  return resolved;
 }
 
 function acceptanceRun(run: RunRecord, prepared: CustodyPlan): boolean {
   return (
     ['provision', 'create-users', 'deploy-apps', 'extension'].includes(prepared.operation ?? '') &&
-    run.status === 'pending' &&
+    ['pending', 'completed'].includes(run.status) &&
     !run.manualGate &&
     (!run.pauseReason || run.pauseReason.kind === 'acceptance') &&
     run.cursor === prepared.plan.actions.length
@@ -64,8 +70,9 @@ function acceptanceRun(run: RunRecord, prepared: CustodyPlan): boolean {
 }
 
 function matches(run: RunRecord, prepared: CustodyPlan, binding: Binding): boolean {
+  validatePreparedEvidence(prepared, binding.resolved.project.extensions);
   const { state, record } = binding;
-  const plan = validatePlan(prepared.plan);
+  const plan = prepared.plan;
   return (
     acceptanceRun(run, prepared) &&
     run.id === digest({ project: record.projectId, plan: state.planDigest }) &&
@@ -77,6 +84,15 @@ function matches(run: RunRecord, prepared: CustodyPlan, binding: Binding): boole
     digest(plan.device) === digest(state.observation.device) &&
     digest(prepared.target.device) === digest(plan.device)
   );
+}
+
+function retainedMatch(run: RunRecord, prepared: CustodyPlan, binding: Binding): boolean {
+  try {
+    return matches(run, prepared, binding);
+  } catch (error) {
+    if (error instanceof EvidenceValidationError) return false;
+    throw error;
+  }
 }
 
 function completed(run: RunRecord): RunRecord {
@@ -101,15 +117,25 @@ export async function custodyRun(
   store: Store,
   state: WorkflowState,
   record: HandoffRecord,
-): Promise<{ previous: RunRecord; next: RunRecord }> {
+  snapshot?: AcceptedHandoffSnapshot,
+): Promise<{ previous: RunRecord; next: RunRecord; expected: ExpectedRecord[] }> {
   const id = digest({ project: record.projectId, plan: state.planDigest });
   const run = await store.get<RunRecord>('runs', id);
   if (!run) throw new Error('Matching workflow run is required before recording custody');
   const prepared = await store.get<CustodyPlan>('plans', run.planId);
-  const binding = inspectBinding(state, record, await store.get('handoff-snapshots', record.id));
-  if (!prepared || !matches(run, prepared, binding))
+  const retained = snapshot ?? (await store.get('handoff-snapshots', record.id));
+  const binding = inspectBinding(state, record, retained);
+  if (!prepared || !retainedMatch(run, prepared, binding))
     throw new Error('Workflow run differs from the accepted handoff; inspect before custody');
-  return { previous: run, next: completed(run) };
+  return {
+    previous: run,
+    next: completed(run),
+    expected: [
+      { collection: 'runs', key: run.id, value: run },
+      { collection: 'plans', key: run.planId, value: prepared },
+      ...(!snapshot ? [{ collection: 'handoff-snapshots', key: record.id, value: retained }] : []),
+    ],
+  };
 }
 
 interface Candidate {
@@ -146,7 +172,7 @@ export class CustodyCompletionSession {
   }
   private pendingAsset(run: RunRecord, prepared: CustodyPlan | undefined): string | undefined {
     try {
-      if (!prepared || !acceptanceRun(run, prepared)) return undefined;
+      if (!prepared || run.status !== 'pending' || !acceptanceRun(run, prepared)) return undefined;
       validatePlan(prepared.plan);
       if (prepared.plan.projectId !== this.projectId) return undefined;
       return prepared.target.device.assetId;
@@ -155,13 +181,7 @@ export class CustodyCompletionSession {
     }
   }
   private matched(run: RunRecord, prepared: CustodyPlan, bindings: Binding[]): boolean {
-    return bindings.some((binding) => {
-      try {
-        return matches(run, prepared, binding);
-      } catch {
-        return false;
-      }
-    });
+    return bindings.some((binding) => retainedMatch(run, prepared, binding));
   }
   private async currentBindings(assetId: string): Promise<Binding[]> {
     return this.bindings([

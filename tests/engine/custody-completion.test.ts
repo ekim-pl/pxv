@@ -9,27 +9,19 @@ import {
   custodyCompletionEvent,
   CustodyCompletionSession,
 } from '../../packages/engine/src/custody-completion.js';
+import { device, observation, project, product, hashB } from '../contracts/fixtures.js';
 import { basePolicy } from './fixtures.js';
-import { device, observation, product, project, hashA, hashB } from '../contracts/fixtures.js';
+import {
+  custodyBaseline as resolved,
+  preparedFixture,
+  alteredPrepared,
+  sealPrepared,
+} from './prepared-fixture.js';
 
 const date = '2026-10-20T10:00:00.000Z';
-const resolved = resolvePolicy(basePolicy(), project, product);
-const prepared = {
-  operation: 'provision' as const,
-  plan: {
-    schemaVersion: 1 as const,
-    id: 'plan',
-    projectId: project.id,
-    device,
-    digest: hashA,
-    policyDigest: resolved.digest,
-    actions: [],
-    createdAt: date,
-  },
-  target: { device, transport: device.transports[0]! },
-};
+const prepared = preparedFixture();
 const run: RunRecord = {
-  id: digest({ project: project.id, plan: hashA }),
+  id: digest({ project: project.id, plan: prepared.plan.digest }),
   planId: 'plan',
   status: 'pending',
   cursor: 0,
@@ -41,7 +33,7 @@ const state: WorkflowState = {
   schemaVersion: 1,
   assetId: device.assetId,
   planId: 'plan',
-  planDigest: hashA,
+  planDigest: prepared.plan.digest,
   policyDigest: resolved.digest,
   observation,
   observedAt: date,
@@ -87,6 +79,25 @@ it('uses exact historical evidence independently of the current policy and never
   expect(await complete()).toEqual({ ...run, status: 'completed', pauseReason: undefined });
   expect(await store.get('runs', run.id)).toEqual(run);
   expect(set).not.toHaveBeenCalled();
+});
+it('authenticates original hashless handoffs without adding content measurements to stored evidence', async () => {
+  const baseline = structuredClone(observation);
+  for (const profile of baseline.profiles) for (const installed of profile.packages) delete installed.sha256;
+  const legacy = sealPrepared({ ...prepared, baseline });
+  const original = { ...run, id: digest({ project: project.id, plan: legacy.plan.digest }) };
+  await store.set('plans', 'plan', legacy);
+  await store.set('workflow', device.assetId, {
+    ...state,
+    planDigest: legacy.plan.digest,
+    observation: baseline,
+  });
+  await store.set('handoff', device.assetId, { ...record, observationDigest: observationDigest(baseline) });
+  const bytes = JSON.stringify(legacy);
+  expect((await complete(original, legacy)).status).toBe('completed');
+  expect(JSON.stringify(await store.get('plans', 'plan'))).toBe(bytes);
+  expect(
+    (await store.get<typeof state>('workflow', device.assetId))!.observation.profiles[0]!.packages[0],
+  ).not.toHaveProperty('sha256');
 });
 
 it.each([
@@ -182,7 +193,9 @@ it('reuses a snapshot shared by current and archived evidence and propagates sto
 
 it('requires the exact retained run and plan before accepting new custody', async () => {
   const expected = { ...run, status: 'completed', pauseReason: undefined };
-  expect(await custodyRun(store, state, record)).toEqual({ previous: run, next: expected });
+  const result = await custodyRun(store, state, record);
+  expect(result.previous).toEqual(run);
+  expect(result.next).toEqual(expected);
   await store.delete('runs', run.id);
   await expect(custodyRun(store, state, record)).rejects.toThrow('Matching workflow run');
   await store.set('runs', run.id, run);
@@ -191,6 +204,59 @@ it('requires the exact retained run and plan before accepting new custody', asyn
   await store.set('plans', run.planId, prepared);
   await store.set('runs', run.id, { ...run, manualGate: 'normal_credentials' });
   await expect(custodyRun(store, state, record)).rejects.toThrow('differs from');
+});
+
+it('rejects altered complete plans and incomplete legacy plans without rewriting stored records', async () => {
+  for (const [name, value] of Object.entries(alteredPrepared(prepared))) {
+    if (name === 'actions') continue; // The empty subset fixture has no actions to replace.
+    await store.set('plans', run.planId, value);
+    expect(
+      (await new CustodyCompletionSession(store, project.id).complete(run, value as typeof prepared)).status,
+    ).toBe('pending');
+    await expect(custodyRun(store, state, record)).rejects.toThrow('differs from');
+    expect(await store.get('plans', run.planId)).toEqual(value);
+    expect(await store.get('runs', run.id)).toEqual(run);
+    const alreadyCompleted = { ...run, status: 'completed' as const };
+    expect(
+      await new CustodyCompletionSession(store, project.id).complete(
+        alreadyCompleted,
+        value as typeof prepared,
+      ),
+    ).toEqual(alreadyCompleted);
+  }
+});
+
+it('authenticates archived legacy completion with original extension locks independently of installation', async () => {
+  const original = resolvePolicy(
+    basePolicy(),
+    {
+      ...project,
+      extensions: [
+        {
+          id: '@private/original',
+          version: '0.1.0',
+          integrity: 'sha512-' + Buffer.alloc(64).toString('base64'),
+          apiVersion: 1,
+          entry: 'index.js',
+          installPath: 'a'.repeat(64),
+        },
+      ],
+    },
+    product,
+  );
+  const plan = sealPrepared(
+    { ...prepared, plan: { ...prepared.plan, policyDigest: original.digest } },
+    original.project.extensions,
+  );
+  const legacyRun = { ...run, id: digest({ project: project.id, plan: plan.plan.digest }) };
+  const workflow = { ...state, planDigest: plan.plan.digest, policyDigest: original.digest };
+  const handoff = { ...record, policyDigest: original.digest };
+  await store.set('handoff-snapshots', record.id, { ...snapshot, resolvedPolicy: original });
+  await store.delete('workflow', device.assetId);
+  await store.set('lifecycle-evidence', 'archive', { workflow, handoff });
+  expect((await new CustodyCompletionSession(store, project.id).complete(legacyRun, plan)).status).toBe(
+    'completed',
+  );
 });
 
 it('records typed custody audit events using the accepted timestamp or retained creation timestamp', () => {
@@ -205,3 +271,20 @@ it('records typed custody audit events using the accepted timestamp or retained 
   void _acceptedAt;
   expect(custodyCompletionEvent(run.id, withoutAcceptanceDate).at).toBe(record.createdAt);
 });
+
+for (const operation of ['provision', 'create-users', 'deploy-apps', 'extension'] as const)
+  for (const status of ['pending', 'completed'] as const)
+    it(`accepts exact fully executed ${status} ${operation} lineage`, async () => {
+      const plan = preparedFixture(operation);
+      const previous = { ...run, id: digest({ project: project.id, plan: plan.plan.digest }), status };
+      await store.set('runs', previous.id, previous);
+      await store.set('plans', run.planId, plan);
+      const result = await custodyRun(store, { ...state, planDigest: plan.plan.digest }, record);
+      expect(result.next.status).toBe('completed');
+      expect(result.next).not.toHaveProperty('pauseReason');
+      expect(result.expected).toEqual([
+        { collection: 'runs', key: previous.id, value: previous },
+        { collection: 'plans', key: run.planId, value: plan },
+        { collection: 'handoff-snapshots', key: record.id, value: snapshot },
+      ]);
+    });

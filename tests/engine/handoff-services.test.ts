@@ -10,7 +10,7 @@ import { createProject, loadProject, saveInventory, WorkflowEngine, type Workflo
 import { AttestationService } from '../../packages/engine/src/attestation-service.js';
 import { HandoffService } from '../../packages/engine/src/handoff-service.js';
 import { ObservationService } from '../../packages/engine/src/observation-service.js';
-import { VpnProofVerifier } from '../../packages/engine/src/vpn-proof-verifier.js';
+import { CapabilityProofVerifier } from '../../packages/engine/src/capability-proof-verifier.js';
 import { EvidenceService } from '../../packages/engine/src/evidence-service.js';
 import { NativeDeviceOwnership, NativeProjectOwnership } from '../../packages/engine/src/ownership.js';
 import { PlanRepository } from '../../packages/engine/src/plan-repository.js';
@@ -44,7 +44,7 @@ describe('independently composed attestation and handoff services', () => {
       observations,
       devices,
       clock,
-      new VpnProofVerifier(project, store, plans),
+      new CapabilityProofVerifier(project, store, plans),
     );
     attestation = new AttestationService(
       project,

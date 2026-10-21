@@ -195,6 +195,7 @@ function checkPackages(profile: ProfilePolicy, actual: ObservedProfile, check: O
       artifact.signerSha256,
       installed?.signerSha256,
     );
+    check(`${profile.id}.package.${artifact.packageId}.sha256`, artifact.sha256, installed?.sha256);
   }
 }
 function checkProfile(profile: ProfilePolicy, actual: ObservedProfile, check: ObservationChecker): void {

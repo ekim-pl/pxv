@@ -375,7 +375,18 @@ it('retains old evidence but requires a new workflow after a maintenance visit o
       io,
     ),
   ).toBe(0);
-  await expect(runCli(device(['report']), io)).rejects.toThrow('Fresh provisioning');
+  expect(await runCli(device(['report']), io)).toBe(0);
+  const [report] = JSON.parse(output.at(-1) ?? '[]') as Record<string, unknown>[];
+  expect(report).toMatchObject({
+    ready: false,
+    readinessStatus: 'unavailable',
+    readinessUnavailableReason: 'missing-workflow',
+    run: { id: runId },
+  });
+  expect(report).not.toHaveProperty('state');
+  await expect(
+    runCli(device(['attest', '--check', 'operator_signoff', '--operator', 'operator', '--yes']), io),
+  ).rejects.toThrow('Fresh provisioning');
   await expect(
     runCli(
       args([

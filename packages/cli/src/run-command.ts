@@ -1,5 +1,11 @@
 import { runExitCode } from './device-command.js';
-import { type RunRecord } from '@pxv/engine';
+import {
+  ownedWorkerClaim,
+  recordWorkerFailure,
+  releaseWorkerClaim,
+  type RunRecord,
+  type WorkerLaunchClaim,
+} from '@pxv/engine';
 import { readBounded } from '@pxv/runtime';
 import { takeCoverage } from 'node:v8';
 import type { ApplicationCliContext } from './arguments.js';
@@ -12,29 +18,53 @@ function runListOptions(context: ApplicationCliContext) {
     ...(context.values['limit'] !== undefined ? { limit: Number(context.value('limit')) } : {}),
   };
 }
+function workerExitCode(status: RunRecord['status']): number {
+  return status === 'completed' ? 0 : status === 'pending' ? 4 : 3;
+}
 export async function internalWorker(context: ApplicationCliContext): Promise<number> {
   const { value } = context;
 
   const { app, signal } = context;
   const runId = value('run');
-  process.send?.({ type: 'ready', runId });
-  if (process.connected) process.disconnect();
+  let expected: RunRecord | undefined;
+  let claim: WorkerLaunchClaim | undefined;
+  let exit = 3;
+  const errors: unknown[] = [];
   try {
+    claim = await ownedWorkerClaim(app.store, runId, process.env['PXV_WORKER_ATTEMPT']);
+    expected = await app.store.get<RunRecord>('runs', runId);
+    process.send?.({ type: 'ready', runId });
+    if (process.connected) process.disconnect();
     const run = await app.engine.execute(runId, signal);
-    return run.status === 'completed' ? 0 : run.status === 'pending' ? 4 : 3;
+    exit = workerExitCode(run.status);
   } catch (error) {
-    const prior = await app.store.get<RunRecord>('runs', runId);
-    if (prior)
-      await app.store.set('runs', runId, {
-        ...prior,
-        status: 'needs-inspection',
-        error: 'Worker stopped; inspect retained evidence before another review',
-      });
-    throw error;
+    errors.push(error);
+    try {
+      await recordWorkerFailure(
+        app.store,
+        expected,
+        claim,
+        'Worker stopped; inspect retained evidence before another review',
+      );
+    } catch (secondary) {
+      errors.push(secondary);
+    }
   } finally {
-    if (process.env['NODE_V8_COVERAGE']) takeCoverage();
-    await app.store.delete('worker-launch', runId);
+    try {
+      if (process.env['NODE_V8_COVERAGE']) takeCoverage();
+    } catch (secondary) {
+      errors.push(secondary);
+    }
+    try {
+      await releaseWorkerClaim(app.store, runId, claim);
+    } catch (secondary) {
+      errors.push(secondary);
+    }
   }
+  if (errors.length > 1)
+    throw new AggregateError(errors, 'Worker stopped; secondary evidence or cleanup failure');
+  if (errors.length) throw errors[0];
+  return exit;
 }
 export async function agentCommand(context: ApplicationCliContext): Promise<number> {
   const { io, value, flag, output, command } = context;

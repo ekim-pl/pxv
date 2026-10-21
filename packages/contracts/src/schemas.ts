@@ -148,7 +148,14 @@ export const sharedApkEffectSchema = z
   .object({
     packageId,
     users: z.array(
-      z.object({ user: androidUserIdentitySchema, versionCode: integer, signerSha256: sha256 }).strict(),
+      z
+        .object({
+          user: androidUserIdentitySchema,
+          versionCode: integer,
+          signerSha256: sha256,
+          sha256: sha256.optional(),
+        })
+        .strict(),
     ),
   })
   .strict()
@@ -765,7 +772,11 @@ const profileObservationSchema = z
     profileId: id,
     user: androidUserIdentitySchema,
     packages: z
-      .array(z.object({ packageId, versionCode: integer, signerSha256: sha256 }).strict())
+      .array(
+        z
+          .object({ packageId, versionCode: integer, signerSha256: sha256, sha256: sha256.optional() })
+          .strict(),
+      )
       .refine((value) => distinct(value, (item) => item.packageId), 'Duplicate observed package'),
     settings: z
       .array(settingObservationSchema)

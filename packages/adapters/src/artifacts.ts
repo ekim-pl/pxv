@@ -130,6 +130,14 @@ export class ArtifactService {
     );
     return { packageId: packageId(match[1]), versionCode, signerSha256: currentApkSigner(verification) };
   }
+  /** Hash exactly the bytes authenticated by the package and signature inspectors. */
+  async contentIdentity(path: string, signal?: AbortSignal): Promise<ApkIdentity & { sha256: string }> {
+    const sha256 = await fileDigest(path, MAX_APK_BYTES, signal);
+    const identity = await this.identity(path, signal);
+    if ((await fileDigest(path, MAX_APK_BYTES, signal)) !== sha256)
+      throw new AdapterError('APK changed during verification');
+    return { ...identity, sha256 };
+  }
   async inspect(
     path: string,
     policy: Pick<ArtifactPolicy, 'packageId' | 'versionCode' | 'sha256' | 'signerSha256'>,

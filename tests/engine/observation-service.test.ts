@@ -29,10 +29,18 @@ const artifact: ArtifactPolicy = {
   signerSha256: hashB,
 };
 function effect(packageId = artifact.packageId): SharedApkEffect {
-  return { packageId, users: [{ user: owner, versionCode: 12, signerSha256: hashB }] };
+  return { packageId, users: [{ user: owner, versionCode: 12, signerSha256: hashB, sha256: hashA }] };
 }
 
 describe('enrolled read-only observations', () => {
+  it('requires fresh content measurements without filling historical records', async () => {
+    const port = new MemoryPort();
+    delete port.observation.profiles[0]!.packages[0]!.sha256;
+    await expect(new ObservationService(context, port).observe(target)).rejects.toThrow(
+      'content measurements',
+    );
+    expect(port.observation.profiles[0]!.packages[0]).not.toHaveProperty('sha256');
+  });
   it('accepts exact enrolled USB and Wi-Fi targets and passes policy plus cancellation through the observation port', async () => {
     const port = new MemoryPort();
     const inspect = vi.spyOn(port, 'inspect');
@@ -78,6 +86,21 @@ describe('enrolled read-only observations', () => {
   });
 });
 describe('device-wide shared APK observations', () => {
+  it('rejects missing hashes even for users outside the configured profiles', async () => {
+    const port = new MemoryPort();
+    vi.spyOn(port, 'sharedEffects').mockResolvedValue([
+      {
+        packageId: artifact.packageId,
+        users: [
+          { user: owner, versionCode: 12, signerSha256: hashB, sha256: hashA },
+          { user: secondary, versionCode: 12, signerSha256: hashB },
+        ],
+      },
+    ]);
+    await expect(
+      new ObservationService(context, port).sharedEffects(target, [artifact.packageId]),
+    ).rejects.toThrow('content measurements');
+  });
   it('skips inspection for an empty request but rejects installs when the shared-effect port is unavailable', async () => {
     const port = new MemoryPort();
     const inspect = vi.spyOn(port, 'sharedEffects');
@@ -97,7 +120,7 @@ describe('device-wide shared APK observations', () => {
     const port = new MemoryPort();
     const signal = new AbortController().signal;
     const first = effect();
-    first.users.unshift({ user: secondary, versionCode: 12, signerSha256: hashB });
+    first.users.unshift({ user: secondary, versionCode: 12, signerSha256: hashB, sha256: hashA });
     const other = effect('org.example.other');
     const inspect = vi.spyOn(port, 'sharedEffects').mockResolvedValue([first, other]);
     const service = new ObservationService(context, port);
@@ -129,8 +152,8 @@ describe('device-wide shared APK observations', () => {
     const next = service.nextEffects(baseline, artifact, secondary);
     expect(baseline).toEqual(saved);
     expect(next.find((row) => row.packageId === artifact.packageId)?.users).toEqual([
-      { user: owner, versionCode: 20, signerSha256: hashB },
-      { user: secondary, versionCode: 20, signerSha256: hashB },
+      { user: owner, versionCode: 20, signerSha256: hashB, sha256: hashA },
+      { user: secondary, versionCode: 20, signerSha256: hashB, sha256: hashA },
     ]);
     expect(next.find((row) => row.packageId === 'org.example.other')).toEqual(effect('org.example.other'));
     expect(service.nextEffects(next, artifact, secondary)).toEqual(next);

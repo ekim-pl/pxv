@@ -20,6 +20,7 @@ import { initializeProject, policyCommand, projectGuide, staticGuide } from './p
 import { agentCommand, internalWorker } from './run-command.js';
 import { selectedContext } from './selection.js';
 import { assertExtensionExecution } from './command-registry.js';
+import type { Store } from '@pxv/runtime';
 export type { CliIo } from './arguments.js';
 async function externalCommand(context: CliContext): Promise<number | undefined> {
   const { section, command } = context;
@@ -62,13 +63,20 @@ async function usingApplication(context: ProjectCliContext): Promise<number> {
     context.command === 'recover' ||
     (context.section === 'agent' && context.command === 'cancel') ||
     (context.section === 'seedvault' && context.command === 'disconnect');
-  const app = recovery
-    ? await application(projectRoot, resources, readOnlyCommand(context), true)
-    : await application(projectRoot, resources, readOnlyCommand(context));
+  const readOnly = readOnlyCommand(context);
+  const offline =
+    recovery ||
+    context.section === 'lifecycle' ||
+    (context.section === 'handoff' && context.command === 'accept');
+  const app = await application(projectRoot, resources, {
+    readOnly,
+    verifyInstalledExtensions: !readOnly && !offline,
+  });
   const controller = new AbortController();
   const interrupt = (): void => controller.abort(new Error('Operator interrupted'));
   process.once('SIGINT', interrupt);
   process.once('SIGTERM', interrupt);
+  let failure: unknown;
   try {
     return await applicationCommand({
       ...context,
@@ -76,10 +84,22 @@ async function usingApplication(context: ProjectCliContext): Promise<number> {
       signal: controller.signal,
       launcher: await workerLauncher(),
     });
+  } catch (error) {
+    failure = error;
+    throw error;
   } finally {
     process.removeListener('SIGINT', interrupt);
     process.removeListener('SIGTERM', interrupt);
-    await app.store.close();
+    await disposeApplication(app.store, failure);
+  }
+}
+async function disposeApplication(store: Store, failure: unknown): Promise<void> {
+  try {
+    await store.close();
+  } catch (error) {
+    if (failure !== undefined)
+      throw new AggregateError([failure, error], 'Application failed and storage disposal failed');
+    throw error;
   }
 }
 function readOnlyCommand({ section, command }: ProjectCliContext): boolean {

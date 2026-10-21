@@ -61,7 +61,7 @@ export const observation: DeviceObservation = {
     {
       profileId: 'admin',
       user: { userId: 0, serialNo: 0, name: 'Administrator' },
-      packages: [{ packageId: 'org.example.vpn', versionCode: 12, signerSha256: hashB }],
+      packages: [{ packageId: 'org.example.vpn', versionCode: 12, signerSha256: hashB, sha256: hashA }],
       settings: [{ namespace: 'secure', key: 'screensaver_enabled', value: '0' }],
       permissions: [
         { packageId: 'org.example.vpn', permission: 'android.permission.POST_NOTIFICATIONS', granted: true },

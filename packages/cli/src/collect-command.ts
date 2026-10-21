@@ -9,6 +9,7 @@ import {
 } from '@pxv/contracts';
 import {
   assertProjectFresh,
+  assertFinalizationResolved,
   assertRegistryAnchor,
   containedPath,
   mergeCollectedRegistryValues,
@@ -181,6 +182,7 @@ async function collectionOperation(
   document: PhoneRegistryDocument,
   commit: Commit,
 ): Promise<void> {
+  await assertFinalizationResolved(context.app.store, target.device.assetId);
   const operationId = `${source.name}-${randomUUID()}`;
   const generation = await readRegistryGeneration(context.app.store, target.device);
   const scope = new ResourceScope(context.app.store, target.device.canonicalSerial, operationId);
@@ -213,6 +215,7 @@ export async function collectCommand(
 ): Promise<number> {
   const source = collectionSource(context.command);
   validateCollection(context, target, source);
+  await assertFinalizationResolved(context.app.store, target.device.assetId);
   const password = await registryPassword(context);
   try {
     const path = await containedPath(context.project.root, 'secrets/phone-registry.pxv');

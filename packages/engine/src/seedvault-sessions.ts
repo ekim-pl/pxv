@@ -15,21 +15,38 @@ interface ConnectionSession {
   at: string;
 }
 const collection = 'seedvault-connections';
-async function sessions(store: Store): Promise<ConnectionSession[]> {
-  const rows = await store.entries<ConnectionSession>(collection, 1000);
-  if (rows.length === 1000)
-    throw new Error('Connection history reached its inspection limit; retain and reconcile it');
-  return rows.map(({ value }) => value);
+function validRecoveryRecord(
+  value: ConnectionSession | undefined,
+  operationId: string,
+): value is ConnectionSession {
+  return (
+    value !== undefined &&
+    value.schemaVersion === 1 &&
+    value.operationId === operationId &&
+    ['connecting', 'connected', 'disconnecting'].includes(value.status)
+  );
+}
+async function* sessions(store: Store): AsyncGenerator<ConnectionSession> {
+  let cursor: string | undefined;
+  do {
+    const page = await store.entriesPage<ConnectionSession>(collection, {
+      ...(cursor ? { cursor } : {}),
+      limit: 1000,
+    });
+    for (const { value } of page.items) yield value;
+    cursor = page.nextCursor ?? undefined;
+  } while (cursor !== undefined);
 }
 
 export async function seedvaultConnections(
   store: Store,
   target: SelectedTarget,
 ): Promise<ConnectionSession[]> {
-  return (await sessions(store)).filter(
-    (value) =>
-      value.assetId === target.device.assetId && value.deviceSerial === target.device.canonicalSerial,
-  );
+  const matches: ConnectionSession[] = [];
+  for await (const value of sessions(store))
+    if (value.assetId === target.device.assetId && value.deviceSerial === target.device.canonicalSerial)
+      matches.push(value);
+  return matches;
 }
 
 /** Host socket obligations stay visible; paired-host trust must be removed privately on the phone. */
@@ -47,7 +64,7 @@ export class SeedvaultConnectionSession {
     if (request.recoverOperationId) {
       const previous = await store.get<ConnectionSession>(collection, request.recoverOperationId);
       if (
-        !previous ||
+        !validRecoveryRecord(previous, request.recoverOperationId) ||
         !request.disconnect ||
         !previous.cleanupRequired ||
         previous.assetId !== target.device.assetId ||
@@ -89,19 +106,20 @@ export class SeedvaultConnectionSession {
   }
 
   async complete(disconnected: boolean): Promise<void> {
+    const at = new Date().toISOString();
+    if (disconnected) await this.resolvePrevious(at);
     const next: ConnectionSession = {
       ...this.value,
-      at: new Date().toISOString(),
+      at,
       status: disconnected ? 'disconnected' : 'connected',
       cleanupRequired: !disconnected,
     };
     await this.save(this.value, next);
     this.value = next;
-    if (disconnected) await this.resolvePrevious();
   }
 
-  private async resolvePrevious(): Promise<void> {
-    for (const previous of await sessions(this.store)) {
+  private async resolvePrevious(at: string): Promise<void> {
+    for await (const previous of sessions(this.store)) {
       if (
         previous.operationId === this.operationId ||
         !previous.cleanupRequired ||
@@ -113,7 +131,7 @@ export class SeedvaultConnectionSession {
         ...previous,
         status: 'disconnected',
         cleanupRequired: false,
-        at: this.value.at,
+        at,
       });
     }
   }

@@ -49,6 +49,8 @@ export class ObservationService implements ObservationReader {
   async observe(target: SelectedTarget, signal?: AbortSignal): Promise<DeviceObservation> {
     this.assertTarget(target);
     const value = validateObservation(await this.port.inspect(target, this.project.policy, signal));
+    if (value.profiles.some((profile) => profile.packages.some((artifact) => !artifact.sha256)))
+      throw new Error('Installed APK content measurements are required for current observations');
     if (digest(value.device) !== digest(target.device))
       throw new Error('Observed identity differs from enrollment');
     return value;
@@ -63,6 +65,8 @@ export class ObservationService implements ObservationReader {
     if (!this.port.sharedEffects)
       throw new Error('Device-wide APK review service is required before planning an install');
     const effects = canonicalEffects(await this.port.sharedEffects(target, packageIds, signal));
+    if (effects.some((effect) => effect.users.some((entry) => !entry.sha256)))
+      throw new Error('Installed APK content measurements are required before reviewing shared effects');
     if (digest(effects.map((effect) => effect.packageId)) !== digest([...packageIds].sort()))
       throw new Error('Shared APK effect inspection is incomplete');
     return effects;
@@ -80,9 +84,15 @@ export class ObservationService implements ObservationReader {
           ...item,
           versionCode: artifact.versionCode,
           signerSha256: artifact.signerSha256,
+          sha256: artifact.sha256,
         }));
         if (!users.some((item) => sameAndroidUser(item.user, user)))
-          users.push({ user, versionCode: artifact.versionCode, signerSha256: artifact.signerSha256 });
+          users.push({
+            user,
+            versionCode: artifact.versionCode,
+            signerSha256: artifact.signerSha256,
+            sha256: artifact.sha256,
+          });
         return { ...effect, users };
       }),
     );

@@ -6,6 +6,8 @@ import type * as TestModule4 from '../../packages/cli/src/seedvault-command.js';
 import type * as TestModule5 from '../../packages/cli/src/seedvault-port.js';
 import type * as TestModule6 from '../../packages/cli/src/workflow-port.js';
 import type * as TestModule7 from '../contracts/fixtures.js';
+import type * as ConnectionModule from '../../packages/engine/src/seedvault-connection.js';
+import type * as RuntimeModule from '@pxv/runtime';
 import { importModule } from './../test-api.js';
 globalThis.__pxvTestFile = import.meta.url;
 
@@ -17,6 +19,8 @@ import type * as EngineModule from '@pxv/engine';
 import type { ApplicationCliContext } from '../../packages/cli/src/arguments.js';
 
 import type { ApplicationDependencies } from '../../packages/cli/src/dependencies.js';
+import { basePolicy } from '../engine/fixtures.js';
+import { toPolicyDocument } from '@pxv/contracts';
 
 type SeedvaultExecutionContext = Parameters<SeedvaultWorkflowPort['executeProfile']>[3];
 
@@ -25,18 +29,20 @@ const mocks = vi.hoisted(() => ({
   connections: vi.fn(),
   question: vi.fn(),
   close: vi.fn(),
+  approval: vi.fn(),
 }));
 vi.mock('@pxv/engine', async (original) => ({
   ...(await original<typeof EngineModule>()),
   connectSeedvaultEndpoint: mocks.connect,
   seedvaultConnections: mocks.connections,
+  assertApprovedProject: mocks.approval,
 }));
 vi.mock('node:readline/promises', () => ({
   createInterface: () => ({ question: mocks.question, close: mocks.close }),
 }));
 // Module exports are called without a receiver.
 
-const { mkdtemp, rm, writeFile } = await importModule<typeof TestModule0>(
+const { mkdtemp, mkdir, rm, writeFile } = await importModule<typeof TestModule0>(
   'node:fs/promises',
   import.meta.url,
 );
@@ -71,6 +77,17 @@ const { createWorkflowPort } = await importModule<typeof TestModule6>(
 
 const { device, product } = await importModule<typeof TestModule7>(
   '../contracts/fixtures.js',
+  import.meta.url,
+);
+const { createProject, loadProject, saveInventory, writePolicyLock } = await importModule<
+  typeof EngineModule
+>('@pxv/engine', import.meta.url);
+const { connectSeedvaultEndpoint: actualConnect } = await importModule<typeof ConnectionModule>(
+  '../../packages/engine/src/seedvault-connection.js',
+  import.meta.url,
+);
+const { SqliteStore, CommandRunner } = await importModule<typeof RuntimeModule>(
+  '@pxv/runtime',
   import.meta.url,
 );
 
@@ -126,6 +143,7 @@ beforeEach(async () => {
   mocks.connections.mockReset().mockResolvedValue([]);
   mocks.question.mockReset().mockResolvedValue('123456');
   mocks.close.mockReset();
+  mocks.approval.mockReset().mockResolvedValue(undefined);
 });
 afterEach(async () => {
   vi.restoreAllMocks();
@@ -136,6 +154,78 @@ afterEach(async () => {
 });
 
 describe('Seedvault command routing', () => {
+  it.each(['deleted', 'corrupt', 'replaced', 'changed-and-renewed'])(
+    'rechecks real project ownership after the private pairing prompt: %s',
+    async (fault) => {
+      const code = join(root, 'resources');
+      await mkdir(code);
+      await writeFile(join(code, 'product.json'), JSON.stringify(product));
+      const created = await createProject(
+        join(root, 'project'),
+        product,
+        toPolicyDocument(basePolicy()),
+        code,
+      );
+      await saveInventory(created, { schemaVersion: 1, devices: [device] });
+      const project = await loadProject(created.root, product, code);
+      await writePolicyLock(project);
+      const store = await SqliteStore.open(join(root, 'state.sqlite'));
+      const lock = join(project.root, 'policy.lock.json');
+      mocks.approval.mockImplementation(async () => {
+        // This real preflight precedes the mocked terminal question.
+        const { assertApprovedProject } = await import('../../packages/engine/src/policy-lock.js');
+        await assertApprovedProject(project);
+      });
+      mocks.connect.mockImplementation(actualConnect);
+      mocks.question.mockImplementation(async () => {
+        if (fault === 'deleted') await rm(lock);
+        else if (fault === 'corrupt') await writeFile(lock, '{invalid');
+        else if (fault === 'replaced')
+          await writeFile(lock, JSON.stringify({ ...project.resolved, digest: 'a'.repeat(64) }));
+        else {
+          await writeFile(
+            join(project.root, project.config.policyFile),
+            JSON.stringify(toPolicyDocument({ ...project.policy, name: 'Changed baseline' })),
+          );
+          await writePolicyLock(await loadProject(project.root, product, code));
+        }
+        return '123456';
+      });
+      Object.defineProperty(stdin, 'isTTY', { configurable: true, value: true });
+      const command = vi.spyOn(CommandRunner.prototype, 'run');
+      const f = context('connect', {
+        endpoint: '192.0.2.10:39111',
+        'pair-endpoint': '192.0.2.10:39112',
+        yes: true,
+      });
+      f.ctx.project = project;
+      f.ctx.app = {
+        ...f.ctx.app,
+        store,
+        engine: { ...f.ctx.app.engine, controlRoot: join(root, 'control') },
+      } as ApplicationCliContext['app'];
+      try {
+        await expect(seedvaultCommand(f.ctx)).rejects.toThrow(
+          fault === 'changed-and-renewed' ? 'Project source changed' : 'explicitly renew policy lock',
+        );
+        expect(mocks.question).toHaveBeenCalledTimes(1);
+        expect(command).not.toHaveBeenCalled();
+        expect(await store.entries('seedvault-connections')).toEqual([]);
+      } finally {
+        await store.close();
+      }
+    },
+  );
+  it('checks approval before dry-run output or requesting a private pairing code', async () => {
+    mocks.approval.mockRejectedValue(new Error('Policy lock is missing'));
+    for (const flags of [
+      { endpoint: '192.0.2.10:39111', 'dry-run': true },
+      { endpoint: '192.0.2.10:39111', 'pair-endpoint': '192.0.2.10:39112', yes: true },
+    ])
+      await expect(seedvaultCommand(context('connect', flags).ctx)).rejects.toThrow('Policy lock is missing');
+    expect(mocks.question).not.toHaveBeenCalled();
+    expect(mocks.connect).not.toHaveBeenCalled();
+  });
   it('keeps historical reports accessible while refusing new optional recovery operations', async () => {
     const backup = context('backup');
     backup.ctx.product = { ...product, features: { extensions: false, seedvault: false } };

@@ -5,6 +5,8 @@ import { createMaster, verifyMaster } from '../../tools/lib/personal-master.mjs'
 import { fileHash, treeFiles } from '../../tools/lib/personal-files.mjs';
 import { createPersonalMaster, recoverPersonalDevice } from '../../tools/lib/personal-workflows.mjs';
 import { qualifiedAdapter } from '../../tools/lib/personal-validation.mjs';
+import { invoke } from '../../tools/lib/personal-cli.mjs';
+import { resolvePolicy, toPolicyDocument, type ProjectConfig } from '@pxv/contracts';
 import {
   fakePxv,
   fakeResources,
@@ -38,6 +40,135 @@ function answer(question: string) {
   if (question.includes('Type REPLACEMENT')) return Promise.resolve('REPLACEMENT');
   return Promise.resolve('done');
 }
+it('preserves UTF-8 JSON and diagnostics across every byte boundary', async () => {
+  const expected = JSON.stringify({ name: 'Właściciel', text: 'Zażółć 🧪' });
+  const bin = await fakePxv(
+    fixture.root,
+    `const b=Buffer.from(${JSON.stringify(expected)}),i=Number(process.argv[process.argv.indexOf('--split')+1]);for(const s of [process.stdout,process.stderr])s.write(b.subarray(0,i));setTimeout(()=>{for(const s of [process.stdout,process.stderr])s.write(b.subarray(i));},30);`,
+  );
+  const session = {
+    root: fixture.root,
+    bin,
+    project: fixture.projectRoot,
+    asset: 'all',
+    operator: 'Self',
+    signal: new AbortController().signal,
+    prompt: answer,
+  };
+  for (let split = 1; split < Buffer.byteLength(expected); split++) {
+    const result = await invoke(session, ['--split', String(split)]);
+    expect(result.stdout).toBe(expected);
+    expect(result.stderr).toBe(expected);
+  }
+});
+for (const fault of ['deleted', 'corrupt', 'changed-and-renewed'])
+  it(`rechecks backup approval after the physical checkpoint: ${fault}`, async () => {
+    const resources = await fakeResources(fixture),
+      log = join(fixture.root, 'calls.jsonl');
+    const bin = await fakePxv(
+      fixture.root,
+      `import{appendFileSync}from'node:fs';appendFileSync(${JSON.stringify(log)},'UNEXPECTED CONNECTION');`,
+    );
+    const lockPath = join(fixture.projectRoot, 'policy.lock.json');
+    const session = {
+      root: resources,
+      bin,
+      project: fixture.projectRoot,
+      asset: 'all',
+      operator: 'Self',
+      signal: new AbortController().signal,
+      prompt: async () => {
+        if (fault === 'deleted') await rm(lockPath);
+        else if (fault === 'corrupt') await writeFile(lockPath, '{invalid');
+        else {
+          const policy = { ...fixture.selected, name: 'Reviewed replacement policy' };
+          await writeFile(join(fixture.projectRoot, 'policy.json'), JSON.stringify(toPolicyDocument(policy)));
+          const config = JSON.parse(
+            await readFile(join(fixture.projectRoot, 'pxv.project.json'), 'utf8'),
+          ) as ProjectConfig;
+          await writeFile(
+            lockPath,
+            JSON.stringify(
+              resolvePolicy(policy, config, fixture.identity.product, fixture.identity.engineDigest),
+            ),
+          );
+        }
+        return 'done';
+      },
+    };
+    await expect(
+      createPersonalMaster(session, {
+        'backup-only': true,
+        'usb-root': fixture.usb,
+        'backup-dir': fixture.destination,
+        'seedvault-adapter': fixture.adapter,
+        'coverage-file': fixture.coverageFile,
+        endpoint: '192.0.2.10:37123',
+        'pair-endpoint': '192.0.2.10:41234',
+      }),
+    ).rejects.toThrow(
+      fault === 'changed-and-renewed' ? 'restart the workflow' : 'explicitly renew policy lock',
+    );
+    await expect(lstat(log)).rejects.toThrow();
+    await expect(lstat(fixture.destination)).rejects.toThrow();
+  });
+for (const fault of ['missing', 'corrupt', 'policy', 'configuration', 'executable'])
+  for (const dryRun of [false, true])
+    it(`rejects ${fault} backup approval before prompts or commands (dry run: ${dryRun})`, async () => {
+      const resources = await fakeResources(fixture);
+      const lockPath = join(fixture.projectRoot, 'policy.lock.json');
+      if (fault === 'missing') await rm(lockPath);
+      if (fault === 'corrupt') await writeFile(lockPath, '{invalid');
+      if (fault === 'policy') {
+        const path = join(fixture.projectRoot, 'policy.json');
+        const value = JSON.parse(await readFile(path, 'utf8')) as Record<string, unknown>;
+        await writeFile(path, JSON.stringify({ ...value, name: 'Changed policy' }));
+      }
+      if (fault === 'configuration') {
+        const path = join(fixture.projectRoot, 'pxv.project.json');
+        const value = JSON.parse(await readFile(path, 'utf8')) as Record<string, unknown>;
+        await writeFile(
+          path,
+          JSON.stringify({ ...value, insertMetadata: { projectName: 'Changed project' } }),
+        );
+      }
+      if (fault === 'executable')
+        await writeFile(
+          join(resources, 'packages/engine/dist/integrity.js'),
+          `export async function engineIntegrity(){return '${'c'.repeat(64)}';}`,
+        );
+      const before = fault === 'missing' ? undefined : await readFile(lockPath, 'utf8');
+      const questions: string[] = [];
+      await expect(
+        createPersonalMaster(
+          {
+            root: resources,
+            bin: '/no/device/commands',
+            project: fixture.projectRoot,
+            asset: 'all',
+            operator: 'Self',
+            signal: new AbortController().signal,
+            prompt: (question: string) => {
+              questions.push(question);
+              return answer(question);
+            },
+          },
+          {
+            'backup-only': true,
+            'dry-run': dryRun,
+            'usb-root': fixture.usb,
+            'backup-dir': fixture.destination,
+            'seedvault-adapter': fixture.adapter,
+            'coverage-file': fixture.coverageFile,
+            endpoint: '192.0.2.10:37123',
+          },
+        ),
+      ).rejects.toThrow('explicitly renew policy lock');
+      expect(questions).toEqual([]);
+      if (before === undefined) await expect(lstat(lockPath)).rejects.toThrow();
+      else expect(await readFile(lockPath, 'utf8')).toBe(before);
+      await expect(lstat(fixture.destination)).rejects.toThrow();
+    });
 it('retains old or unrelated encrypted trees with an explicitly unverified incomplete status', async () => {
   await writeFile(
     join(fixture.usb, '.SeedVaultAndroidBackup/metadata'),

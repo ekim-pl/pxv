@@ -29,6 +29,7 @@ import {
   qualifiedAdapter,
   readCoverage,
   requirePersonalRecovery,
+  requireBackupApproval,
   validateRestoreReport,
 } from './personal-validation.mjs';
 
@@ -117,12 +118,21 @@ async function install(session, device, enroll) {
   );
   await jsonCommand(session, ['device', 'inspect', '--asset', session.asset, '--transport', 'usb']);
 }
+/** @param {any} session @param {Options} options */
+async function verifyBackupCheckpoint(session, options) {
+  if (
+    options['backup-only'] &&
+    (await requireBackupApproval(session.root, session.project)) !== session.backupApproval
+  )
+    throw new Error('Backup approval baseline changed during the physical checkpoint; restart the workflow');
+}
 /** @param {any} session @param {Options} options @param {any} device */
 async function connectStorage(session, options, device) {
   await checkpoint(
     session,
     'Keep the phone connected by USB. Enable Wireless debugging on the trusted local network and obtain its advertised TLS address/port.\nKeep PINs and pairing codes out of files and logs. The optional pairing prompt belongs to PXV.',
   );
+  await verifyBackupCheckpoint(session, options);
   const args = [
     'seedvault',
     'connect',
@@ -267,6 +277,8 @@ export async function createPersonalMaster(session, options) {
     destination = resolve(option(options, 'backup-dir'));
   await distinctRoots([session.project, usb, destination]);
   await absent(destination);
+  if (options['backup-only'])
+    session.backupApproval = await requireBackupApproval(session.root, session.project);
   const initial = await createInputs(session, options);
   if (options['dry-run']) return printDryRun('create', session, options, initial.device);
   session.adapter = await qualifiedAdapter(option(options, 'seedvault-adapter'));
@@ -286,7 +298,7 @@ export async function createPersonalMaster(session, options) {
       session,
       'Complete personal app/account/MFA setup in every profile, verify the intended layout, and retain required app-specific exports separately. Enter all secrets privately on the phone; review your coverage inventory before backing up.',
     );
-  } else await jsonCommand(session, ['policy', 'lock', '--yes']);
+  }
   const expected = await connectStorage(session, options, initial.device);
   const report = await seedvaultOperation(session, option(options, 'seedvault-adapter'), 'backup');
   await returnToUsb(session, options);

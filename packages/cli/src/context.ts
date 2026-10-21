@@ -34,9 +34,9 @@ export async function productAt(root: string): Promise<ProductDescriptor> {
 }
 async function verifyExtensions(
   project: Awaited<ReturnType<typeof loadProject>>,
-  skip: boolean,
+  required: boolean,
 ): Promise<void> {
-  if (skip || !project.config.extensions.length) return;
+  if (!required || !project.config.extensions.length) return;
   if (project.product.features?.extensions === false)
     throw new Error(
       'This core product cannot execute projects with extensions; remove them explicitly or use an extension-enabled product',
@@ -50,15 +50,19 @@ async function verifyExtensions(
   for (const extension of project.config.extensions) await manager.inspect(extension);
 }
 
+export interface ApplicationOptions {
+  readOnly?: boolean;
+  verifyInstalledExtensions?: boolean;
+}
 export async function application(
   root: string,
   resources: string,
-  readOnly = false,
-  recovery = false,
+  options: ApplicationOptions = {},
 ): Promise<{ engine: WorkflowEngine; store: SqliteStore; runner: CommandRunner; android: AndroidAdapter }> {
+  const { readOnly = false, verifyInstalledExtensions = !readOnly } = options;
   const product = await productAt(resources);
   const project = await loadProject(root, product, resources);
-  await verifyExtensions(project, readOnly || recovery);
+  await verifyExtensions(project, verifyInstalledExtensions);
   const database = join(project.root, 'state/pxv.sqlite3');
   await access(database); // Only project init may create a database.
   const store = await SqliteStore.open(database, { readOnly });

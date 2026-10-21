@@ -41,6 +41,13 @@ Review the authored policy before enrollment or execution. The bundled five-prof
 
 Define an `apps` catalog once and reference its IDs in each profile's `apps` list. Pin package ID, version code, APK SHA-256, signer SHA-256 and an approved source. Android package versions are shared across users; profiles cannot independently install conflicting versions.
 
+Installed managed apps must use one standalone APK. PXV verifies package, version,
+signer and SHA-256 from the same pulled bytes. Different content at the same
+version/signer requires a reviewed reinstall, including effects on other users.
+Split installations require explicit maintenance; PXV never removes them
+automatically. Missing or mismatched current hashes block acceptance/finalization.
+Older authentic handoffs remain historical evidence without invented hashes.
+
 ### Resolve and update app pins
 
 `policy resolve-apps` fills missing app version, content-hash and signer pins from
@@ -94,9 +101,7 @@ pxv policy lock --project-root "$P"
 pxv guide project --project-root "$P" --kind pixel --locale en
 ```
 
-Planning, submission, execution/resume, refresh, attestation and finalization require a matching policy lock. `policy validate` reports `policyLockStatus`: `current`, `missing`, `stale` or `invalid`. Explicitly renew after policy, configuration, extension or executable changes. Inspection, cancellation, typed recovery, offline records and custody remain accessible.
-
-Select the reviewed policy in `pxv.project.json` before validating and locking it.
+Planning through finalization requires a matching lock. `policy validate` reports `policyLockStatus` (`current`, `missing`, `stale`, `invalid`). Explicitly renew after policy, configuration, extension or executable changes. Inspection, cancellation, typed recovery and offline records work without installed extensions. Custody uses the original handoff across baseline changes until lifecycle invalidation. Select the reviewed policy in `pxv.project.json` before validating/locking.
 
 ## 3. Enroll one exact physical device
 
@@ -188,6 +193,11 @@ After provisioning, attestation can use an expired execution plan if measurement
 
 ## 7. Check, finalize and transfer custody
 
+Recipe/probe readiness requires complete results, the exact source action/run and
+retained execution checkpoints. Assisted app setup needs its consumed audit-backed
+witness. Preserve incomplete or ambiguous evidence for inspection; never edit proofs
+to claim readiness. Worker failures preserve newer progress and completed records.
+
 Before final signoff, you may collect agreed registry values with the three optional device collectors in section 9. Complete collection before debugging is disabled.
 
 Read current requirements and stored readiness, then perform the actual checks on the phone:
@@ -215,6 +225,24 @@ pxv device finalize --project-root "$P" --asset "$ASSET" \
   --transport usb --operator "$OPERATOR" --locale en
 ```
 
+`finalization-inspection` blocks incomplete shutdown. Inspect the phone/evidence, complete required recovery, then use the [maintenance procedure](../../../docs/operators/recovery-and-maintenance.md#recover-incomplete-finalization) for new provisioning and acceptance. Do not retry shutdown or claim custody. Storage/decoding failures are errors, not VPN tasks. Custody authenticates the full original plan; altered/incomplete evidence blocks it.
+
+The retained intent also blocks new planning, submission, refresh, execution/resume,
+attestation, extension contributions, Seedvault and collectors after policy or
+executable changes. Lock renewal cannot clear it. Inspection, history, cancellation,
+typed recovery, disconnect and offline records stay available; explicit maintenance
+archives it before newly reviewed provisioning.
+
+In an enabled recovery product, backup-only preflight also checks current policy
+approval during dry runs, before pairing/connecting. Validate and explicitly renew
+missing, corrupt or stale locks after upgrades; automation never renews approval.
+Connection history has no 1,000-record ceiling. Failed disconnect reconciliation
+retains cleanup for explicit retry and preserves unrelated sessions.
+
+Every new Seedvault connection requires current approval, checked again after prompts.
+Backup-only work stops if its initial baseline changes while waiting, even after lock
+renewal; restart the workflow. Disconnect and inspected cleanup stay available.
+
 After finalization, physically verify **USB debugging and Wireless debugging are both off**. Confirm the bootloader remains locked and OEM unlocking is off. Confirm the phone is in the recipient's custody before recording acceptance:
 
 ```sh
@@ -224,7 +252,7 @@ pxv handoff export --project-root "$P" --asset "$ASSET" \
   --locale en --output /absolute/path/to/handoff
 ```
 
-Custody completes the matching run; status/history then show `completed` without acceptance instructions. Exact retained evidence also corrects older reports. Before finalization, `measurement-freshness` flags invalid, future or expired measurements (15 minutes); `policy-lock` flags an unapproved baseline. Historical custody does not expire: do not repeat provisioning merely to refresh old measurements.
+Custody completes the matching run without further acceptance instructions; subset/extension completion alone does not prove custody. Reports flag `measurement-freshness` (invalid, future or over 15 minutes) and `policy-lock`. Unavailable readiness retains history with `ready: false`, `readinessStatus: unavailable` and a reason. Historical custody survives expiry; never reprovision solely to refresh it.
 
 The handoff packet is Markdown/HTML from its retained policy snapshot. Review it before sharing. Generic guide PDFs are instructions, not device acceptance evidence.
 
@@ -293,7 +321,7 @@ the registry. `--html-only` can replace the Chromium option. Use a separate outp
 directory and omit `--policy`. Both private export paths use the same contact details.
 See [project insert metadata](../../../guides/README.md#project-names-and-support-contacts).
 
-Flashing, profile creation, credential-default writes and lifecycle changes stale affected bindings; old values remain history. Registry commands are local/offline and do not configure phones or supply provisioning secrets. Per-profile Oblivion notification-wipe behavior is user-described as affecting the whole phone and is unqualified for any exact app/build. Keep its keys separate from GrapheneOS duress values; never place real keys in notifications, logs, ordinary exports or tests.
+Flashing, profile creation, credential defaults and lifecycle changes stale affected registry bindings; history remains. Offline records neither configure phones nor supply provisioning secrets. Oblivion notification-wipe behavior is user-described as phone-wide and unqualified for any exact app/build. Keep its keys separate from GrapheneOS duress; never include real keys in notifications, logs, ordinary exports or tests.
 
 ## 10. Handle interruptions and later maintenance
 
@@ -307,13 +335,13 @@ pxv device recover --project-root "$P" --asset "$ASSET" \
   --run ORIGINAL_OPERATION_ID --inspected
 ```
 
-Cancellation is a request, not proof of cleanup. Use the original operation ID named by retained recovery evidence. Never delete SQLite state, fences, locks or receipts to retry. Reused Android user IDs/names do not authorize cleanup against a new user serial. Some unresolved native cleanup needs host restart and inspected recovery.
+Cancellation does not prove cleanup. Use the original operation ID from recovery evidence. Never delete SQLite state, fences, locks or receipts. Reused Android user IDs/names cannot authorize cleanup against a different user serial. Uncertain native cleanup may require host restart and inspected recovery.
 
 Record `lifecycle maintenance|policy-change|loss|retirement --asset ID --operator NAME --note TEXT` for the applicable event. Notes contain no secrets. These events invalidate earlier handoff evidence; a new deployment needs fresh review and acceptance. Use `--erased` only after erasure was actually confirmed.
 
 ## Offline rehearsal and reference
 
-Without a physical canary, the shortest rehearsal uses a new dedicated project and a synthetic policy:
+For an offline rehearsal, use a new project and synthetic policy:
 
 ```sh
 pxv project init --path /private/path/offline-rehearsal --policy /path/to/synthetic-policy.json
@@ -321,6 +349,4 @@ pxv policy validate --project-root /private/path/offline-rehearsal
 pxv guide project --project-root /private/path/offline-rehearsal --kind pixel --locale en
 ```
 
-Initialization records a lock. Synthetic registry/workflow tests verify host behavior only; they cannot qualify flashing, UI recipes, VPN behavior, restoration or physical custody. Rehearse phone operations only on a disposable canary.
-
-See the [command reference](../../../docs/operators/command-reference.md), [automation/MCP](../../../docs/ai-agents/workflow-and-recovery.md), [Docker operation](../../../docs/operators/host-setup.md), [security boundaries](../../../SECURITY.md) and [verification status](../../../docs/operators/acceptance.md). Community disables extensions and experimental Seedvault automation. Manual backup/restore requires a separate phone procedure. Historical physical records qualify their recorded candidate.
+Initialization records a lock. Synthetic tests qualify host behavior only; verify flashing, UI recipes, VPN, restoration and custody separately on a disposable canary. References: [commands](../../../docs/operators/command-reference.md), [automation/MCP](../../../docs/ai-agents/workflow-and-recovery.md), [Docker](../../../docs/operators/host-setup.md), [security](../../../SECURITY.md), [verification](../../../docs/operators/acceptance.md). Community disables extensions and experimental Seedvault. Verify manual backup/restore separately; physical results qualify only their recorded candidate.

@@ -14,6 +14,13 @@ reviewed OpenSSH signing identity. HTTPS alone is not a publisher identity.
 Repository inputs also require authenticated, fresh index evidence and rollback
 checks.
 
+Managed installed APKs are verified from one pulled standalone APK: SHA-256,
+package, version and signer describe the same stable bytes. Split installations
+require explicit maintenance; PXV never uninstalls them automatically. Content
+differences require reviewed reinstalls even at the same version, including effects
+on other Android users. Older retained handoffs can authenticate original custody;
+missing historical hashes do not establish newly verified content.
+
 Mutating subprocess inputs cross private IPC; command specifications do not persist
 secret argv/environment/stdin. Cancellation or process loss does not prove reversal
 or cleanup. Native reservations and application obligations remain until inspected,
@@ -31,6 +38,21 @@ ADB authorization and USB access remain operator responsibilities. Debugging is
 provisioning access: physically verify both debugging toggles are off and helpers
 are removed before separate recipient custody confirmation. Lifecycle changes
 invalidate prior readiness; a retirement record does not erase a phone.
+
+An incomplete debugging-shutdown intent blocks new device-changing work even after
+policy or executable changes. Inspection, typed recovery, disconnect and offline
+records remain available. Explicit maintenance archives the intent and invalidates
+old plans before new provisioning. Backup-only automation, including dry runs,
+requires an authentic current policy lock before connecting or pairing; renewal
+requires operator validation and explicit approval, including after upgrades.
+
+Recipe/probe acceptance requires complete results, exact retained execution lineage
+and observation checkpoints; assisted recipe completion also needs its consumed
+audit-backed witness receipt. Malformed evidence blocks current readiness without
+rewriting history. Original-baseline historical custody remains available. Every
+new Seedvault connection rechecks approval under ownership after prompts; disconnect
+and inspected cleanup remain accessible. Worker error handling cannot replace a
+competing run or remove another launch attempt's claim.
 
 ## Private information
 

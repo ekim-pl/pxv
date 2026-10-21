@@ -71,6 +71,7 @@ async function run(args: string[]): Promise<string> {
 }
 let directory: string;
 let apkPolicy: ArtifactPolicy;
+let alternateApk: string;
 let artifacts: ArtifactService;
 let repo: RepositoryService;
 let signedJar: string;
@@ -229,6 +230,36 @@ beforeAll(async () => {
       signerSha256: signer,
       path: signed,
     };
+    alternateApk = join(directory, 'alternate.apk');
+    await writeFile(
+      manifest,
+      (await readFile(manifest, 'utf8')).replace(
+        'android:label="fixture"',
+        'android:label="different content"',
+      ),
+    );
+    await run([
+      aapt,
+      'package',
+      '-f',
+      '-M',
+      manifest,
+      '-I',
+      join(sdk, 'platforms/android-35/android.jar'),
+      '-F',
+      unsigned,
+    ]);
+    await run([
+      apksigner,
+      'sign',
+      '--ks',
+      keyStore,
+      '--ks-pass',
+      'pass:fixture-only',
+      '--out',
+      alternateApk,
+      unsigned,
+    ]);
   }
 }, 60_000);
 afterAll(async () => {
@@ -236,6 +267,15 @@ afterAll(async () => {
 });
 afterEach(() => vi.unstubAllGlobals());
 describe('real cryptographic artifact checks', () => {
+  it('distinguishes signed APK content with identical package, version and certificate', async (context) => {
+    if (!apkAvailable) return context.skip('Android crypto fixtures explicitly disabled');
+    const original = await artifacts.contentIdentity(apkPolicy.path!);
+    const alternate = await artifacts.contentIdentity(alternateApk);
+    expect({ ...original, sha256: undefined }).toEqual({ ...alternate, sha256: undefined });
+    expect(original.sha256).toBe(apkPolicy.sha256);
+    expect(alternate.sha256).not.toBe(original.sha256);
+    await expect(artifacts.inspect(alternateApk, apkPolicy)).rejects.toThrow('SHA-256');
+  });
   it('retains verifier refusal when the child exits before consuming streamed input', async () => {
     const inputFile = join(directory, 'early-exit-input');
     await writeFile(inputFile, Buffer.alloc(8 * 1024 * 1024));
