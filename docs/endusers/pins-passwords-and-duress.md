@@ -23,7 +23,9 @@ When preparation pauses for your private work:
 
 1. Finish the named app setup, imports, MFA, and consent in the correct profile.
 2. Set or verify ordinary screen locks in every intended profile. Privately replace
-   supplied defaults when agreed, then check ordinary unlocking.
+   supplied defaults when agreed, then check ordinary unlocking. If primary PIN
+   scrambling is configured, privately confirm the requested keypad layout: shuffled
+   when enabled and standard when disabled.
 3. Confirm each profile’s final language.
 4. Complete optional GrapheneOS duress setup only after ordinary locks and language
    are correct, following the supervised instructions for this build.

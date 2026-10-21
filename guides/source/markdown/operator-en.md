@@ -155,6 +155,8 @@ Keep the returned run ID and read its status and `pauseReason`. A manual pause l
 
 Private initial credential defaults, if selected, come from `secrets/credentials/ASSET.json`: a `schemaVersion: 1` document whose `values` map resolves policy secret references. Use an owned `0600` file and private directories; never put values in commands or notes. Omit default declarations for private manual setup. Defaults initialize a profile with no existing screen lock and are not a password-change mechanism; accepted defaults are skipped on repeat runs for the same stable user.
 
+Set `scramblePinLayout: true` on each profile that should use a shuffled primary PIN keypad, or `false` for the standard layout; omission leaves it unmanaged. This applies during profile settings before PIN initialization and remains managed on later provisioning runs. The fleet starters enable it on profiles with initial PINs. Stored-setting readback is followed by private visual verification at `normal_credentials`; it does not configure fingerprint second-factor PIN scrambling.
+
 For automatic duress defaults, `ownerCredentialRef` must resolve to the owner's **current ordinary unlock credential**, updated privately if it changed. Never supply an existing duress credential for authentication. Unsupported commands or existing locks require inspection and a fresh reviewed manual path; a successful default write does not prove a real unlock.
 
 ## 6. Complete the named phone checkpoints

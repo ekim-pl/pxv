@@ -23,6 +23,7 @@ import {
   canonicalJson,
   canonicalLocale,
   profileLocale,
+  effectiveProfileSettings,
   sameAndroidUser,
   validAndroidUserName,
   validAndroidSettingKey,
@@ -385,7 +386,7 @@ export class AndroidAdapter {
       if (installed.has(wanted.packageId))
         packages.push(await this.installedIdentity(target, user, wanted.packageId, signal, inspected));
     const settings: SettingPolicy[] = [];
-    for (const setting of profile.settings)
+    for (const setting of effectiveProfileSettings(profile))
       settings.push({ ...setting, value: await this.readSetting(target, user, setting, signal) });
     const permissions: PermissionPolicy[] = [];
     for (const permission of profile.permissions)

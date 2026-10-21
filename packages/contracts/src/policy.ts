@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { profileLocale } from './locales.js';
+import { effectiveProfileSettings } from './profile-settings.js';
 import {
   validateInventory,
   validateObservation,
@@ -200,7 +201,7 @@ function checkProfile(profile: ProfilePolicy, actual: ObservedProfile, check: Ob
   check(`${profile.id}.name`, profile.name, actual.user.name);
   check(`${profile.id}.owner`, profile.kind === 'owner', actual.user.userId === 0);
   checkPackages(profile, actual, check);
-  for (const setting of profile.settings) {
+  for (const setting of effectiveProfileSettings(profile)) {
     const observed = actual.settings.find(
       (item) => item.namespace === setting.namespace && item.key === setting.key,
     );
@@ -289,7 +290,11 @@ function normalCredentialsRequired(policy: ExecutionPolicy): boolean {
     policy.requiredAttestations.includes('normal_credentials') ||
     policy.capabilities.includes('normal_credentials') ||
     policy.profiles.some(
-      (profile) => profileLocale(profile) || profile.defaultCredential || profile.defaultDuress,
+      (profile) =>
+        profileLocale(profile) ||
+        profile.defaultCredential ||
+        profile.defaultDuress ||
+        profile.scramblePinLayout !== undefined,
     )
   );
 }
@@ -398,6 +403,15 @@ export function buildReadinessRequirements(
   return [...policy.profiles.map(vpnSettingsRequirement), ...acceptance];
 }
 
+function pinScramblingInstructions(profiles: ProfilePolicy[]): string {
+  const configured = profiles.filter((profile) => profile.scramblePinLayout !== undefined);
+  if (!configured.length) return '';
+  const layouts = configured
+    .map((profile) => `${profile.id}: ${profile.scramblePinLayout ? 'shuffled' : 'standard'}`)
+    .join(', ');
+  return ` For profiles using a PIN, privately verify the primary PIN keypad layout: ${layouts}.`;
+}
+
 /** Private normal credentials precede language setup; duress is always last and never activated. */
 export function finalSetupActions(policy: ExecutionPolicy): Action[] {
   const actions: Action[] = [];
@@ -412,7 +426,7 @@ export function finalSetupActions(policy: ExecutionPolicy): Action[] {
     actions.push({
       kind: 'manual',
       capability: 'normal_credentials',
-      instructions: `Recipient privately sets and verifies normal credentials for every selected profile: ${policy.profiles.map((profile) => profile.id).join(', ')}. Privately verify or replace configured defaults. Confirm all profiles before proceeding to language setup. Do not record any value.`,
+      instructions: `Recipient privately sets and verifies normal credentials for every selected profile: ${policy.profiles.map((profile) => profile.id).join(', ')}. Privately verify or replace configured defaults. Confirm all profiles before proceeding to language setup. Do not record any value.${pinScramblingInstructions(policy.profiles)}`,
     });
   }
   for (const profile of policy.profiles) {

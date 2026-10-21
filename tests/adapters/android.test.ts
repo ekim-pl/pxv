@@ -21,6 +21,8 @@ import {
 } from '../../packages/adapters/src/index.js';
 import {
   evaluateObservation,
+  effectiveProfileSettings,
+  PIN_SCRAMBLING_KEY,
   observationDigest,
   type AndroidUserIdentity,
   type ExecutionPolicy,
@@ -99,6 +101,8 @@ class FakeRunner implements CommandRunner {
   failedListing = false;
   mutations: string[][] = [];
   calls: { args: string[]; options?: CommandOptions }[] = [];
+  pinValues = new Map<number, string>();
+  pinWrite: 'retain' | 'fail' | 'ignore' = 'retain';
   localeValues = new Map<number, string>();
   values = new Map([
     ['secure:always_on_vpn_app', 'null'],
@@ -187,6 +191,15 @@ class FakeRunner implements CommandRunner {
       const get = command.indexOf('get');
       const put = command.indexOf('put');
       const deletion = command.indexOf('delete');
+      if (command.includes(PIN_SCRAMBLING_KEY)) {
+        const userId = Number(command[command.indexOf('--user') + 1]);
+        if (get >= 0) return result(`${this.pinValues.get(userId) ?? 'null'}\n`);
+        if (put >= 0) {
+          if (this.pinWrite === 'fail') return result('setting rejected', 1);
+          if (this.pinWrite === 'retain') this.pinValues.set(userId, command[put + 3] ?? '');
+        }
+        return result('');
+      }
       if (get >= 0 && command[get + 1] === 'system' && command[get + 2] === 'system_locales') {
         const value = this.localeValues.get(Number(command[command.indexOf('--user') + 1]));
         if (value !== undefined) return result(`${value}\n`);
@@ -239,6 +252,86 @@ function adapter(runner: FakeRunner): AndroidAdapter {
   artifacts.checkCompatibility = () => Promise.resolve();
   return new AndroidAdapter({ runner, artifacts, adbServer: endpoint });
 }
+describe('per-profile primary PIN scrambling', () => {
+  it('writes and observes independently for the owner and secondary Android user', async () => {
+    const runner = new FakeRunner();
+    const android = adapter(runner);
+    const configured = structuredClone(policy);
+    configured.profiles[0]!.scramblePinLayout = true;
+    configured.profiles[1]!.scramblePinLayout = false;
+    const identities = [user, { userId: 0, serialNo: 0, name: 'Owner' }];
+    for (const [index, profile] of configured.profiles.entries())
+      await android.applySetting(target, identities[index]!, effectiveProfileSettings(profile)[0]!, {
+        lease: {},
+      });
+    expect(runner.pinValues).toEqual(
+      new Map([
+        [10, '1'],
+        [0, '0'],
+      ]),
+    );
+    const measured = await android.inspect(target, configured);
+    expect(measured.profiles.find((profile) => profile.profileId === 'work')?.settings).toContainEqual({
+      namespace: 'secure',
+      key: PIN_SCRAMBLING_KEY,
+      value: '1',
+    });
+    expect(measured.profiles.find((profile) => profile.profileId === 'owner')?.settings).toContainEqual({
+      namespace: 'secure',
+      key: PIN_SCRAMBLING_KEY,
+      value: '0',
+    });
+    expect(
+      evaluateObservation(configured, measured)
+        .checks.filter((check) => check.key.includes(PIN_SCRAMBLING_KEY))
+        .every((check) => check.passed),
+    ).toBe(true);
+    const writes = runner.mutations
+      .map((args) => args.map(decode))
+      .filter((args) => args.includes(PIN_SCRAMBLING_KEY));
+    expect(writes.map((args) => args.slice(args.indexOf('settings')))).toEqual([
+      ['settings', '--user', '10', 'put', 'secure', PIN_SCRAMBLING_KEY, '1'],
+      ['settings', '--user', '0', 'put', 'secure', PIN_SCRAMBLING_KEY, '0'],
+    ]);
+  });
+
+  it.each(['fail', 'ignore'] as const)('rejects an unconfirmed setting write (%s)', async (mode) => {
+    const runner = new FakeRunner();
+    runner.pinWrite = mode;
+    await expect(
+      adapter(runner).applySetting(
+        target,
+        user,
+        {
+          namespace: 'secure',
+          key: PIN_SCRAMBLING_KEY,
+          value: '1',
+        },
+        { lease: {} },
+      ),
+    ).rejects.toThrow();
+    expect(runner.pinValues.has(user.userId)).toBe(false);
+  });
+
+  it('refuses a reused Android user identity before writing the setting', async () => {
+    const runner = new FakeRunner();
+    runner.serialNo++;
+    await expect(
+      adapter(runner).applySetting(
+        target,
+        user,
+        {
+          namespace: 'secure',
+          key: PIN_SCRAMBLING_KEY,
+          value: '1',
+        },
+        { lease: {} },
+      ),
+    ).rejects.toThrow();
+    expect(runner.mutations).toEqual([]);
+  });
+});
+
 describe('observation-scoped shared APK inspection', () => {
   function sharedPolicy(): ExecutionPolicy {
     const configured = structuredClone(policy);

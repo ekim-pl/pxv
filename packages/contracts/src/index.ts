@@ -9,3 +9,4 @@ export * from './policy-document.js';
 export * from './phone-registry.js';
 export * from './network-address.js';
 export * from './android-validation.js';
+export * from './profile-settings.js';

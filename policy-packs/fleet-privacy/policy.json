@@ -103,6 +103,7 @@
         "alwaysOn": false,
         "lockdown": false
       },
+      "scramblePinLayout": true,
       "defaultCredential": {
         "type": "pin",
         "secretRef": "contacts-pin"
@@ -126,6 +127,7 @@
         "alwaysOn": false,
         "lockdown": false
       },
+      "scramblePinLayout": true,
       "defaultCredential": {
         "type": "pin",
         "secretRef": "google-pin"

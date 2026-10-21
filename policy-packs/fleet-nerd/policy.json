@@ -110,6 +110,7 @@
         "alwaysOn": false,
         "lockdown": false
       },
+      "scramblePinLayout": true,
       "defaultCredential": {
         "type": "pin",
         "secretRef": "contacts-pin"
@@ -133,6 +134,7 @@
         "alwaysOn": false,
         "lockdown": false
       },
+      "scramblePinLayout": true,
       "defaultCredential": {
         "type": "pin",
         "secretRef": "google-pin"
@@ -154,6 +156,7 @@
         "alwaysOn": false,
         "lockdown": false
       },
+      "scramblePinLayout": true,
       "defaultCredential": {
         "type": "pin",
         "secretRef": "testing-pin"
@@ -174,6 +177,7 @@
         "alwaysOn": false,
         "lockdown": false
       },
+      "scramblePinLayout": true,
       "defaultCredential": {
         "type": "pin",
         "secretRef": "onion-pin"

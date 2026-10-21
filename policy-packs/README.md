@@ -138,6 +138,12 @@ Create `secrets/credentials/<assetId>.json` inside the private project, replacin
 }
 ```
 
+The `fleet-nerd` and `fleet-privacy` profiles with initial PINs explicitly set
+`scramblePinLayout: true`. Set it to `false` for the standard primary PIN layout,
+or omit it to leave scrambling unmanaged. The recipient privately checks the
+keypad layout alongside ordinary unlocking; saved-setting readback alone does not
+confirm its visual behavior.
+
 Normal defaults initialize profiles without an existing screen lock. The recipient privately verifies or replaces each default at `normal_credentials`, then confirms each profile's locale through the accepted UI path or the manual `language:<profileId>` checkpoint. Owner duress setup follows locale setup and retains the manual `duress` checkpoint. See [initial screen locks, language and duress](../docs/operators/policy-reference.md#initial-screen-locks-language-and-duress) for credential formats, private-file conditions and the current-owner-credential procedure. This starter remains a structural template, with no certified hardening or live-device acceptance claim.
 
 Select a pack at new-project initialization with `project init --path DIRECTORY --policy FILE`, or explicitly review an installed extension's declared policy contribution. Validate the resulting project policy and write a fresh lock before planning. Copying a file is not policy acceptance.

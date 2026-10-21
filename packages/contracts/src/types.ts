@@ -112,6 +112,8 @@ export interface ProfilePolicy {
   permissions: PermissionPolicy[];
   /** Saved Android VPN configuration; this does not prove live VPN enforcement. */
   vpn: VpnPolicy;
+  /** Manage the primary PIN keypad layout; omitted leaves it unmanaged. */
+  scramblePinLayout?: boolean;
   defaultCredential?: DefaultCredentialPolicy;
   defaultDuress?: DefaultDuressPolicy;
   defaultLocale?: string;

@@ -329,7 +329,7 @@ account passwords or wipe keys into public recipe text, policies or operator not
 
 ## Initial screen locks, language and duress
 
-Profiles may declare `defaultCredential` and `defaultLocale`. Only the owner may
+Profiles may declare `defaultCredential`, `scramblePinLayout` and `defaultLocale`. Only the owner may
 declare device-wide `defaultDuress`. This is a partial profile fragment to merge
 into an otherwise complete profile:
 
@@ -344,6 +344,21 @@ into an otherwise complete profile:
   }
 }
 ```
+
+Set `"scramblePinLayout": true` on an individual profile to shuffle its primary
+PIN keypad, or `false` to request the standard layout. Omit the option to leave
+scrambling unmanaged. This also supports profiles whose PIN is entered privately
+rather than initialized by `defaultCredential`. It manages the per-user secure
+setting `lockscreen_scramble_pin_layout`; fingerprint second-factor PINs are a
+separate setting. Password entry has no PIN keypad to shuffle.
+
+Scrambling runs in the profile settings stage before initial screen locks and the
+private `normal_credentials` checkpoint. It remains independently managed after
+initial credentials have been accepted, so provisioning can correct setting drift
+without resetting a PIN. A matching raw entry in `settings[]` is accepted once;
+a conflicting value is rejected. Readback confirms the stored setting, while the
+recipient privately checks the actual keypad layout during normal-credential
+confirmation. See [GrapheneOS PIN scrambling](https://grapheneos.org/features#pin-scrambling).
 
 Supply private values in `secrets/credentials/<assetId>.json` within the project:
 

@@ -5,6 +5,7 @@ import {
   finalSetupActions,
   requiredAttestations,
   profileLocale,
+  effectiveProfileSettings,
   validateAction,
   validateArtifact,
   osPolicyForTarget,
@@ -124,7 +125,7 @@ export class PreparationService implements Preparation {
       case 'install-apk':
         return profile.packages.some((value) => sameArtifact(value, action.artifact));
       case 'setting':
-        return profile.settings.some((value) => digest(value) === digest(action.setting));
+        return effectiveProfileSettings(profile).some((value) => digest(value) === digest(action.setting));
       case 'permission':
         return profile.permissions.some((value) => digest(value) === digest(action.permission));
       case 'vpn':
@@ -353,7 +354,7 @@ export class PreparationService implements Preparation {
     observed: DeviceObservation['profiles'][number] | undefined,
   ): Action[] {
     const actions: Action[] = [];
-    for (const setting of profile.settings)
+    for (const setting of effectiveProfileSettings(profile))
       if (!observed?.settings.some((value) => digest(value) === digest(setting)))
         actions.push({ kind: 'setting', profileId: profile.id, setting });
     for (const permission of profile.permissions)

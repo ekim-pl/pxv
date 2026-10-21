@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { canonicalLocale } from './locales.js';
+import { PIN_SCRAMBLING_KEY } from './profile-settings.js';
 import { validateEgressCidr } from './network-address.js';
 import {
   validAndroidUserName,
@@ -399,6 +400,7 @@ const profileBaseSchema = z
     settings: z.array(settingPolicySchema),
     permissions: z.array(permissionPolicySchema),
     vpn: vpnPolicySchema,
+    scramblePinLayout: z.boolean().optional(),
     defaultCredential: defaultCredentialPolicySchema.optional(),
     defaultDuress: defaultDuressPolicySchema.optional(),
     defaultLocale: locale.optional(),
@@ -423,6 +425,19 @@ function validateProfileReferences(
     context.addIssue({ code: 'custom', message: 'Profile defaultLocale conflicts with alternate language' });
   if (!distinct(value.packages, (artifact) => artifact.packageId))
     context.addIssue({ code: 'custom', message: 'Duplicate profile package' });
+  if (
+    value.scramblePinLayout !== undefined &&
+    value.settings.some(
+      (setting) =>
+        setting.namespace === 'secure' &&
+        setting.key === PIN_SCRAMBLING_KEY &&
+        setting.value !== (value.scramblePinLayout ? '1' : '0'),
+    )
+  )
+    context.addIssue({
+      code: 'custom',
+      message: 'Profile scramblePinLayout conflicts with the raw secure setting',
+    });
   if (!distinct(value.settings, (setting) => `${setting.namespace}:${setting.key}`))
     context.addIssue({ code: 'custom', message: 'Duplicate profile setting' });
   if (!distinct(value.permissions, (permission) => `${permission.packageId}:${permission.permission}`))
