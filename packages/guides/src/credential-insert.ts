@@ -54,6 +54,16 @@ function status(text: string): string {
   return '<p class="state">' + escape(text).replaceAll('\n', '<br>') + '</p>';
 }
 
+function fieldRow({ label, field }: InsertField, common: string | undefined, t: InsertLabels): string {
+  const value = field
+    ? (metadata(field, t) !== common ? status(metadata(field, t)) : '') +
+      '<pre class="value">' +
+      escape(field.value) +
+      '</pre>'
+    : '<p class="manual">' + escape(t.manual) + '</p><div class="write-line"></div>';
+  return '<tr><td><article class="entry"><h3>' + escape(label) + '</h3>' + value + '</article></td></tr>';
+}
+
 class InsertRenderer {
   private readonly t: InsertLabels;
   private readonly pageStyles: string[] = [];
@@ -106,20 +116,7 @@ class InsertRenderer {
       counts.set(key, (counts.get(key) ?? 0) + 1);
     }
     const common = [...counts].sort((a, b) => b[1] - a[1])[0]?.[0];
-    const rows = recorded
-      .map(({ label, field }) => {
-        const own = metadata(field, this.t);
-        return (
-          '<tr><td><article class="entry"><h3>' +
-          escape(label) +
-          '</h3>' +
-          (own !== common ? status(own) : '') +
-          '<pre class="value">' +
-          escape(field.value) +
-          '</pre></article></td></tr>'
-        );
-      })
-      .join('');
+    const rows = fields.map((entry) => fieldRow(entry, common, this.t)).join('');
     const attributes = identity ? ' profile-section" style="page:' + pageName : '';
     return (
       '<table class="credential-section' +
@@ -128,7 +125,7 @@ class InsertRenderer {
       intro +
       this.heading(title, identity, common, counts.size > 1) +
       '</th></tr></thead><tbody>' +
-      (rows || '<tr><td><p class="empty">' + escape(this.t.empty) + '</p></td></tr>') +
+      rows +
       '</tbody></table>'
     );
   }
@@ -173,9 +170,7 @@ class InsertRenderer {
       '</div><p class="note">' +
       escape(t.instructions) +
       '</p>' +
-      (record.fields.phoneNumber
-        ? this.section(t.device, '', [{ label: t.phoneNumber, field: record.fields.phoneNumber }])
-        : '') +
+      this.section(t.device, '', [{ label: t.simPhoneNumbers, field: record.fields.phoneNumber }]) +
       (record.profiles.length
         ? record.profiles.map((profile) => this.profile(profile, false)).join('')
         : '<p class="empty">' + escape(t.empty) + '</p>') +
@@ -185,7 +180,7 @@ class InsertRenderer {
 
   private erasure(): string {
     const { t, record } = this;
-    const profiles = record.profiles.filter((profile) => profile.fields.oblivionNotificationWipeKey);
+    const profiles = record.profiles;
     const intro =
       '<h2 class="group-title">Oblivion</h2><p class="note">' + escape(t.oblivionInstructions) + '</p>';
     return (

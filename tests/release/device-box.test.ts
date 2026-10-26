@@ -108,8 +108,25 @@ it('keeps supplied data inert and preserves whitespace-sensitive values', () => 
   expect(script).not.toContain('untrusted()');
   data.fields = {};
   data.profiles[0]!.fields = {};
-  expect(renderDeviceBoxCard(data)).toContain('No values recorded.');
+  expect(renderDeviceBoxCard(data).match(/class="write-line"/gu)).toHaveLength(6);
   expect(() => renderDeviceBoxCard(data, { locale: 'de' as 'en' })).toThrow('locale');
+});
+
+it('preserves a multiline device SIM list and supplies writable missing fields in both card languages', () => {
+  const data = record();
+  data.fields = { phoneNumber: value('+48000000001\n+48000000002', 'unknown') };
+  data.profiles[0]!.fields = {};
+  for (const locale of ['en', 'pl'] as const) {
+    const html = renderDeviceBoxCard(data, { locale });
+    expect(html).toContain('<pre>+48000000001\n+48000000002</pre>');
+    expect(html).toContain(locale === 'en' ? 'SIM phone numbers' : 'Numery telefonów SIM');
+    expect(html.match(/class="write-line"/gu)).toHaveLength(5);
+    expect(html).toContain(
+      locale === 'en' ? 'Fill in manually / not configured:' : 'Uzupełnij ręcznie / nie skonfigurowano:',
+    );
+    expect(html).not.toContain('INITIAL');
+    expect(html).not.toContain('POCZĄTKOWE');
+  }
 });
 
 it('renders three sticker identity lines, escapes text and validates YYYYMM and identities', () => {
