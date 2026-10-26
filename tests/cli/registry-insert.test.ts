@@ -206,6 +206,31 @@ async function assertReleased(selected = context, message?: string) {
   expect(output.join()).not.toContain(password);
 }
 
+it('exports the full retained SIM number list without changing storage or exposing numbers in output', async () => {
+  const numbers = '+48000000001\n+48000000002';
+  const input = join(root, 'sim-numbers.json');
+  await writeFile(
+    input,
+    JSON.stringify({
+      fields: { phoneNumber: { value: numbers, state: 'unknown', source: 'Synthetic SIM collection' } },
+      profiles: [{ profileId: 'admin', user: { userId: 0, serialNo: 0, name: 'Administrator' }, fields: {} }],
+    }),
+    { mode: 0o600 },
+  );
+  await runCli(
+    args('registry', 'update', '--asset', device.assetId, '--file', input, '--record-revision', '1'),
+    io,
+  );
+  output.length = 0;
+  vi.clearAllMocks();
+  await assertReleased();
+  const exported = vi.mocked(guides.writeCredentialInsert).mock.calls[0]![0];
+  expect(exported.fields.phoneNumber).toMatchObject({ value: numbers, state: 'unknown' });
+  expect(exported.profiles[0]!.fields).toEqual({});
+  expect(output.join()).not.toContain('+48000000001');
+  expect(output.join()).not.toContain('+48000000002');
+});
+
 for (const [values, message] of [
   [{ all: true }, 'one exact'],
   [{ group: 'pilot' }, 'one exact'],

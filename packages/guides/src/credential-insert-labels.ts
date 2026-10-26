@@ -18,10 +18,11 @@ export const insertLabels = {
     updated: 'Updated',
     confirmed: 'Confirmed',
     empty: 'No values recorded.',
+    manual: 'Fill in manually / not configured:',
     metadataDefault: 'Unless marked otherwise:',
-    missingNote: 'Omitted fields are not recorded; this does not mean unconfigured.',
+    missingNote: 'Blank fields are not recorded. Fill in by hand or mark not configured.',
     instructions:
-      'Private - store apart from the phone. Omitted fields are not recorded, not necessarily unconfigured. States describe saved operator claims, not live device checks.',
+      'Private - store apart from the phone. Fill blank fields by hand or mark not configured. States describe saved operator claims, not live device checks.',
     destructive:
       'Never use these for ordinary unlock or tests. Detach and seal separately. GrapheneOS duress irreversibly erases the whole device, all profiles and installed eSIMs.',
     oblivionInstructions:
@@ -30,6 +31,7 @@ export const insertLabels = {
     pin: 'Ordinary PIN',
     password: 'Ordinary password',
     phoneNumber: 'Phone number',
+    simPhoneNumbers: 'SIM phone numbers',
     sessionMessengerId: 'Session ID',
     protonVpnUsername: 'Proton VPN username',
     protonVpnPassword: 'Proton VPN password',
@@ -58,10 +60,11 @@ export const insertLabels = {
     updated: 'Zaktualizowano',
     confirmed: 'Potwierdzono',
     empty: 'Nie zapisano wartości.',
+    manual: 'Uzupełnij ręcznie / nie skonfigurowano:',
     metadataDefault: 'Jeśli nie oznaczono inaczej:',
-    missingNote: 'Pominiętych pól nie zapisano; nie oznacza to braku konfiguracji.',
+    missingNote: 'Pustych pól nie zapisano. Uzupełnij ręcznie lub oznacz brak konfiguracji.',
     instructions:
-      'Dokument prywatny - przechowuj oddzielnie od telefonu. Pominiętych pól nie zapisano; nie oznacza to braku konfiguracji. Stany opisują zapis operatora, nie bieżącą kontrolę telefonu.',
+      'Dokument prywatny - przechowuj oddzielnie od telefonu. Puste pola uzupełnij ręcznie lub oznacz brak konfiguracji. Stany opisują zapis operatora, nie bieżącą kontrolę telefonu.',
     destructive:
       'Nigdy nie używaj do zwykłego odblokowania ani testów. Odłącz i zapieczętuj osobno. Kod przymusu GrapheneOS nieodwracalnie usuwa całe urządzenie, wszystkie profile i zainstalowane karty eSIM.',
     oblivionInstructions:
@@ -70,6 +73,7 @@ export const insertLabels = {
     pin: 'Zwykły PIN',
     password: 'Zwykłe hasło',
     phoneNumber: 'Numer telefonu',
+    simPhoneNumbers: 'Numery telefonów SIM',
     sessionMessengerId: 'Identyfikator Session',
     protonVpnUsername: 'Użytkownik Proton VPN',
     protonVpnPassword: 'Hasło Proton VPN',

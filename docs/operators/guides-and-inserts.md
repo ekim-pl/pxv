@@ -138,7 +138,9 @@ It includes the canonical hardware serial, device duress PIN/password, device an
 profile phone numbers, every profile's Session ID and Oblivion notification-wipe
 key. Ordinary unlock and Proton VPN credentials are omitted. Profile identity,
 effective credential states, update/confirmation times, destructive-use warnings,
-and missing-value notices remain visible. Identical metadata is shared across
+and labeled writing spaces for missing fields remain visible. The device phone
+number field includes the full saved SIM number list from `device collect-simcards`;
+profile phone numbers remain separate. Identical metadata is shared across
 consecutive fields in the same profile. Continuation cards repeat the phone serial
 and relevant profile/field identity, with card numbering. Long values wrap and
 continue without truncation or shrinking the credential font.
@@ -225,10 +227,15 @@ profile Oblivion keys. Historical revisions are not supported. Values are groupe
 one section per profile, with identical effective state and update/confirmation metadata
 shared within that section. Field-specific differences remain explicit; stale and
 unknown values are prominently flagged. Current means last operator-confirmed, not
-measured from the phone. Only recorded fields are printed; blank recipient, recovery and
-backup worksheets are omitted. Profiles without ordinary values and destructive sections
-without values are explicitly marked. Omitted fields are not recorded, which does not
-mean unconfigured.
+measured from the phone. Saved SIM numbers from `device collect-simcards` are printed
+together at device scope, separately from any profile-specific phone numbers.
+Collect and retain the numbers before exporting; the export itself remains offline.
+Every supported missing credential/account field has a labeled writing space of at
+least 8 mm, including device phone numbers, profile unlocks and phone numbers,
+Session IDs, Proton VPN details, device duress credentials and each recorded
+profile's Oblivion key. Fill blanks privately by hand or mark them not configured;
+a blank does not establish configuration state. Separate recipient, recovery and
+backup worksheets are omitted. Missing fields are not written back to the registry.
 
 The phone's canonical hardware serial is printed in the device details of both
 the ordinary and destructive sections, labeled in the selected language. It comes

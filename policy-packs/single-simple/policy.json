@@ -8,8 +8,31 @@
     "recipient_acceptance",
     "operator_signoff"
   ],
-  "repositories": [],
-  "apps": {},
+  "repositories": [
+    {
+      "id": "fdroid-official",
+      "url": "https://f-droid.org/repo",
+      "signerSha256": "43238d512c1e5eb2d6569f4a3afbf5523418b82e0a3ed1552770abb9a9c9ccab",
+      "maxAgeDays": 30,
+      "redirectHosts": []
+    }
+  ],
+  "apps": {
+    "oblivion-wipe": {
+      "packageId": "net.oblivion.wipe",
+      "versionCode": 46,
+      "sha256": "87b76f8e20e319f38eb69d0a8e3784127e9ac47f4fc76b1363af8da3ea1030e5",
+      "signerSha256": "cc7ea11578ca4339997b0473118ec8c83ed6046834a7b684acf08b174e21ea98",
+      "url": "https://f-droid.org/repo/net.oblivion.wipe_46.apk"
+    },
+    "findmyip": {
+      "packageId": "com.maksimowiczm.findmyip",
+      "versionCode": 15,
+      "sha256": "387b945ebfb6a4adc3c497ab3416c0577fec0f6c0e0935641d44bc6352aacb28",
+      "signerSha256": "8fb26f9ff3a2f955d6133789a7ebac28a348e9438df13584d1d7e66aafdd7ea6",
+      "url": "https://f-droid.org/repo/com.maksimowiczm.findmyip_15.apk"
+    }
+  },
   "profiles": [
     {
       "id": "owner",
@@ -23,7 +46,10 @@
         "lockdown": false
       },
       "defaultLocale": "en-US",
-      "apps": []
+      "apps": [
+        "oblivion-wipe",
+        "findmyip"
+      ]
     }
   ],
   "deviceSettings": []

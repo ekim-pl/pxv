@@ -35,6 +35,8 @@ header p{margin:0 0 .8mm}
 main{flex:1;min-height:0}
 footer{height:4mm;text-align:right;font-size:7pt;padding-top:1mm}
 .entry{margin:0 0 1.4mm;overflow-wrap:anywhere}
+.manual{font-size:7pt;margin:0}
+.write-line{height:8mm;border-bottom:.2mm dotted #555}
 .same-identity h2,.same-state .state{display:none}
 h2,h3{font-size:7pt;line-height:1.15;margin:0 0 .4mm}
 .state{font-size:6pt;line-height:1.15;margin:0 0 .5mm;white-space:pre-wrap}
@@ -48,7 +50,7 @@ export function renderDeviceBoxCard(record: PhoneRegistryRecord, options: CardOp
   const t = insertLabels[locale];
   const entry = (identity: string, label: string, field: PhoneRegistryValue | undefined): string => {
     if (!field)
-      return `<article class="entry"><h2>${escape(identity)}</h2><h3>${escape(label)}</h3>${escape(t.empty)}</article>`;
+      return `<article class="entry"><h2>${escape(identity)}</h2><h3>${escape(label)}</h3><p class="manual">${escape(t.manual)}</p><div class="write-line"></div></article>`;
     const metadata = [
       t.metadataDefault,
       t[field.state],
@@ -60,7 +62,7 @@ export function renderDeviceBoxCard(record: PhoneRegistryRecord, options: CardOp
   const fields = [
     entry(t.device, t.duressPin, record.fields.duressPin),
     entry(t.device, t.duressPassword, record.fields.duressPassword),
-    entry(t.device, t.phoneNumber, record.fields.phoneNumber),
+    entry(t.device, t.simPhoneNumbers, record.fields.phoneNumber),
     ...record.profiles.flatMap((profile) => {
       const identity = `${t.profile}: ${profile.user.name} (${profile.profileId}; ${profile.user.userId}/${profile.user.serialNo})`;
       return [

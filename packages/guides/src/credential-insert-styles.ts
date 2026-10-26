@@ -1,6 +1,6 @@
 import { foldPanelStyles } from './fold-packet.js';
 
-/** Compact registry records use flowing tables, without blank worksheet/header space. */
+/** Registry values flow through tables; missing fields retain space for handwriting. */
 export const credentialInsertStyles =
   foldPanelStyles +
   `
@@ -22,6 +22,7 @@ h1{font-size:12pt;line-height:1.1;margin:0 0 2mm}
 @media print{.profile-section thead .section-title,.profile-section .identity{display:none}}
 .entry{margin:0 0 1.2mm}
 .entry h3{font-size:8pt;font-weight:bold;line-height:1.15;margin:0 0 .3mm}
+.manual{font-size:8pt;line-height:1.2;margin:0}
 .entry pre.value{font:10pt/1.15 'DejaVu Sans Mono',monospace;white-space:pre-wrap;overflow-wrap:anywhere;tab-size:4;margin:0;padding:0;border:0}
 .empty{margin:0 0 1mm}
 .credential-warning{font-weight:bold;border:.6mm solid #111;padding:2mm;margin-bottom:2mm}

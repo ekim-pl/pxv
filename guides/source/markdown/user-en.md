@@ -89,7 +89,7 @@ Flashing, profile creation, certain initial credential writes and maintenance/li
 
 Ordinary reports and handoff exports omit registry values. A private retrieval deliberately creates a plaintext file that needs protection and cleanup. Registry backups and unlock material need separate protection; the operator can rotate the encryption passphrase. See [registry details](../../../docs/operators/registry.md) and [security boundaries](../../../SECURITY.md).
 
-Your preparer can supply a private registry-backed insert with ordinary credentials grouped by profile and destructive credentials on a separate foldable A4 sheet. It normally uses two sheets, with more for longer records. The asset label appears once per sheet. Omitted fields mean not recorded, not necessarily unconfigured; keep destructive sheets sealed separately.
+Your preparer can supply a private registry-backed insert with ordinary credentials grouped by profile and destructive credentials on a separate foldable A4 sheet. It normally uses two sheets, with more for longer records. The asset label appears once per sheet. Saved SIM numbers are printed for the device; profile phone numbers remain separate. Blank fields are not recorded: complete them privately by hand or mark not configured. Keep destructive sheets sealed separately.
 
 ## 7. Keep recoverable copies of your data
 

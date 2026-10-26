@@ -94,7 +94,9 @@ describe('private credential insert', () => {
       expect(html).toContain('&lt;script&gt;&amp;&quot;&#39;');
       expect(html.match(/PRIVATE-SERIAL/gu)).toHaveLength(2);
       expect(html).toContain(locale === 'en' ? 'Phone serial number' : 'Numer seryjny telefonu');
-      expect(html).toContain(locale === 'en' ? 'No values recorded.' : 'Nie zapisano wartości.');
+      expect(html).toContain(
+        locale === 'en' ? 'Fill in manually / not configured:' : 'Uzupełnij ręcznie / nie skonfigurowano:',
+      );
       expect(html).toContain(
         locale === 'en' ? 'STALE - verify privately' : 'NIEAKTUALNE - sprawdź prywatnie',
       );
@@ -114,7 +116,7 @@ describe('private credential insert', () => {
     expect(html).toContain('<pre class="value">' + secret + '</pre>');
     expect(html).not.toContain('DURESS-PIN');
     expect(html).not.toContain('OBLIVION-KEY');
-    expect(html).not.toContain('class="write-line"');
+    expect(html.match(/class="write-line"/gu)).toHaveLength(6);
     expect(html).toContain('PRIVATE-SERIAL');
   });
   it('groups ordinary values once per profile and deduplicates metadata with explicit exceptions', () => {
@@ -138,6 +140,33 @@ describe('private credential insert', () => {
     data.profiles = [];
     expect(renderCredentialInsert(data, options, 'ordinary')).toContain('No values recorded.');
     expect(renderCredentialInsert(data, options, 'erasure')).toContain('No values recorded.');
+  });
+  it('retains every saved SIM number at device scope and leaves every missing field writable in EN/PL', () => {
+    const data = record();
+    const numbers = '+48000000001\n+48000000002';
+    data.fields = { phoneNumber: value(numbers, 'unknown') };
+    data.profiles[0]!.fields = { phoneNumber: value('+48000000003') };
+    const before = structuredClone(data);
+    for (const locale of ['en', 'pl'] as const) {
+      const ordinary = renderCredentialInsert(data, { ...options, locale }, 'ordinary');
+      expect(ordinary).toContain(locale === 'en' ? 'SIM phone numbers' : 'Numery telefonów SIM');
+      expect(ordinary.match(/\+48000000001/gu)).toHaveLength(1);
+      expect(ordinary).toContain('<pre class="value">' + numbers + '</pre>');
+      expect(ordinary).toContain('+48000000003');
+      expect(ordinary.match(/class="write-line"/gu)).toHaveLength(11);
+      const erasure = renderCredentialInsert(data, { ...options, locale }, 'erasure');
+      expect(erasure.match(/class="write-line"/gu)).toHaveLength(4);
+      expect(erasure).toContain('Work');
+      expect(erasure).not.toContain('Last operator-confirmed');
+      expect(erasure).not.toContain('Ostatnio potwierdzone przez operatora');
+      expect(erasure).not.toContain(numbers);
+      delete data.fields.phoneNumber;
+      expect(
+        renderCredentialInsert(data, { ...options, locale }, 'ordinary').match(/class="write-line"/gu),
+      ).toHaveLength(12);
+      data.fields.phoneNumber = before.fields.phoneNumber!;
+    }
+    expect(data).toEqual(before);
   });
   it('writes only a private PDF and cleans the isolated renderer directory', async () => {
     const destination = join(await root(), 'private', 'insert.pdf');
@@ -286,7 +315,7 @@ function populatedRecord(count: number): PhoneRegistryRecord {
   return data;
 }
 
-it('renders one/five-profile EN/PL records on two readable A4 sheets (PXV_CHROMIUM)', async (context) => {
+it('renders one/five-profile EN/PL records with manual fields and readable A4 overflow (PXV_CHROMIUM)', async (context) => {
   const chromium = process.env['PXV_CHROMIUM'];
   if (!chromium) {
     context.skip('Set PXV_CHROMIUM to run real PDF/Poppler checks');
@@ -307,7 +336,7 @@ it('renders one/five-profile EN/PL records on two readable A4 sheets (PXV_CHROMI
         chromiumExecutable: chromium,
       });
       const pdf = await PDFDocument.load(await readFile(destination));
-      expect(pdf.getPageCount()).toBe(2);
+      expect(pdf.getPageCount()).toBeGreaterThanOrEqual(2);
       expect(pdf.getPage(0).getWidth()).toBeCloseTo((297 * 72) / 25.4, 4);
       expect(pdf.getPage(0).getHeight()).toBeCloseTo((210 * 72) / 25.4, 4);
       const text = execFileSync('pdftotext', ['-raw', destination, '-'], { encoding: 'utf8' });
@@ -316,20 +345,24 @@ it('renders one/five-profile EN/PL records on two readable A4 sheets (PXV_CHROMI
       expect(text).not.toContain(product.support.email);
       const sheets = text.split('\f').filter((page) => page.trim());
       for (const sheet of sheets) expect(sheet.match(/phone-01/gu)).toHaveLength(1);
-      expect(sheets[0]).toContain('VPN-password-0');
-      for (const sheet of sheets) expect(sheet).toContain(data.canonicalSerial);
+      const erasureStart = sheets.findIndex((sheet) => sheet.includes('DURESS-PIN'));
+      expect(erasureStart).toBeGreaterThan(0);
+      const ordinary = sheets.slice(0, erasureStart).join('\n');
+      const erasure = sheets.slice(erasureStart).join('\n');
+      expect(ordinary).toContain('VPN-password-0');
+      expect(ordinary).toContain(data.canonicalSerial);
+      expect(erasure).toContain(data.canonicalSerial);
       expect(sheets[0]).toContain(locale === 'en' ? 'Phone serial number' : 'Numer seryjny telefonu');
-      expect(sheets[1]).toContain(locale === 'en' ? 'Phone serial number' : 'Numer seryjny telefonu');
-      expect(sheets[0]).not.toContain('WIPE-key-');
-      expect(sheets[0]).not.toContain('DURESS-PIN');
-      expect(sheets[1]).toContain('DURESS-PIN');
-      expect(sheets[1]).toContain('Oblivion');
-      expect(sheets[1]).toContain('WIPE-key-0');
-      expect(sheets[1]).not.toContain('VPN-password-');
+      expect(ordinary).not.toContain('WIPE-key-');
+      expect(ordinary).not.toContain('DURESS-PIN');
+      expect(erasure).toContain('Oblivion');
+      expect(erasure).toContain('WIPE-key-0');
+      expect(erasure).not.toContain('VPN-password-');
+      expect(ordinary).toContain(locale === 'en' ? 'Fill in manually' : 'Uzupełnij ręcznie');
       for (let i = 0; i < count; i++) {
-        expect(sheets[0]).toContain('vpn-user-' + i);
-        expect(sheets[0]!.replaceAll(/\s/gu, '')).toContain('05' + String(i).repeat(64));
-        expect(sheets[1]).toContain('WIPE-key-' + i);
+        expect(ordinary).toContain('vpn-user-' + i);
+        expect(ordinary.replaceAll(/\s/gu, '')).toContain('05' + String(i).repeat(64));
+        expect(erasure).toContain('WIPE-key-' + i);
       }
       const xml = execFileSync('pdftohtml', ['-xml', '-zoom', '1', '-hidden', '-stdout', destination], {
         encoding: 'utf8',

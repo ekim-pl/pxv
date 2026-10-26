@@ -89,7 +89,7 @@ Flashowanie, tworzenie profilu, niektóre początkowe zapisy blokady i zdarzenia
 
 Zwykłe raporty i pakiety przekazania pomijają wartości rejestru. Prywatne pobranie celowo tworzy plik jawny, który trzeba chronić i usunąć po użyciu. Kopie rejestru i dane do ich odblokowania wymagają osobnej ochrony; operator może zmienić hasło szyfrowania. Przeczytaj [szczegóły rejestru](../../../docs/operators/registry.md) i [zasady bezpieczeństwa](../../../SECURITY.md).
 
-Osoba przygotowująca telefon może dostarczyć prywatną wkładkę z rejestru: zwykłe dane są pogrupowane według profilu, a dane destrukcyjne znajdują się na osobnym arkuszu A4 do złożenia. Zwykle są to dwa arkusze; dłuższy wpis wymaga większej liczby. Identyfikator pojawia się raz na arkuszu. Pominiętych pól nie zapisano; nie oznacza to braku konfiguracji. Arkusze destrukcyjne przechowuj zapieczętowane osobno.
+Osoba przygotowująca telefon może dostarczyć prywatną wkładkę z rejestru: zwykłe dane są pogrupowane według profilu, a dane destrukcyjne znajdują się na osobnym arkuszu A4 do złożenia. Zwykle są to dwa arkusze; dłuższy wpis wymaga większej liczby. Identyfikator pojawia się raz na arkuszu. Zapisane numery SIM są drukowane dla urządzenia; numery profili pozostają oddzielne. Pustych pól nie zapisano: uzupełnij je prywatnie ręcznie lub oznacz brak konfiguracji. Arkusze destrukcyjne przechowuj zapieczętowane osobno.
 
 ## 7. Zachowuj dane możliwe do odtworzenia
 
