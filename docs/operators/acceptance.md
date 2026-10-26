@@ -165,8 +165,9 @@ Before the full run, fill the private results matrix with:
   pin. Even when skipping installation, pinned OS verification must pass. Follow
   [policy format](policy-reference.md); do not invent hashes, keys or signatures.
 - Review the starter's [pinned app catalog and assignments](../../policy-packs/README.md#five-profile-apps),
-  including Rethink DNS in all five profiles, Oblivion in owner, Session/Telegram/Signal/Molly
-  in contacts, Molly in testing, Aurora Store in google and Orbot in onion. Confirm the exact versions,
+  including Oblivion Wipe and Find my IP in every profile, Rethink DNS in all five
+  profiles, Session/Telegram/Signal/Molly in contacts, Molly and Oblivion VPN in
+  testing, Aurora Store in google and Orbot in onion. Confirm the exact versions,
   content and signer digests and trusted sources, and record any private changes or
   intentional absences. Rethink's supplied APK requires arm64-v8a; replace its pin
   for x86_64 emulator work. An empty catalog qualifies only a profile-layout rehearsal,

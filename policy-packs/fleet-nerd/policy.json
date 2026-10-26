@@ -16,6 +16,13 @@
   ],
   "repositories": [
     {
+      "id": "fdroid-official",
+      "url": "https://f-droid.org/repo",
+      "signerSha256": "43238d512c1e5eb2d6569f4a3afbf5523418b82e0a3ed1552770abb9a9c9ccab",
+      "maxAgeDays": 30,
+      "redirectHosts": []
+    },
+    {
       "id": "session",
       "url": "https://fdroid.getsession.org/fdroid/repo",
       "signerSha256": "db0e5297eb65cc22d6bd93c869943bdcfcb6a07dc69a48a0dd8c7ba698ec04e6",
@@ -92,6 +99,20 @@
       "sha256": "6b79cb30d59278fd66b2740223e0592a1f8363274ac8498960491b0201b9b4f2",
       "signerSha256": "a454b87a1847a89ed7f5e70fba6bba96f3ef29c26e0981204fe347bf231dfd5b",
       "url": "https://guardianproject.info/fdroid/repo/orbot-latest.apk"
+    },
+    "oblivion-wipe": {
+      "packageId": "net.oblivion.wipe",
+      "versionCode": 46,
+      "sha256": "87b76f8e20e319f38eb69d0a8e3784127e9ac47f4fc76b1363af8da3ea1030e5",
+      "signerSha256": "cc7ea11578ca4339997b0473118ec8c83ed6046834a7b684acf08b174e21ea98",
+      "url": "https://f-droid.org/repo/net.oblivion.wipe_46.apk"
+    },
+    "findmyip": {
+      "packageId": "com.maksimowiczm.findmyip",
+      "versionCode": 15,
+      "sha256": "387b945ebfb6a4adc3c497ab3416c0577fec0f6c0e0935641d44bc6352aacb28",
+      "signerSha256": "8fb26f9ff3a2f955d6133789a7ebac28a348e9438df13584d1d7e66aafdd7ea6",
+      "url": "https://f-droid.org/repo/com.maksimowiczm.findmyip_15.apk"
     }
   },
   "profiles": [
@@ -118,7 +139,8 @@
       "defaultLocale": "en-US",
       "apps": [
         "rethink",
-        "oblivion"
+        "oblivion-wipe",
+        "findmyip"
       ]
     },
     {
@@ -142,7 +164,9 @@
         "session",
         "telegram",
         "signal",
-        "molly"
+        "molly",
+        "oblivion-wipe",
+        "findmyip"
       ]
     },
     {
@@ -163,7 +187,9 @@
       "defaultLocale": "pl-PL",
       "apps": [
         "rethink",
-        "aurora"
+        "aurora",
+        "oblivion-wipe",
+        "findmyip"
       ]
     },
     {
@@ -184,7 +210,10 @@
       "defaultLocale": "pl-PL",
       "apps": [
         "rethink",
-        "molly"
+        "molly",
+        "oblivion",
+        "oblivion-wipe",
+        "findmyip"
       ]
     },
     {
@@ -205,7 +234,9 @@
       "defaultLocale": "pl-PL",
       "apps": [
         "rethink",
-        "orbot"
+        "orbot",
+        "oblivion-wipe",
+        "findmyip"
       ]
     }
   ],

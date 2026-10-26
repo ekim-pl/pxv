@@ -1,33 +1,49 @@
 # Policy pack starters
 
-These packs demonstrate one, three, five and arbitrary profile layouts. They are structural templates, not certified hardening policies. No live device acceptance is claimed.
+These packs demonstrate one, two, three, five and arbitrary profile layouts. They are structural templates, not certified hardening policies. No live device acceptance is claimed.
 
 Use each pack's `policy.json` for Community projects. Its shared app catalog,
 profile app references and per-codename OS pins follow the [policy format](../docs/operators/policy-reference.md).
 
-Before using a pack on a phone, a product maintainer must add reviewed OS provenance, required settings, permission grants and service-specific network configuration. The nerd and privacy packs include pinned apps listed below; review their versions, sources and signer pins for the deployment. The `single-simple` and `fleet-custom` app catalogs remain empty. Add repository trust anchors if using repository-backed artifacts. Changes to the normalized execution policy change its resolved digest and invalidate the previous reviewed plan. Authoring-only changes, such as adding an unused app catalog entry, do not change that digest. Validate and lock the edited policy before reviewing a new plan.
+Before using a pack on a phone, a product maintainer must add reviewed OS provenance, required settings, permission grants and service-specific network configuration. All packs include pinned apps listed below; review their versions, sources and signer pins for the deployment. Add repository trust anchors if using repository-backed artifacts. Changes to the normalized execution policy change its resolved digest and invalidate the previous reviewed plan. Authoring-only changes, such as adding an unused app catalog entry, do not change that digest. Validate and lock the edited policy before reviewing a new plan.
 
 `fleet-nerd` retains owner, contacts, google, testing and onion roles. `single-simple` uses only the owner. `fleet-custom` demonstrates arbitrary role names and Polish recipient language. Exactly one owner is required; five profiles and the literal name owner are not engine requirements.
 
+[`bete-pl`](bete-pl/policy.json) has two profiles: owner `Admin` in `en-US` and
+secondary `contacts`, displayed as `Kontakty`, in `pl-PL`. Both profiles include
+Rethink DNS and the common apps below. Kontakty also installs Session and Molly
+from their official F-Droid repositories, using the same pins as the nerd packs.
+
 Every starter profile, including the owner, declares `defaultLocale`. Edit profiles independently, for example owner `en-US`, work `pl-PL` and travel `de-DE`. The field accepts one canonical BCP 47 language/region/script tag, such as `sr-Latn-RS`; it does not set a time zone or document language. The alternate `language` field is accepted, with conflicting aliases rejected. Locale setup runs after normal credentials and before optional duress through an accepted UI adapter or a manual checkpoint.
+
+## Common apps
+
+Every profile in every pack installs Oblivion Wipe (`net.oblivion.wipe`, catalog ID
+`oblivion-wipe`) and Find my IP (`com.maksimowiczm.findmyip`, catalog ID `findmyip`).
+The `single-simple` and `fleet-custom` catalogs contain these two apps.
+Oblivion Wipe's private setup and Android consent remain separate from installation.
+
+The Oblivion VPN app (`org.bepass.oblivion`, catalog ID `oblivion`) is installed
+only in the existing `testing` profile of `single-nerd` and `fleet-nerd`. Policies
+without a tester profile omit it from both their profiles and app catalogs.
 
 ## Five-profile apps
 
-`fleet-nerd` and `single-nerd` share these app assignments:
+`fleet-nerd` and `single-nerd` share these assignments in addition to the common apps:
 
 | Profile | Apps |
 | --- | --- |
-| owner | Rethink DNS, Oblivion |
+| owner | Rethink DNS |
 | contacts | Rethink DNS, Session, Telegram, Signal, Molly |
 | google | Rethink DNS, Aurora Store |
-| testing | Rethink DNS, Molly |
+| testing | Rethink DNS, Molly, Oblivion VPN |
 | onion | Rethink DNS, Orbot |
 
 [`fleet-privacy`](fleet-privacy/policy.json) copies `fleet-nerd`, and
 [`single-privacy`](single-privacy/policy.json) copies `single-nerd`, with the testing
 and onion profiles removed. Both privacy packs retain owner, contacts and google
-with the same app assignments above except Molly; the unused Orbot catalog entry
-is removed.
+with the same app assignments above except Molly; the unused Orbot and Oblivion VPN
+catalog entries are removed.
 `fleet-privacy` retains the fleet credential defaults and owner duress configuration
 for those three profiles. `single-privacy` retains private on-device credential
 entry with no initial credential references or duress configuration. It selects
@@ -55,19 +71,23 @@ Refresh eligible F-Droid app pins in a selected starter with
 Use the intended phone's actual SDK and ABI values, review the result, then replace
 `--dry-run` with `--yes` to write it. Run the command separately for each starter
 that should receive the update. Custom repositories require trust anchors in the
-policy. Both nerd packs declare trust anchors for Session and Molly, matching
+policy. Every pack declares the official F-Droid trust anchor for its pinned APK
+URLs. Both nerd packs and `bete-pl` also declare trust anchors for Session and Molly, matching
 their pinned direct APK URLs. See [updating app pins](../docs/operators/policy-reference.md#updating-app-pins).
 
-The existing catalog pins date from 2026-10-19; Molly was added on 2026-10-21:
+The existing catalog pins date from 2026-10-19; Molly, Oblivion Wipe and Find my IP
+were added on 2026-10-21:
 
 | Catalog ID | Version (version code) | Distribution |
 | --- | --- | --- |
 | rethink | 0.5.8 (703) | F-Droid, arm64-v8a |
-| oblivion | 8.0.0 (800) | Upstream GitHub release v8 |
+| oblivion | 8.0.0 (800) | Oblivion VPN, upstream GitHub release v8; nerd testing profiles only |
+| oblivion-wipe | 1.0.7 (46) | F-Droid; every profile in every pack |
+| findmyip | 4.1.2 (15) | F-Droid, universal; every profile in every pack |
 | session | 1.33.7 (4555) | Session repository, universal |
 | telegram | 13.0.3 (71839) | Telegram website distribution |
 | signal | 8.31.2 (176601) | Signal website distribution, universal |
-| molly | v8.19.2-4 (171904) | Molly repository, universal; nerd packs only |
+| molly | v8.19.2-4 (171904) | Molly repository, universal; nerd packs and bete-pl |
 | aurora | 4.8.4 (76) | F-Droid, universal |
 | orbot | 17.9.5-RC-4-tor-0.4.9.11 (1795300400) | Guardian Project, universal |
 
@@ -102,22 +122,31 @@ Telegram's downloaded APK signature was verified and its signer matched
 Signal's version and content hash came from its
 [update metadata](https://updates.signal.org/android/latest.json), with the signer
 checked against its [published certificate](https://signal.org/android/apk/).
-Oblivion's APK hash matched the publisher's
+Oblivion VPN's APK hash matched the publisher's
 [v8 release asset digest](https://api.github.com/repos/bepass-org/oblivion/releases/tags/v8);
 its signature, package ID and version code were inspected with Android Build Tools.
 The catalog pins each APK content hash and signer. PXV's private artifact cache
 retains the APK bytes and signing evidence. This artifact review does not claim live
 phone or routing acceptance.
 
+Oblivion Wipe and Find my IP were pinned from the official F-Droid repository on
+2026-10-21. PXV's repository verifier authenticated `entry.jar` against the F-Droid
+repository signer above. The index-v2 JSON's size and SHA-256 matched that signed
+entry; its SHA-256 was
+`900242f55ff7397aca52ffb25439f21657fbfe8cff23f80528a2725da6ce5faf`.
+Both downloaded APKs matched the authenticated sizes and digests, and Android Build
+Tools verified their signatures, package IDs and version codes. Oblivion Wipe's
+signer matches PXV's existing `collect-oblivion` signer pin.
+
 Molly comes from the [official Molly repository](https://molly.im/fdroid/repo/)
-provided for the nerd packs. Its `entry.jar` was authenticated with PXV's repository
+used by the nerd packs and `bete-pl`. Its `entry.jar` was authenticated with PXV's repository
 verifier against repository signer
 `3b7e93b1fe32c6e35a93d6ddfc5afbeb1239a7c6ea6af20ff33ed53cdc38b04a`.
 The authenticated index-v2 SHA-256 was
 `ab6d7f04c4819a3481bf5612d63f7297049de121b6068f37c33883f329d43dd9`;
 its size and digest, and the APK's size, digest, signature, package ID and version
 code were verified. This is the regular Molly build; Molly-FOSS uses a separate
-repository and signing key. Both nerd policies retain this repository's trust
+repository and signing key. Both nerd policies and `bete-pl` retain this repository's trust
 anchor for `policy update-apps`, while installing the pinned APK through its direct
 URL, like the other catalog entries. The observed repository index is dated
 2026-07-31, outside the retained 30-day update freshness window; repository updates
