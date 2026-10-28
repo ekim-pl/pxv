@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
-import { digest, observationDigest, sameAndroidUser as sameUser } from '@pxv/contracts';
-import type { SelectedTarget, DeviceObservation, AndroidUserIdentity, RecipePolicy } from '@pxv/contracts';
-import type { Store } from '@pxv/runtime';
+import { digest, observationDigest } from '@pxv/contracts';
+import type { SelectedTarget, DeviceObservation } from '@pxv/contracts';
+import type { Store, ExpectedRecord } from '@pxv/runtime';
 import type { ProjectContext } from './project.js';
 import { ResourceScope } from './recovery.js';
 import type {
@@ -9,8 +9,6 @@ import type {
   PreparedOperation,
   SetupReceiptRef,
   CapabilityEvidenceRef,
-  CapabilityProof,
-  RecipeProof,
   ReviewLineage,
 } from './workflow-types.js';
 import type { ObservationReader } from './observation-service.js';
@@ -23,8 +21,7 @@ import { checkLanguageDelta } from './setup-evidence.js';
 import type { CapabilityProofVerifier } from './capability-proof-verifier.js';
 import { pausedVpnAction, checkVpnDelta } from './vpn-evidence.js';
 import { assertFinalizationResolved } from './finalization-guard.js';
-import { validateRecipeResult } from './capability-results.js';
-import { validateEvidence } from './evidence-validation.js';
+import { PendingRecipeQuery } from './pending-recipe.js';
 export class ReviewService {
   constructor(
     readonly project: ProjectContext,
@@ -116,7 +113,11 @@ export class ReviewService {
     const cursor = this.refreshedCursor(run, previous, state.observation, baseline);
     const completedSetup = await this.checkedSetupHistory(run, target);
     const capabilityEvidence = await this.checkedCapabilityHistory(run, previous, baseline);
-    const pendingRecipeEvidenceId = await this.pausedRecipeEvidence(run, previous, baseline);
+    const checkpoint = await new PendingRecipeQuery(this.project, this.store, this.plans, run).read(
+      previous,
+      baseline,
+    );
+    const pendingRecipeEvidenceId = checkpoint?.evidenceId;
     const refreshedFrom: ReviewLineage = {
       runId: run.id,
       planDigest: previous.plan.digest,
@@ -138,7 +139,7 @@ export class ReviewService {
       ...(previous.lifecycleGeneration ? { lifecycleGeneration: previous.lifecycleGeneration } : {}),
       ...(previous.capabilities ? { capabilities: previous.capabilities } : {}),
     });
-    await this.commitRefreshedReview(run, prepared, cursor);
+    await this.commitRefreshedReview(run, prepared, cursor, checkpoint?.expected);
     return prepared;
   }
   private refreshedCursor(
@@ -191,52 +192,18 @@ export class ReviewService {
     for (const reference of references) await session.assert(reference);
     return references;
   }
-  private async pausedRecipeEvidence(
-    run: RunRecord & { cursor: number; manualGate: string },
-    previous: PreparedOperation,
-    baseline: DeviceObservation,
-  ): Promise<string | undefined> {
-    const paused = previous.plan.actions[run.cursor];
-    if (run.manualGate !== 'app_setup' || paused?.kind !== 'recipe') return undefined;
-    const id = previous.refreshedFrom?.pendingRecipeEvidenceId ?? `${run.id}:recipe:${run.cursor}`;
-    const proof = await this.store.get<CapabilityProof & RecipeProof & { kind: string }>(
-      'capability-evidence',
-      id,
-    );
-    const user = baseline.profiles.find((value) => value.profileId === paused.profileId)?.user;
-    if (!this.validPausedRecipe(proof, user, previous.plan.policyDigest, paused.recipe))
-      throw new Error('Paused recipe evidence changed; preserve it for inspection');
-    validateRecipeResult(paused.recipe, proof!.result, 'manual-pending');
-    return id;
-  }
-  private validPausedRecipe(
-    proof: (CapabilityProof & RecipeProof & { kind: string }) | undefined,
-    user: AndroidUserIdentity | undefined,
-    policyDigest: string,
-    recipe: RecipePolicy,
-  ): boolean {
-    return validateEvidence(
-      () =>
-        !!proof &&
-        !!user &&
-        proof.kind === 'recipe' &&
-        proof.status === 'manual-pending' &&
-        proof.policyDigest === policyDigest &&
-        proof.configurationDigest === digest(recipe) &&
-        sameUser(proof.user, user),
-    );
-  }
   private async commitRefreshedReview(
     run: RunRecord,
     prepared: PreparedOperation,
     cursor: number,
+    expected: ExpectedRecord[] = [],
   ): Promise<void> {
     const event = this.journal.entry(run.id, 'review-refreshed', {
       planId: prepared.plan.id,
       completedActions: cursor,
     });
     const committed = await this.store.transition({
-      expected: [{ collection: 'runs', key: run.id, value: run }],
+      expected: [{ collection: 'runs', key: run.id, value: run }, ...expected],
       changes: [
         {
           kind: 'set',

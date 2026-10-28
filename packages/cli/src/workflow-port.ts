@@ -22,6 +22,8 @@ function corePort(
       return android.inspect(target, policy, signal);
     },
     createUser: (target, profile, context) => android.createUser(target, profile, context),
+    inspectAction: (target, policy, previous, action, signal) =>
+      android.inspectAction(target, policy, previous, action, signal),
     sharedEffects: (target, packages, signal) => android.inspectSharedEffects(target, packages, signal),
     async install(target, user, artifact, context) {
       if (!artifact.path) throw new Error('Reviewed immutable APK snapshot missing');

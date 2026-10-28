@@ -10,6 +10,7 @@ import {
   reviewed,
   type AcquisitionFailure,
 } from './artifact-port-fixture.js';
+import { createArtifactPort } from '../../packages/cli/src/artifact-port.js';
 
 const target = { device, transport: device.transports[0]! };
 let fixture: Awaited<ReturnType<typeof artifactFixture>>;
@@ -41,7 +42,10 @@ it('authenticates and selects measured SDK/ABIs before exact-version fdroidcl do
     maxAgeDays: 30,
     redirectHosts: [],
   };
-  expect(fixture.index).toHaveBeenCalledExactlyOnceWith(official, { signal });
+  expect(fixture.index).toHaveBeenCalledExactlyOnceWith(official, {
+    signal,
+    packageIds: [reviewed.packageId],
+  });
   expect(fixture.candidate).toHaveBeenCalledExactlyOnceWith({ evidence, packages: {} }, reviewed.packageId, {
     sdk: 35,
     abis: ['arm64-v8a', 'armeabi-v7a'],
@@ -92,7 +96,30 @@ it('writes a private official-only configuration before either command', async (
     return original(args, options);
   });
   await acquire();
-  expect(fixture.index.mock.calls[0]?.[1]).toEqual({});
+  expect(fixture.index.mock.calls[0]?.[1]).toEqual({ packageIds: [reviewed.packageId] });
+});
+
+it('shares one authenticated repository index across all selected packages in a plan', async () => {
+  const first: ArtifactPolicy = {
+    packageId: 'org.example.app',
+    versionCode: 42,
+    sha256: reviewed.sha256,
+    signerSha256: reviewed.signerSha256,
+    repositoryId: repository.id,
+  };
+  const second: ArtifactPolicy = {
+    ...first,
+    packageId: 'org.example.second',
+    versionCode: 43,
+  };
+  fixture.deps.project.policy.profiles[0]!.packages.push(first, second);
+  const port = createArtifactPort(fixture.deps);
+  await port.snapshot(first, join(fixture.root, 'first.apk'), undefined, target);
+  await port.snapshot(second, join(fixture.root, 'second.apk'), undefined, target);
+  expect(fixture.index).toHaveBeenCalledExactlyOnceWith(repository, {
+    packageIds: ['org.example.app', 'org.example.second'],
+  });
+  expect(fixture.candidate).toHaveBeenCalledTimes(2);
 });
 
 for (const failure of [

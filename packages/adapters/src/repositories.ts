@@ -9,6 +9,7 @@ import { download, fileDigest, regularFile } from './files.js';
 import { cacheSignedFiles } from './artifact-cache.js';
 
 const MAX_INDEX_BYTES = 128 * 1024 * 1024;
+const REPOSITORY_INDEX_DOWNLOAD_TIMEOUT_MS = 600_000;
 type Row = Record<string, unknown>;
 export interface RepositoryFloor {
   signerSha256: string;
@@ -60,6 +61,8 @@ export interface IndexOptions {
   signal?: AbortSignal;
   /** Skip freshness-floor advancement; authenticated material may still be retained for later validation. */
   readOnly?: boolean;
+  /** Normalize only these package records after authenticating the complete index. */
+  packageIds?: readonly string[];
 }
 
 function strictJson(source: string): unknown {
@@ -208,7 +211,14 @@ export class RepositoryService {
         timestamp = positiveInteger(object(index['repo'], 'repository')['timestamp'], 'repository timestamp');
       }
       this.assertFresh(repository, timestamp, floor);
-      const packages = this.normalize(repository, object(index['packages'], 'package set'), isV2);
+      const rawPackages = object(index['packages'], 'package set');
+      const selected = options.packageIds ? new Set(options.packageIds.map(packageId)) : undefined;
+      const selectedPackages = selected
+        ? Object.fromEntries(
+            [...selected].filter((id) => Object.hasOwn(rawPackages, id)).map((id) => [id, rawPackages[id]]),
+          )
+        : rawPackages;
+      const packages = this.normalize(repository, selectedPackages, isV2);
       const entrySha256 = await fileDigest(jar, 32 * 1024 * 1024, options.signal);
       const materialFiles = isV2
         ? [
@@ -255,16 +265,23 @@ export class RepositoryService {
       ...(options.signal ? { signal: options.signal } : {}),
     };
     const entry = await this.verifyJar(jar, signer, 'entry.json', options.signal);
-    const version = positiveInteger(entry['version'], 'v2 entry version');
-    if (version < 20_000 || version >= 30_000)
+    const version = positiveInteger(entry['version'], 'authenticated repository entry version');
+    const isV2Entry = version >= 20_000 && version < 30_000;
+    const isV3Entry = version >= 30_000 && version < 40_000;
+    if (!isV2Entry && !isV3Entry)
       throw new AdapterError('Unsupported authenticated repository entry version');
+    // Entry 3.x adds age/diff metadata but still publishes a complete index-v2 descriptor.
     const descriptor = object(entry['index'], 'v2 index descriptor');
     const size = positiveInteger(descriptor['size'], 'v2 index size');
     if (size > MAX_INDEX_BYTES) throw new AdapterError('Authenticated repository index exceeds size limit');
     const checksum = sha256Pin(text(descriptor['sha256'], 'v2 index hash'));
     const name = repositoryFilename(descriptor['name'], '.json');
     const path = join(directory, 'index.json');
-    await download(path, `${url}/${name}`, { ...downloadOptions, limit: size });
+    await download(path, `${url}/${name}`, {
+      ...downloadOptions,
+      limit: size,
+      timeoutMs: REPOSITORY_INDEX_DOWNLOAD_TIMEOUT_MS,
+    });
     const bytes = await readFile(path);
     const indexSha256 = createHash('sha256').update(bytes).digest('hex');
     if (bytes.length !== size || indexSha256 !== checksum)

@@ -20,7 +20,7 @@ import { initializeProject, policyCommand, projectGuide, staticGuide } from './p
 import { agentCommand, internalWorker } from './run-command.js';
 import { selectedContext } from './selection.js';
 import { assertExtensionExecution } from './command-registry.js';
-import type { Store } from '@pxv/runtime';
+import { disposeApplication } from './application-disposal.js';
 export type { CliIo } from './arguments.js';
 async function externalCommand(context: CliContext): Promise<number | undefined> {
   const { section, command } = context;
@@ -76,7 +76,7 @@ async function usingApplication(context: ProjectCliContext): Promise<number> {
   const interrupt = (): void => controller.abort(new Error('Operator interrupted'));
   process.once('SIGINT', interrupt);
   process.once('SIGTERM', interrupt);
-  let failure: unknown;
+  let failure: { error: unknown } | undefined;
   try {
     return await applicationCommand({
       ...context,
@@ -85,21 +85,12 @@ async function usingApplication(context: ProjectCliContext): Promise<number> {
       launcher: await workerLauncher(),
     });
   } catch (error) {
-    failure = error;
+    failure = { error };
     throw error;
   } finally {
     process.removeListener('SIGINT', interrupt);
     process.removeListener('SIGTERM', interrupt);
     await disposeApplication(app.store, failure);
-  }
-}
-async function disposeApplication(store: Store, failure: unknown): Promise<void> {
-  try {
-    await store.close();
-  } catch (error) {
-    if (failure !== undefined)
-      throw new AggregateError([failure, error], 'Application failed and storage disposal failed');
-    throw error;
   }
 }
 function readOnlyCommand({ section, command }: ProjectCliContext): boolean {

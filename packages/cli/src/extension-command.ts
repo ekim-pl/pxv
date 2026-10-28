@@ -7,6 +7,7 @@ import { join, resolve } from 'node:path';
 import type { ProjectCliContext } from './arguments.js';
 import { confirmation } from './arguments.js';
 import { application } from './context.js';
+import { usingApplicationStore } from './application-disposal.js';
 
 async function writeExtensions(context: ProjectCliContext, extensions: ExtensionLock[]): Promise<void> {
   const { project } = context;
@@ -85,7 +86,7 @@ async function invoke(
     ? parseDocument((await readBounded(value('input-file'), 1024 * 1024)).toString('utf8'))
     : {};
   const app = await application(projectRoot, resources);
-  try {
+  await usingApplicationStore(app.store, async () => {
     const target = targets()[0];
     if (!target) throw new Error('Select an asset');
     await assertFinalizationResolved(app.store, target.device.assetId);
@@ -99,9 +100,7 @@ async function invoke(
       reviewSummary: prepared.reviewSummary,
       expiresAt: prepared.expiresAt,
     });
-  } finally {
-    await app.store.close();
-  }
+  });
   return 0;
 }
 export async function extensionCommand(context: ProjectCliContext): Promise<number> {

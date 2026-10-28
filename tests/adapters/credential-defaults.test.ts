@@ -89,6 +89,8 @@ class FakeAndroid extends AndroidAdapter {
   result: CommandResult = { code: 0, stdout: '', stderr: '' };
   failure?: Error;
   identityFailure = false;
+  credentialDump = '  User 0\n    CredentialType: NONE\n  User 10\n    CredentialType: NONE\n';
+  credentialDumps: string[] = [];
   constructor() {
     super({ runner: { run: () => Promise.resolve({ code: 0, stdout: '', stderr: '' }) } });
   }
@@ -104,7 +106,9 @@ class FakeAndroid extends AndroidAdapter {
   }
   override shell(_target: SelectedTarget, args: string[]): Promise<string> {
     this.calls.push({ args: ['shell', ...args], options: {} });
-    return Promise.resolve(this.help);
+    return Promise.resolve(
+      args[0] === 'dumpsys' ? (this.credentialDumps.shift() ?? this.credentialDump) : this.help,
+    );
   }
   override runAdb(args: string[], options: CommandOptions = {}): Promise<CommandResult> {
     this.calls.push({ args, options });
@@ -299,7 +303,7 @@ describe('private credential defaults', () => {
     await inputRejected();
   });
   it('sets initial normal defaults through private stdin, with no old credential or verification', async () => {
-    await service.setCredential(target, work, configured('work'), { lease });
+    expect(await service.setCredential(target, work, configured('work'), { lease })).toBe('command-accepted');
     const mutation = android.mutations()[0];
     expect(mutation?.args).toEqual(['-s', 'PIXEL123', 'shell', 'sh', '-s']);
     expect(mutation?.options).toMatchObject({ lease, mutation: true, check: false, timeoutMs: 30_000 });
@@ -309,7 +313,52 @@ describe('private credential defaults', () => {
     expect(JSON.stringify(android.calls.map((call) => call.args))).not.toContain(
       initialValues['work-password'],
     );
-    expect(android.guardedUsers).toEqual([work]);
+    expect(android.guardedUsers).toEqual([work, work, work, work]);
+  });
+  it.each(['PIN', 'PASSWORD', 'PATTERN'])(
+    'preserves an existing %s without dispatch or credential verification',
+    async (type) => {
+      android.credentialDump = `  User 0\n    CredentialType: NONE\n  User 10\n    CredentialType: ${type}\n`;
+      expect(await service.setCredential(target, work, configured('work'), { lease })).toBe(
+        'existing-lock-preserved',
+      );
+      expect(android.mutations()).toEqual([]);
+      expect(JSON.stringify(android.calls)).not.toMatch(/--old|verify|work default pass/);
+    },
+  );
+  it.each([
+    '',
+    '  User 0\n    CredentialType: NONE\n',
+    '  User 10\n    CredentialType: NONE\n  User 10\n    CredentialType: PIN\n',
+    '  User 10\n    CredentialType: NONE\n    CredentialType: PIN\n',
+    '  User 10\n    CredentialType: UNKNOWN\n',
+    '  User 10\n    CredentialType: NONE\n    CredentialType: PIN extra\n',
+    '  User 10\n    CredentialType: \n',
+    '  User 10\n  User 11\n    CredentialType: NONE\n',
+  ])('rejects unavailable or ambiguous credential state without mutation: %j', async (dump) => {
+    android.credentialDump = dump;
+    await expect(service.setCredential(target, work, configured('work'), { lease })).rejects.toThrow(
+      'Credential state is unavailable',
+    );
+    expect(android.mutations()).toEqual([]);
+  });
+  it('preserves a lock established between initial observation and dispatch', async () => {
+    android.credentialDumps = [android.credentialDump, '  User 10\n    CredentialType: PIN\n'];
+    expect(await service.setCredential(target, work, configured('work'), { lease })).toBe(
+      'existing-lock-preserved',
+    );
+    expect(android.mutations()).toEqual([]);
+  });
+  it('blocks dispatch when identity changes after observing an unset lock', async () => {
+    let guards = 0;
+    android.guardUser = () => {
+      if (++guards === 4) return Promise.reject(new AdapterError('Android user identity changed'));
+      return Promise.resolve();
+    };
+    await expect(service.setCredential(target, work, configured('work'), { lease })).rejects.toThrow(
+      'identity changed',
+    );
+    expect(android.mutations()).toEqual([]);
   });
   it('loads current private values at execution and accepts a password replacing an owner PIN', async () => {
     await service.preflight(target);
@@ -412,7 +461,7 @@ describe('private credential defaults', () => {
       stdout: initialValues['work-password'],
       stderr: initialValues['work-password'],
     };
-    expect(await service.setCredential(target, work, configured('work'), { lease })).toBeUndefined();
+    expect(await service.setCredential(target, work, configured('work'), { lease })).toBe('command-accepted');
   });
   it('does not dispatch when cancelled before private input preparation', async () => {
     const signal = AbortSignal.abort();

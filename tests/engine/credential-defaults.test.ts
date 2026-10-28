@@ -116,6 +116,24 @@ describe('credential defaults and private recipient checkpoints', () => {
     expect(state).not.toContain('values');
   });
 
+  it('retains preservation separately and still requires private normal verification', async () => {
+    port.setCredentialDefault.mockImplementation(() => Promise.resolve('existing-lock-preserved'));
+    const run = await approve();
+    expect(await executeWithWitnesses(engine, run.id)).toMatchObject({
+      status: 'pending',
+      manualGate: 'normal_credentials',
+    });
+    const history = JSON.stringify(await store.entries('credential-defaults'));
+    expect(history).toContain('existing-lock-preserved');
+    expect(history).not.toContain('command-accepted');
+    expect(port.setDuressDefault).not.toHaveBeenCalled();
+    expect(
+      (await engine.prepare(target)).plan.actions.some((action) => action.kind === 'default-credential'),
+    ).toBe(false);
+    await engine.attest(target, 'normal_credentials', 'Operator');
+    expect(await executeWithWitnesses(engine, run.id)).toMatchObject({ manualGate: 'duress' });
+  });
+
   it('remembers accepted defaults for stable users and fences older approved plans', async () => {
     port.observation.profiles.push({
       ...structuredClone(port.observation.profiles[0]!),

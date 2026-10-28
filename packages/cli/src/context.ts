@@ -10,6 +10,7 @@ import { createArtifactPort } from './artifact-port.js';
 import { createDependencies } from './dependencies.js';
 import { createWorkflowPort } from './workflow-port.js';
 import { createSeedvaultPort } from './seedvault-port.js';
+import { disposeApplication } from './application-disposal.js';
 export async function resourceRoot(explicit?: string): Promise<string> {
   if (explicit) return realpath(resolve(explicit));
   const candidates = [
@@ -83,14 +84,7 @@ export async function application(
       android: deps.android,
     };
   } catch (error) {
-    try {
-      await store.close();
-    } catch (closeError) {
-      throw new AggregateError(
-        [error, closeError],
-        'Application construction failed and storage disposal failed',
-      );
-    }
+    await disposeApplication(store, { error });
     throw error;
   }
 }

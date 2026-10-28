@@ -17,7 +17,7 @@ interface AcceptedDefault {
   user: AndroidUserIdentity;
   configurationDigest: string;
   runId: string;
-  status: 'command-accepted';
+  status: 'command-accepted' | 'existing-lock-preserved';
 }
 const collection = 'credential-defaults';
 const malformed = (): Error => new Error('Malformed credential default history retained for inspection');
@@ -40,6 +40,11 @@ function exactFields(value: unknown, keys: readonly string[]): value is Record<s
 function defaultAction(action: Action): action is DefaultCredentialAction {
   return action.kind === 'default-credential' || action.kind === 'default-duress';
 }
+function validStatus(kind: unknown, status: unknown): status is AcceptedDefault['status'] {
+  return (
+    status === 'command-accepted' || (kind === 'default-credential' && status === 'existing-lock-preserved')
+  );
+}
 function acceptedEntry(value: unknown): AcceptedDefault {
   if (
     !exactFields(value, ['kind', 'profileId', 'user', 'configurationDigest', 'runId', 'status']) ||
@@ -48,7 +53,7 @@ function acceptedEntry(value: unknown): AcceptedDefault {
     typeof value.configurationDigest !== 'string' ||
     !/^[a-f0-9]{64}$/u.test(value.configurationDigest) ||
     !label(value.runId) ||
-    value.status !== 'command-accepted'
+    !validStatus(value.kind, value.status)
   )
     throw malformed();
   return {
@@ -114,9 +119,10 @@ export class CredentialDefaultHistory {
     action: DefaultCredentialAction,
     user: AndroidUserIdentity,
     runId: string,
+    status: AcceptedDefault['status'] = 'command-accepted',
   ): Promise<void> {
     const checked = validateAction(action);
-    if (!defaultAction(checked) || !label(runId)) throw malformed();
+    if (!defaultAction(checked) || !label(runId) || !validStatus(checked.kind, status)) throw malformed();
     const identity = validateUserIdentity(user);
     const entries = (await this.read(target)).filter((entry) => !matches(entry, checked, identity));
     entries.push({
@@ -125,7 +131,7 @@ export class CredentialDefaultHistory {
       user: identity,
       configurationDigest: digest(checked),
       runId,
-      status: 'command-accepted',
+      status,
     });
     await this.store.set(collection, target.device.assetId, {
       deviceSerial: target.device.canonicalSerial,

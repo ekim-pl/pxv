@@ -2,6 +2,15 @@
 
 Start here when a run requires inspection, a phone needs repair, or you are designing backup and restore coverage. Keep the exact asset, original operation ID, project, and host control directory. Consult [acceptance](acceptance.md) before claiming that recovery has been demonstrated.
 
+## Inspect damaged assisted-recipe checkpoints
+
+Missing or altered recipe checkpoints stop resume and review refresh before UI
+replay. Preserve the original records, inspect the physical app state and run
+events, and complete typed recovery for any retained obligations before preparing
+new reviewed work. Do not recreate proof fields, delete records or repeat an
+import to bypass inspection. A combined operation/disposal error reports both
+failures; inspect the original operation failure as well as storage health.
+
 Use this runbook for physical testing, live acceptance and recovery. For code development without a phone, use [developing and testing pxv](../developers/testing.md). Read the [verification boundaries](acceptance.md) before interpreting results. This document describes procedures; it does not record a completed test or qualify a device.
 
 Here, **master device** is a recorded role: a protected reference phone, a primary phone containing real owner data, or both. Keep the role explicit because a reference can seed reviewed fleet configuration while a primary backup is private to its owner. A phone with both roles receives the primary-data protections; its full backup is not a fleet seed.

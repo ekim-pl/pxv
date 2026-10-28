@@ -1,4 +1,5 @@
 import type {
+  Action,
   AndroidUserIdentity,
   ArtifactPolicy,
   DeviceObservation,
@@ -15,7 +16,8 @@ import type {
   ObligationWriter,
   OperatorAttestation,
 } from '@pxv/contracts';
-import type { DeviceLease, Store } from '@pxv/runtime';
+import type { DeviceLease, Store, ExpectedRecord, RecordChange } from '@pxv/runtime';
+import type { PendingRecipeCheckpoint } from './pending-recipe.js';
 import type { ProjectContext } from './project.js';
 import type { ResourceScope } from './recovery.js';
 import type { ExecutionControl } from './execution-control.js';
@@ -106,6 +108,14 @@ export interface VpnSettingsProof {
 export interface WorkflowPort {
   readonly capabilities?: { uiAutomation: boolean };
   inspect(target: SelectedTarget, policy: ExecutionPolicy, signal?: AbortSignal): Promise<DeviceObservation>;
+  /** Intermediate action state only; full inspect remains mandatory at evidence boundaries. */
+  inspectAction?(
+    target: SelectedTarget,
+    policy: ExecutionPolicy,
+    previous: DeviceObservation,
+    action: Action,
+    signal?: AbortSignal,
+  ): Promise<DeviceObservation>;
   createUser(
     target: SelectedTarget,
     profile: ProfilePolicy,
@@ -147,7 +157,7 @@ export interface WorkflowPort {
     user: AndroidUserIdentity,
     profile: ProfilePolicy,
     context: ExecutionContext,
-  ): Promise<void>;
+  ): Promise<void | 'command-accepted' | 'existing-lock-preserved'>;
   setDuressDefault?(
     target: SelectedTarget,
     user: AndroidUserIdentity,
@@ -309,6 +319,11 @@ export interface ActiveExecution {
   effects: SharedApkEffect[];
   resume: boolean;
   workflowExpected: unknown;
+  recipeCheckpoint?: PendingRecipeCheckpoint;
+  recipeEvidence?: {
+    change: RecordChange;
+    expected: ExpectedRecord[];
+  };
 }
 
 export interface CapabilityRequirement {

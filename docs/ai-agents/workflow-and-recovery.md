@@ -56,6 +56,15 @@ Read the run's `pauseReason` and follow its next step:
 
 Only an intentional `manual-step` checkpoint can resume:
 
+An assisted recipe also requires its complete retained checkpoint and exact
+source lineage. Missing, malformed or conflicting evidence blocks resume and
+refresh; never retry the UI recipe to reconstruct it. Inspect the phone and
+retained records, complete typed recovery where required, then prepare and approve
+new work. Refreshed queued runs retain this requirement. Completed historical
+evidence remains readable. If request storage disposal also fails, CLI/MCP report
+both the original operation message and the disposal message; neither is an
+instruction to replay a mutation.
+
 ```sh
 pxv agent resume --project-root "$P" --run RUN_ID --yes
 ```

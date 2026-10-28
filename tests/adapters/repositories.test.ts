@@ -104,6 +104,73 @@ describe('pinned repository metadata', () => {
     expect(repo.candidate(index, 'org.example.app', { sdk: 35, abis: ['arm64-v8a'] }).versionCode).toBe(7);
     entry.index.sha256 = '0'.repeat(64);
     await expect(repo.index(repository)).rejects.toThrow(/signed size and SHA-256/);
+    entry.index.sha256 = createHash('sha256').update(full).digest('hex');
+    entry.index.size += 1;
+    await expect(repo.index(repository)).rejects.toThrow(/signed size and SHA-256/);
+  });
+  it('accepts 3.x authenticated entries and verifies their full v2 index descriptor', async () => {
+    const { repo } = service();
+    const full = JSON.stringify({
+      repo: { timestamp: now },
+      packages: {
+        'org.example.app': {
+          versions: {
+            v7: {
+              file: { name: '/org.example.app_7.apk', sha256: row.hash, size: 500 },
+              manifest: {
+                versionCode: 7,
+                signer: { sha256: [row.signer] },
+                usesSdk: { minSdkVersion: 28 },
+                nativecode: ['arm64-v8a'],
+              },
+            },
+          },
+        },
+        'org.example.large': {
+          versions: {
+            v1: {
+              file: {
+                name: '/org.example.large_1.apk',
+                sha256: 'd'.repeat(64),
+                size: 512 * 1024 * 1024 + 1,
+              },
+              manifest: {
+                versionCode: 1,
+                signer: { sha256: ['e'.repeat(64)] },
+              },
+            },
+          },
+        },
+      },
+    });
+    const indexDescriptor = {
+      name: '/index-v2.json',
+      size: Buffer.byteLength(full),
+      sha256: createHash('sha256').update(full).digest('hex'),
+      numPackages: 0,
+    };
+    for (const version of [30_000, 39_999]) {
+      const entry = {
+        version,
+        timestamp: now,
+        maxAge: 14,
+        index: indexDescriptor,
+        diffs: { [now - 1]: { name: '/diff/old.json', sha256: 'd'.repeat(64), size: 1 } },
+      };
+      vi.stubGlobal(
+        'fetch',
+        vi
+          .fn()
+          .mockImplementation((url: URL) =>
+            Promise.resolve(new Response(url.pathname.endsWith('/entry.jar') ? JSON.stringify(entry) : full)),
+          ),
+      );
+      const result = await repo.index(repository, { packageIds: ['org.example.app'] });
+      expect(result.evidence.format).toBe('v2');
+      expect(result.evidence.timestamp).toBe(now);
+      expect(Object.keys(result.packages)).toEqual(['org.example.app']);
+      expect(repo.candidate(result, 'org.example.app', { sdk: 35, abis: ['arm64-v8a'] }).versionCode).toBe(7);
+    }
   });
   it('rejects authenticated duplicate JSON keys, unsupported entry schemas and inconsistent timestamps', async () => {
     const { repo } = service();
@@ -120,8 +187,10 @@ describe('pinned repository metadata', () => {
         ),
     );
     await expect(repo.index(repository)).rejects.toThrow(/unique|Map keys|Duplicate/i);
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('{"version":30000}')));
-    await expect(repo.index(repository)).rejects.toThrow(/Unsupported/);
+    for (const version of [19_999, 40_000]) {
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ version }))));
+      await expect(repo.index(repository)).rejects.toThrow(/Unsupported/);
+    }
     const full = JSON.stringify({ repo: { timestamp: now }, packages: {} });
     const entry = {
       version: 20002,

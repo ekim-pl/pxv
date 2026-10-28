@@ -18,6 +18,7 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { application, redact, type ApplicationOptions } from './context.js';
 import { inspectHost } from './host.js';
+import { usingApplicationStore } from './application-disposal.js';
 
 function extensionManager(registry?: string): ExtensionManager {
   return new ExtensionManager({
@@ -421,11 +422,9 @@ export function liveAgentBackend(
     options: ApplicationOptions = {},
   ): Promise<T> => {
     const app = await application(root, resources, options);
-    try {
-      return await action(agentBackend(app.engine, resources, launcher, allowMutations));
-    } finally {
-      await app.store.close();
-    }
+    return usingApplicationStore(app.store, () =>
+      action(agentBackend(app.engine, resources, launcher, allowMutations)),
+    );
   };
   return {
     inspectHost: () => using((backend) => backend.inspectHost(), { readOnly: true }),

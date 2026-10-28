@@ -55,6 +55,20 @@ describe('one-time credential default history', () => {
     expect(actions).toEqual([normal, manual, language, duress]);
   });
 
+  it('records preserved normal locks without claiming a command succeeded or accepting preserved duress', async () => {
+    await history.recordAccepted(target, normal, user, 'preserved-run', 'existing-lock-preserved');
+    expect(await history.pending(target, observation, [normal, manual, duress])).toEqual([manual, duress]);
+    const retained = await store.get<{ entries: { status: string }[] }>(
+      'credential-defaults',
+      device.assetId,
+    );
+    expect(retained?.entries[0]?.status).toBe('existing-lock-preserved');
+    await expect(
+      history.recordAccepted(target, duress, user, 'invalid-run', 'existing-lock-preserved'),
+    ).rejects.toThrow('Malformed credential default history');
+    expect(await store.get('credential-defaults', device.assetId)).toEqual(retained);
+  });
+
   it('never reapplies accepted defaults when policy references or credential types change', async () => {
     await history.recordAccepted(target, normal, user, 'first-run');
     await history.recordAccepted(target, duress, user, 'first-run');

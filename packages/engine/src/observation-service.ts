@@ -3,6 +3,7 @@ import {
   sameAndroidUser,
   validateObservation,
   type AndroidUserIdentity,
+  type Action,
   type ArtifactPolicy,
   type DeviceObservation,
   type SelectedTarget,
@@ -16,6 +17,12 @@ import type { WorkflowPort } from './workflow-types.js';
 export interface ObservationReader {
   assertTarget(target: SelectedTarget): void;
   observe(target: SelectedTarget, signal?: AbortSignal): Promise<DeviceObservation>;
+  observeAction(
+    target: SelectedTarget,
+    previous: DeviceObservation,
+    action: Action,
+    signal?: AbortSignal,
+  ): Promise<DeviceObservation>;
   sharedEffects(
     target: SelectedTarget,
     packageIds: string[],
@@ -48,7 +55,26 @@ export class ObservationService implements ObservationReader {
 
   async observe(target: SelectedTarget, signal?: AbortSignal): Promise<DeviceObservation> {
     this.assertTarget(target);
-    const value = validateObservation(await this.port.inspect(target, this.project.policy, signal));
+    return this.validate(target, await this.port.inspect(target, this.project.policy, signal));
+  }
+
+  async observeAction(
+    target: SelectedTarget,
+    previous: DeviceObservation,
+    action: Action,
+    signal?: AbortSignal,
+  ): Promise<DeviceObservation> {
+    if (!this.port.inspectAction || !['setting', 'permission', 'install-apk'].includes(action.kind))
+      return this.observe(target, signal);
+    this.assertTarget(target);
+    return this.validate(
+      target,
+      await this.port.inspectAction(target, this.project.policy, previous, action, signal),
+    );
+  }
+
+  private validate(target: SelectedTarget, observation: DeviceObservation): DeviceObservation {
+    const value = validateObservation(observation);
     if (value.profiles.some((profile) => profile.packages.some((artifact) => !artifact.sha256)))
       throw new Error('Installed APK content measurements are required for current observations');
     if (digest(value.device) !== digest(target.device))

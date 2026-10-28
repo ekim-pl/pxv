@@ -5,7 +5,9 @@ import {
   parseBackupObservation,
   parsePrimaryLocale,
 } from './android-observation.js';
+import { inspectAndroidAction } from './android-action-observation.js';
 import type {
+  Action,
   AndroidUserIdentity,
   DeviceObservation,
   PermissionPolicy,
@@ -314,6 +316,12 @@ export class AndroidAdapter {
     signal?: AbortSignal,
     content = false,
   ): Promise<ApkIdentity & { sha256?: string }> {
+    const hash = content ? await this.installedHash(target, base, signal) : undefined;
+    const cached = hash ? this.artifacts.verifiedIdentity(hash) : undefined;
+    if (cached && hash) {
+      await this.assertInstalledHash(target, base, hash, signal);
+      return { ...cached, sha256: hash };
+    }
     const directory = await mkdtemp(join(tmpdir(), 'pxv-observe-apk-'));
     try {
       const path = join(directory, 'base.apk');
@@ -324,12 +332,39 @@ export class AndroidAdapter {
         }),
         'Installed APK read',
       );
-      return await (content
+      const identity: ApkIdentity & { sha256?: string } = await (content
         ? this.artifacts.contentIdentity(path, signal)
         : this.artifacts.identity(path, signal));
+      if (hash && identity.sha256 !== hash)
+        throw new AdapterError('Installed APK changed during content inspection');
+      await this.assertInstalledHash(target, base, hash, signal);
+      return identity;
     } finally {
       await rm(directory, { recursive: true, force: true });
     }
+  }
+  private async assertInstalledHash(
+    target: SelectedTarget,
+    path: string,
+    hash: string | undefined,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    if (hash && (await this.installedHash(target, path, signal)) !== hash)
+      throw new AdapterError('Installed APK changed during content inspection');
+  }
+  private async installedHash(
+    target: SelectedTarget,
+    path: string,
+    signal?: AbortSignal,
+  ): Promise<string | undefined> {
+    // Unsupported tools or unreadable paths retain the existing pull-and-verify behavior.
+    const result = await this.runAdb(
+      ['-s', target.transport.serial, 'shell', ...['sha256sum', path].map(shellQuote)],
+      { timeoutMs: 30_000, check: false, ...signalOptions(signal) },
+    );
+    if (result.code !== 0) return undefined;
+    const match = /^([a-fA-F0-9]{64})\s+\*?(.+)$/.exec(result.stdout.trim());
+    return match?.[2] === path ? match[1]?.toLowerCase() : undefined;
   }
   async permission(
     target: SelectedTarget,
@@ -395,6 +430,15 @@ export class AndroidAdapter {
       helpers: helpers.sort(),
       debuggingEnabled,
     };
+  }
+  inspectAction(
+    target: SelectedTarget,
+    policy: ExecutionPolicy,
+    previous: DeviceObservation,
+    action: Action,
+    signal?: AbortSignal,
+  ): Promise<DeviceObservation> {
+    return inspectAndroidAction(this, target, policy, previous, action, signal);
   }
   private async inspectUserPackages(
     target: SelectedTarget,

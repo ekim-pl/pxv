@@ -10,7 +10,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from './../test-api.j
 import { digest, requiredAttestations } from '@pxv/contracts';
 import type { ExecutionPolicy, SelectedTarget } from '@pxv/contracts';
 import { createProject, loadProject, ResourceScope, saveInventory, WorkflowEngine } from '@pxv/engine';
-import type { ArtifactPort, PreparedOperation, ProjectContext, RunRecord } from '@pxv/engine';
+import type { ArtifactPort, PreparedOperation, ProjectContext, RunRecord, WorkflowPort } from '@pxv/engine';
 import { commitProjectFile, deviceLeaseKeys, SqliteStore } from '@pxv/runtime';
 import { device, hashA, hashB, policy as setupPolicy, product } from '../contracts/fixtures.js';
 import { basePolicy, MemoryPort } from './fixtures.js';
@@ -84,6 +84,32 @@ describe('reviewed workflows, operator and recipient gates', () => {
     await expect(engine.submit(prepared.plan.id, prepared.reviewSummary, 'Alice')).rejects.toThrow('expired');
     await expect(engine.refreshReview(run.id)).rejects.toThrow('intentional manual');
     await engine.finalize(target, 'Alice');
+  });
+
+  it('uses action observations between full start and completion measurements', async () => {
+    const profile = context.policy.profiles[0]!;
+    const actions = [
+      { kind: 'setting' as const, profileId: profile.id, setting: profile.settings[0]! },
+      { kind: 'permission' as const, profileId: profile.id, permission: profile.permissions[0]! },
+    ];
+    const prepared = await engine.prepareExtension(target, actions);
+    const run = await engine.submit(prepared.plan.id, prepared.reviewSummary, 'Alice');
+    const inspect = vi.spyOn(port, 'inspect');
+    const inspectAction = vi.fn<NonNullable<WorkflowPort['inspectAction']>>(
+      (_target, _policy, previous, _action, signal) => {
+        signal?.throwIfAborted();
+        return Promise.resolve({ ...structuredClone(port.observation), observedAt: previous.observedAt });
+      },
+    );
+    Object.assign(port, { inspectAction });
+    await engine.execute(run.id);
+    expect(inspectAction.mock.calls.map((call) => call[3].kind)).toEqual([
+      'setting',
+      'setting',
+      'permission',
+      'permission',
+    ]);
+    expect(inspect).toHaveBeenCalledTimes(2);
   });
 
   it('prepares without phone mutation and atomically deduplicates concurrent exact approvals', async () => {

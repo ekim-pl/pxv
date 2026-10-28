@@ -4,6 +4,7 @@ import { chmod, copyFile, lstat, mkdir, readdir, symlink, writeFile } from 'node
 import { basename, dirname, join, resolve } from 'node:path';
 import { canonicalJson, parseDocument } from '@pxv/contracts';
 import { CommandRunner, hashFile, readBounded, type Runtime } from '@pxv/runtime';
+import { withPromotionSnapshot } from './promotion-snapshot.js';
 import {
   copyCandidate,
   ANDROID_ARCHIVES,
@@ -563,15 +564,9 @@ function checksumRecord(line: string, checksums: Map<string, string>): [string, 
 
 /** @internal Shared release verification used by promotion and independent artifact acceptance. */
 export async function verifyArtifacts(directory: string): Promise<void> {
-  const lines = (await readBounded(join(directory, 'SHA256SUMS'), 1024 * 1024))
-    .toString('utf8')
-    .trim()
-    .split('\n');
-  const checksums = new Map<string, string>();
-  for (const line of lines) {
-    const match = checksumRecord(line, checksums);
-    checksums.set(match[2], match[1]);
-    if ((await hashFile(join(directory, match[2]))) !== match[1])
+  const checksums = parseChecksums(await readBounded(join(directory, 'SHA256SUMS'), 1024 * 1024));
+  for (const [file, sha256] of checksums) {
+    if ((await hashFile(join(directory, file))) !== sha256)
       throw new Error('Release artifact checksum mismatch');
   }
   if (!checksums.has('provenance.json')) throw new Error('Release provenance is absent from checksums');
@@ -588,6 +583,15 @@ export async function verifyArtifacts(directory: string): Promise<void> {
       throw new Error('Release provenance artifact does not match reviewed bytes');
   }
   if (provenance.signed) await readBounded(join(directory, 'SHA256SUMS.sig'), 16 * 1024);
+}
+
+function parseChecksums(content: Buffer): Map<string, string> {
+  const checksums = new Map<string, string>();
+  for (const line of content.toString('utf8').trim().split('\n')) {
+    const match = checksumRecord(line, checksums);
+    checksums.set(match[2], match[1]);
+  }
+  return checksums;
 }
 
 export interface PromotionOptions {
@@ -609,16 +613,29 @@ export async function promoteNpm(options: PromotionOptions): Promise<void> {
   const packageFile = resolve(options.packageFile);
   if (dirname(packageFile) !== directory || !packageFile.endsWith('.tgz'))
     throw new Error('Promotion requires a reviewed npm artifact from this candidate');
-  const provenance = validateProvenance(
-    parseDocument((await readBounded(join(directory, 'provenance.json'), 1024 * 1024)).toString('utf8')),
-  );
-  if (
-    !provenance.signed ||
-    !provenance.artifacts.some(
-      (artifact) => artifact.format === 'npm' && artifact.file === basename(packageFile),
-    )
-  )
-    throw new Error('Promotion requires an npm artifact identified by signed release provenance');
+  await withPromotionSnapshot(directory, packageFile, async (snapshot) => {
+    await verifyPromotionSnapshot(snapshot, basename(packageFile), options, runner);
+    if (!options.dryRun)
+      await runner.run(
+        [
+          'npm',
+          'publish',
+          join(snapshot, basename(packageFile)),
+          '--registry',
+          registry.href,
+          '--ignore-scripts',
+        ],
+        { timeoutMs: 120_000 },
+      );
+  });
+}
+
+async function verifyPromotionSnapshot(
+  directory: string,
+  packageName: string,
+  options: PromotionOptions,
+  runner: Runtime,
+): Promise<void> {
   const checksums = await readBounded(join(directory, 'SHA256SUMS'), 1024 * 1024);
   await runner.run(
     [
@@ -636,10 +653,26 @@ export async function promoteNpm(options: PromotionOptions): Promise<void> {
     ],
     { input: checksums },
   );
-  if (!options.dryRun)
-    await runner.run(['npm', 'publish', packageFile, '--registry', registry.href, '--ignore-scripts'], {
-      timeoutMs: 120_000,
-    });
+  const hashes = parseChecksums(checksums);
+  if (hashes.get('provenance.json') !== (await hashFile(join(directory, 'provenance.json'))))
+    throw new Error('Release provenance checksum mismatch');
+  const provenance = validateProvenance(
+    parseDocument((await readBounded(join(directory, 'provenance.json'), 1024 * 1024)).toString('utf8')),
+  );
+  if (
+    !provenance.signed ||
+    !provenance.artifacts.some((artifact) => artifact.format === 'npm' && artifact.file === packageName)
+  )
+    throw new Error('Promotion requires an npm artifact identified by signed release provenance');
+  if (
+    hashes.size !== provenance.artifacts.length + 1 ||
+    provenance.artifacts.some((artifact) => hashes.get(artifact.file) !== artifact.sha256)
+  )
+    throw new Error('Release provenance does not cover the complete checksum set');
+  const artifact = provenance.artifacts.find((value) => value.file === packageName)!;
+  const packageFile = join(directory, packageName);
+  if ((await hashFile(packageFile)) !== artifact.sha256 || (await lstat(packageFile)).size !== artifact.size)
+    throw new Error('Promotion snapshot differs from the reviewed artifact');
 }
 
 function promotionRegistry(value: string): URL {

@@ -1,8 +1,8 @@
-import { FdroidclSession, type RepositoryEvidence } from '@pxv/adapters';
+import { FdroidclSession, type AuthenticatedRepository, type RepositoryEvidence } from '@pxv/adapters';
 import { digest, type ArtifactPolicy, type RepositoryPolicy, type SelectedTarget } from '@pxv/contracts';
 import { containedPath, type ArtifactPort } from '@pxv/engine';
 import type { ApplicationDependencies } from './dependencies.js';
-import { artifactRepository } from './artifact-repository.js';
+import { artifactRepository, repositoryUpdateKey } from './artifact-repository.js';
 
 interface StoredArtifactProvenance {
   repository: RepositoryPolicy;
@@ -20,17 +20,31 @@ function artifactPins(
   };
 }
 
+function repositoryPackagesByKey(deps: ApplicationDependencies): Map<string, string[]> {
+  const packages = new Map<string, Set<string>>();
+  const artifacts = deps.project.policy.profiles.flatMap((profile) => [
+    ...profile.packages,
+    ...(profile.networkProbe ? [profile.networkProbe.artifact] : []),
+  ]);
+  for (const artifact of artifacts) {
+    const repository = artifactRepository(artifact, deps.project.policy.repositories);
+    if (!repository) continue;
+    const key = repositoryUpdateKey(repository);
+    const selected = packages.get(key) ?? new Set<string>();
+    selected.add(artifact.packageId);
+    packages.set(key, selected);
+  }
+  return new Map([...packages].map(([key, selected]) => [key, [...selected].sort()]));
+}
+
 async function repositorySource(
   deps: ApplicationDependencies,
   artifact: ArtifactPolicy,
-  repository: RepositoryPolicy,
-  target: SelectedTarget | undefined,
+  target: SelectedTarget,
+  index: AuthenticatedRepository,
   signal?: AbortSignal,
 ): Promise<{ candidate: ArtifactPolicy; apkUrl: string; evidence: RepositoryEvidence }> {
-  const { tools, repositories, android } = deps;
-  await tools.require('java');
-  if (!target) throw new Error('Repository selection requires measured target SDK and ABIs');
-  const index = await repositories.index(repository, signal ? { signal } : {});
+  const { repositories, android } = deps;
   const sdk = Number(
     (await android.shell(target, ['getprop', 'ro.build.version.sdk'], signal ? { signal } : {})).trim(),
   );
@@ -69,6 +83,32 @@ function storedProvenance(retained: unknown): Partial<StoredArtifactProvenance> 
 
 export function createArtifactPort(deps: ApplicationDependencies): ArtifactPort {
   const { tools, project, artifacts, images, store, repositories } = deps;
+  const packagesByRepository = repositoryPackagesByKey(deps);
+  const repositoryIndexes = new Map<string, Promise<AuthenticatedRepository>>();
+  const repositoryIndex = (
+    repository: RepositoryPolicy,
+    artifact: ArtifactPolicy,
+    signal?: AbortSignal,
+  ): Promise<AuthenticatedRepository> => {
+    const repositoryKey = repositoryUpdateKey(repository);
+    const packageIds = new Set(packagesByRepository.get(repositoryKey) ?? []);
+    packageIds.add(artifact.packageId);
+    const selected = [...packageIds].sort();
+    const cacheKey = digest({ repositoryKey, packageIds: selected });
+    let index = repositoryIndexes.get(cacheKey);
+    if (!index) {
+      index = repositories.index(repository, {
+        packageIds: selected,
+        ...(signal ? { signal } : {}),
+      });
+      repositoryIndexes.set(cacheKey, index);
+      const pending = index;
+      void pending.catch(() => {
+        if (repositoryIndexes.get(cacheKey) === pending) repositoryIndexes.delete(cacheKey);
+      });
+    }
+    return index;
+  };
   return {
     async snapshot(artifact, destination, signal, target) {
       await Promise.all([tools.require('aapt'), tools.require('apksigner')]);
@@ -77,7 +117,10 @@ export function createArtifactPort(deps: ApplicationDependencies): ArtifactPort 
       const repository = artifactRepository(artifact, project.policy.repositories);
       if (artifact.repositoryId && !repository) throw new Error('Unknown authenticated repository');
       if (repository) {
-        const selected = await repositorySource(deps, artifact, repository, target, signal);
+        if (!target) throw new Error('Repository selection requires measured target SDK and ABIs');
+        await tools.require('java');
+        const index = await repositoryIndex(repository, artifact, signal);
+        const selected = await repositorySource(deps, artifact, target, index, signal);
         evidence = selected.evidence;
         if (artifact.source?.kind === 'fdroidcl') {
           const session = await FdroidclSession.open(

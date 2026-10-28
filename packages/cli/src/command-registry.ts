@@ -204,8 +204,18 @@ const commands: readonly CommandDefinition[] = [
   ),
   command('agent status', 'Read stored run evidence, checkpoints and next steps.', ['run', 'after'], ['run']),
   command('agent cancel', 'Request cancellation of an exact run.', ['run'], ['run']),
-  command('agent resume', 'Continue reviewed work after its manual checkpoint.', ['run', 'yes'], ['run']),
-  command('agent refresh', 'Prepare a new review of remaining work.', ['run'], ['run']),
+  command(
+    'agent resume',
+    'Continue reviewed work after its retained manual checkpoint; missing recipe evidence requires inspection.',
+    ['run', 'yes'],
+    ['run'],
+  ),
+  command(
+    'agent refresh',
+    'Prepare a new review of remaining work after validating retained checkpoints.',
+    ['run'],
+    ['run'],
+  ),
   command(
     'agent execute',
     'Submit the exact saved review and launch its worker.',

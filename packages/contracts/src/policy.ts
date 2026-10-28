@@ -427,7 +427,7 @@ export function finalSetupActions(policy: ExecutionPolicy): Action[] {
     actions.push({
       kind: 'manual',
       capability: 'normal_credentials',
-      instructions: `Recipient privately sets and verifies normal credentials for every selected profile: ${policy.profiles.map((profile) => profile.id).join(', ')}. Privately verify or replace configured defaults. Confirm all profiles before proceeding to language setup. Do not record any value.${pinScramblingInstructions(policy.profiles)}`,
+      instructions: `Recipient privately sets and verifies normal credentials for every selected profile: ${policy.profiles.map((profile) => profile.id).join(', ')}. Existing locks are preserved; privately verify or change them as needed. Privately verify or replace configured defaults. Confirm all profiles before proceeding to language setup. Do not record any value.${pinScramblingInstructions(policy.profiles)}`,
     });
   }
   for (const profile of policy.profiles) {

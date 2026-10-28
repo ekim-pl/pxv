@@ -369,6 +369,16 @@ a conflicting value is rejected. Readback confirms the stored setting, while the
 recipient privately checks the actual keypad layout during normal-credential
 confirmation. See [GrapheneOS PIN scrambling](https://grapheneos.org/features#pin-scrambling).
 
+Normal credential defaults initialize only profiles with no existing lock. PXV reads
+public per-user credential type and preserves existing PINs, passwords and patterns;
+it does not verify them automatically or replace them with the policy secret.
+Preservation is recorded separately from an accepted initialization command. At
+`normal_credentials`, privately verify each lock or change it in Android Settings.
+An unknown credential state blocks initialization. A failed command still requires
+inspected recovery before newly reviewed work; preservation does not release an
+existing recovery reservation. Duress setup continues to require verified normal
+credentials and the actual current owner credential in private input.
+
 Supply private values in `secrets/credentials/<assetId>.json` within the project:
 
 ```json

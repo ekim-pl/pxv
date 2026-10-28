@@ -26,8 +26,20 @@ same-process acquisition coalesces requests sharing the same cancellation signal
 Independent cancellation contexts and separate processes can transiently download
 the same identity before deduplicating publication. Cache corruption refuses
 reuse, and no automatic garbage collection removes historical references. Execution
-still makes and authenticates private staging copies. APK observations deduplicate
-only within one measurement; user membership and permission checks remain separate.
+still makes and authenticates private staging copies. Installed APK observations
+hash bytes on the device and reuse identities authenticated by the same artifact
+service, keyed by content hash. Unknown content is pulled and verified; devices
+without usable `sha256sum` retain pull-and-verify behavior. Hash and path checks
+detect changes during measurement. The identity cache is process-local; user
+membership and permission checks remain separate.
+
+Intermediate setting, permission and installation actions refresh only affected
+state, retaining the last full observation timestamp. Installation observations
+refresh the package and its permissions across managed users, while installation
+guards still review shared effects across all users. Full observations remain at
+start/resume, user creation, manual and capability actions, and completion. Ports
+without targeted observation support fall back to full inspection. Targeted state
+is journaled for action progress, not promoted to fresh full-device evidence.
 
 Managed installed packages require exactly one APK path. The adapter hashes the
 same pulled bytes used for package/version/signature verification, detects local
@@ -75,6 +87,17 @@ allow expired approval while keeping integrity, policy, target and lifecycle che
 The contracts layer supplies per-profile VPN witness requirements to readiness and
 English/Polish guide generation. Generic setting actions cannot write the reserved
 VPN secure keys; observation parsing remains separate from authoring validation.
+
+Pending assisted recipes share complete checkpoint and source-lineage validation
+between resume and review refresh, including queued refreshed runs. Missing or
+conflicting identity fields require inspection; the adapter is never replayed to
+replace lost evidence. Receipt consumption, completed proof, run cursor and
+observation audit commit atomically against the retained proof, plans, source runs
+and workflow. Competing state or audit failure leaves the checkpoint unconsumed.
+Application disposal retains both failures in an aggregate with the original as
+its cause; CLI/MCP text includes both messages without serializing error payloads.
+Bounded file reads and hashes open nonblocking, no-follow descriptors and reject
+special files before reading, including FIFOs without a writer.
 
 Detached worker failures use an engine-owned expected-state transition with its
 audit event. Only an unchanged queued/manual run can become needs-inspection;

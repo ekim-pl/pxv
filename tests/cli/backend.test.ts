@@ -609,6 +609,43 @@ describe('MCP/CLI backend ports and detached execution', () => {
     expect(close).toHaveBeenCalledTimes(2);
   });
 
+  it('retains the original operation error through MCP when request disposal also fails', async () => {
+    const original = Object.assign(new Error('Original preparation failed'), {
+      input: 'private-input-sentinel',
+    });
+    const secondary = new Error('Request storage close failed');
+    const close = vi.fn(() => Promise.reject(secondary));
+    vi.spyOn(engine, 'prepare').mockRejectedValue(original);
+    vi.spyOn(Context, 'application').mockResolvedValue({ engine, store: { close } } as unknown as Awaited<
+      ReturnType<typeof Context.application>
+    >);
+    const live = liveAgentBackend(engine.project.root, resourceRoot, 'launcher.js', true);
+    const failure: unknown = await live.prepareOperation('all', 'provision').catch((error: unknown) => error);
+    expect(failure).toBeInstanceOf(AggregateError);
+    expect((failure as AggregateError).errors).toEqual([original, secondary]);
+    expect((failure as Error).cause).toBe(original);
+    const server = createMcpServer(live),
+      client = new Client({ name: 'disposal-failure', version: '1' });
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    await server.connect(serverTransport);
+    await client.connect(clientTransport);
+    try {
+      const result = await client.callTool({
+        name: 'prepare_operation',
+        arguments: { assetId: 'all', operation: 'provision' },
+      });
+      expect(result.isError).toBe(true);
+      const content = JSON.stringify(result.content);
+      expect(content).toContain(original.message);
+      expect(content).toContain(secondary.message);
+      expect(content).not.toContain('private-input-sentinel');
+      expect(close).toHaveBeenCalledTimes(2);
+    } finally {
+      await client.close();
+      await server.close();
+    }
+  });
+
   it('launches one acknowledged detached worker and forwards only approved host configuration', async () => {
     const prepared = await engine.prepare({
       device,

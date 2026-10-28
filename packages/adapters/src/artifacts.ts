@@ -74,6 +74,7 @@ function currentApkSigner(verification: string): string {
 
 /** The only APK acquisition and verification path, shared by CLI, MCP and workflows. */
 export class ArtifactService {
+  private readonly verifiedIdentities = new Map<string, ApkIdentity>();
   readonly runner: CommandRunner;
   readonly aapt: string;
   readonly apksigner: string;
@@ -136,7 +137,13 @@ export class ArtifactService {
     const identity = await this.identity(path, signal);
     if ((await fileDigest(path, MAX_APK_BYTES, signal)) !== sha256)
       throw new AdapterError('APK changed during verification');
+    this.verifiedIdentities.set(sha256, { ...identity });
     return { ...identity, sha256 };
+  }
+  /** Only identities authenticated from actual APK bytes may populate this cache. */
+  verifiedIdentity(sha256: string): ApkIdentity | undefined {
+    const identity = this.verifiedIdentities.get(sha256);
+    return identity ? { ...identity } : undefined;
   }
   async inspect(
     path: string,
@@ -157,6 +164,7 @@ export class ArtifactService {
       throw new AdapterError('APK package, version or signer does not match the reviewed artifact');
     if ((await fileDigest(path, MAX_APK_BYTES, signal)) !== hash)
       throw new AdapterError('APK changed during verification');
+    this.verifiedIdentities.set(hash, { ...identity });
     return { ...identity, path, sha256: hash };
   }
   async snapshot(

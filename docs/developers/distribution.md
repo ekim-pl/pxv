@@ -27,6 +27,13 @@ node packages/release/dist/cli.js promote --artifacts ARTIFACT_DIRECTORY \
 
 Remove `--dry-run` only for an authorized publication to the configured registry. The built-in promotion path verifies real OpenSSH signatures/checksums before npm publication. Repository/OCI/package-repository publishing outside that path requires an equally explicit reviewed release process.
 
+Promotion first validates the complete artifact bundle, then authenticates a
+private copy of the selected tarball, signed checksums, signature and provenance.
+Only that read-only tarball is passed to npm; replacing original files during
+verification cannot change publication bytes. Dry runs perform the same snapshot
+verification without invoking npm or changing source artifacts. Temporary copies
+are removed on success and failure; cleanup errors retain the original failure.
+
 The SEA target is experimental and requires an explicit postject executable plus matching external resources. The portable archive is the supported binary-like distribution baseline. Do not describe the experimental launcher as a self-contained supported phone-management binary.
 
 Candidate and release-provenance schema 2 bind Node 24.22.0, the supervisor JavaScript bundle, Koffi 3.3.3 Linux glibc x64 Node-API 8 prebuild, loader bytes and artifact hashes. Regenerate schema 1 candidates. Every supported distribution contains the supervisor, selected addon and reviewed Koffi notices; qualify installed candidate bytes on Debian 12 and Ubuntu 24.04 without workspace dist mounts. Keep host control reservations and private projects intact.

@@ -4,6 +4,7 @@ import { createServer, type Server } from 'node:net';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { createHash } from 'node:crypto';
 import { ResourceScope } from '@pxv/engine';
 import { SqliteStore } from '@pxv/runtime';
 import {
@@ -130,6 +131,7 @@ class FakeRunner implements CommandRunner {
           );
     const shell = args.indexOf('shell');
     const command = args.slice(shell + 1).map(decode);
+    if (command[0] === 'sha256sum') return result('', 127);
     if (command[0] === 'getprop') {
       const properties: Record<string, string> = {
         'ro.serialno': this.hardware,
@@ -337,6 +339,147 @@ describe('per-profile primary PIN scrambling', () => {
 });
 
 describe('observation-scoped shared APK inspection', () => {
+  function hashingAdapter() {
+    const runner = new FakeRunner();
+    let bytes = 'fixture apk';
+    const run = runner.run.bind(runner);
+    runner.run = async (args, options) => {
+      const command = args.slice(args.indexOf('shell') + 1).map(decode);
+      if (command[0] === 'sha256sum') {
+        runner.calls.push({ args });
+        return {
+          code: 0,
+          stdout: `${createHash('sha256').update(bytes).digest('hex')}  ${command[1]}\n`,
+          stderr: '',
+        };
+      }
+      const result = await run(args, options);
+      if (args.includes('pull')) await writeFile(args.at(-1)!, bytes);
+      return result;
+    };
+    const artifacts = new ArtifactService({ runner });
+    const identity = vi.spyOn(artifacts, 'identity').mockImplementation(() =>
+      Promise.resolve({
+        packageId: 'org.example.app',
+        versionCode: runner.version,
+        signerSha256: 'b'.repeat(64),
+      }),
+    );
+    return {
+      runner,
+      identity,
+      artifacts,
+      android: new AndroidAdapter({ runner, artifacts, adbServer: endpoint }),
+      replaceBytes(this: void, value: string) {
+        bytes = value;
+      },
+    };
+  }
+  it('reuses verified content across inspections and pulls changed bytes at the same path', async () => {
+    const { android, runner, identity, replaceBytes } = hashingAdapter();
+    await android.inspect(target, sharedPolicy());
+    await android.inspect(target, sharedPolicy());
+    await android.inspectSharedEffects(target, ['org.example.app']);
+    expect(runner.calls.filter(({ args }) => args.includes('pull'))).toHaveLength(1);
+    expect(identity).toHaveBeenCalledTimes(1);
+    replaceBytes('replacement apk');
+    runner.version = 2;
+    const next = await android.inspect(target, sharedPolicy());
+    expect(next.profiles[0]?.packages[0]?.versionCode).toBe(2);
+    expect(runner.calls.filter(({ args }) => args.includes('pull'))).toHaveLength(2);
+    expect(identity).toHaveBeenCalledTimes(2);
+  });
+  it('reuses a locally authenticated artifact without pulling its installed bytes', async () => {
+    const { android, runner, artifacts } = hashingAdapter();
+    const directory = await mkdtemp(join(tmpdir(), 'pxv-known-installed-'));
+    try {
+      const path = join(directory, 'known.apk');
+      await writeFile(path, 'fixture apk');
+      await artifacts.inspect(path, {
+        packageId: 'org.example.app',
+        versionCode: 1,
+        signerSha256: 'b'.repeat(64),
+        sha256: createHash('sha256').update('fixture apk').digest('hex'),
+      });
+      await android.inspect(target, policy);
+      expect(runner.calls.filter(({ args }) => args.includes('pull'))).toHaveLength(0);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+  it.each(['unsupported', 'malformed'])('pulls again when fresh device hashing is %s', async (mode) => {
+    const { android, runner } = hashingAdapter();
+    await android.inspect(target, policy);
+    const run = android.runAdb.bind(android);
+    android.runAdb = (args, options) =>
+      args.map(decode).includes('sha256sum')
+        ? Promise.resolve({ code: mode === 'unsupported' ? 127 : 0, stdout: 'invalid hash', stderr: '' })
+        : run(args, options);
+    await android.inspect(target, policy);
+    expect(runner.calls.filter(({ args }) => args.includes('pull'))).toHaveLength(2);
+  });
+  it.each([false, true])('rejects hash changes during inspection (cached: %s)', async (cached) => {
+    const { android, replaceBytes } = hashingAdapter();
+    if (cached) await android.inspect(target, policy);
+    const run = android.runAdb.bind(android);
+    let reads = 0;
+    android.runAdb = async (args, options) => {
+      if (args.map(decode).includes('sha256sum') && ++reads === 2) replaceBytes('changed apk');
+      return run(args, options);
+    };
+    await expect(android.inspect(target, policy)).rejects.toThrow('changed during content inspection');
+  });
+  it('refreshes settings and permissions without pulling unrelated APKs or renewing freshness', async () => {
+    const runner = new FakeRunner();
+    const android = adapter(runner);
+    const previous = await android.inspect(target, policy);
+    runner.calls = [];
+    runner.values.set('secure:test_setting', 'new');
+    const observed = await android.inspectAction(target, policy, previous, {
+      kind: 'setting',
+      profileId: 'work',
+      setting: { namespace: 'secure', key: 'test_setting', value: 'new' },
+    });
+    runner.granted = false;
+    const updated = await android.inspectAction(target, policy, observed, {
+      kind: 'permission',
+      profileId: 'work',
+      permission: policy.profiles[0]!.permissions[0]!,
+    });
+    expect(updated.profiles[0]?.settings).toContainEqual({
+      namespace: 'secure',
+      key: 'test_setting',
+      value: 'new',
+    });
+    expect(updated.profiles[0]?.permissions[0]?.granted).toBe(false);
+    expect(updated.observedAt).toBe(previous.observedAt);
+    expect(previous.profiles[0]?.permissions[0]?.granted).toBe(true);
+    expect(runner.calls.filter(({ args }) => args.includes('pull'))).toHaveLength(0);
+    runner.serialNo++;
+    await expect(
+      android.inspectAction(target, policy, updated, {
+        kind: 'permission',
+        profileId: 'work',
+        permission: policy.profiles[0]!.permissions[0]!,
+      }),
+    ).rejects.toThrow('identity changed');
+  });
+  it('refreshes installed content and permissions across every affected managed user', async () => {
+    const runner = new FakeRunner();
+    const android = adapter(runner);
+    const configured = sharedPolicy();
+    const previous = await android.inspect(target, configured);
+    runner.version = 2;
+    runner.granted = false;
+    const updated = await android.inspectAction(target, configured, previous, {
+      kind: 'install-apk',
+      profileId: 'work',
+      artifact: configured.profiles[0]!.packages[0]!,
+    });
+    expect(updated.profiles.map((profile) => profile.packages[0]?.versionCode)).toEqual([2, 2]);
+    expect(updated.profiles.map((profile) => profile.permissions[0]?.granted)).toEqual([false, false]);
+    expect(previous.profiles[0]?.packages[0]?.versionCode).toBe(1);
+  });
   it('keeps metadata inspection for optional split packages but rejects managed splits without mutation', async () => {
     const runner = new FakeRunner();
     const android = adapter(runner);

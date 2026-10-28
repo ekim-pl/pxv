@@ -200,11 +200,12 @@ Po konfiguracji atestacja może korzystać z wygasłego planu wykonania, jeśli 
 
 ## 7. Sprawdź telefon i przekaż go odbiorcy
 
-Receptury i testy sieci wymagają kompletnych wyników powiązanych z dokładną
-czynnością, przebiegiem i pomiarami. Ręczna konfiguracja wymaga zużytego
-poświadczenia z audytu. Nie edytuj niepełnych ani niejednoznacznych dowodów;
-zachowaj je do inspekcji. Awaria procesu nie nadpisuje nowszego postępu ani
-zakończonego przebiegu.
+Gotowość receptur i prób sieci wymaga pełnych wyników, dokładnego pochodzenia i
+poświadczeń z audytu. Brak lub sprzeczność punktu receptury blokuje wznowienie i
+odświeżenie; PXV nie powtarza UI ani nie odtwarza dowodów. Zachowaj zapisy, sprawdź
+aplikację i wykonaj wymagane odzyskiwanie przed nowym zatwierdzonym planem. Awaria
+nie nadpisuje nowszych ani zakończonych zapisów; komunikat obejmuje oba błędy
+operacji i zamykania magazynu.
 
 Przed końcowym zatwierdzeniem możesz zapisać uzgodnione dane trzema opcjonalnymi poleceniami odczytu z rozdziału 9. Zakończ odczyt przed wyłączeniem debugowania.
 
@@ -352,12 +353,10 @@ Zapisz właściwe zdarzenie przez `lifecycle maintenance|policy-change|loss|reti
 
 ## Próba offline i dokumentacja
 
-Bez fizycznego telefonu testowego najkrótsza próba wymaga nowego osobnego projektu i polityki z danymi syntetycznymi:
-
 ```sh
 pxv project init --path /prywatna/sciezka/proba-offline --policy /sciezka/polityki-syntetycznej.json
 pxv policy validate --project-root /prywatna/sciezka/proba-offline
 pxv guide project --project-root /prywatna/sciezka/proba-offline --kind pixel --locale pl
 ```
 
-Inicjalizacja zapisuje blokadę. Testy syntetyczne kwalifikują hosta; flashowanie, receptury UI, VPN, odtwarzanie i odbiór sprawdź na osobnym telefonie testowym. Wyniki fizyczne dotyczą tylko zapisanej wersji. Community wyłącza rozszerzenia i automatyzację Seedvault; ręczną kopię i odtwarzanie sprawdź osobno. Zobacz [polecenia](../../../docs/operators/command-reference.md), [automatyzację i MCP](../../../docs/ai-agents/workflow-and-recovery.md), [Docker](../../../docs/operators/host-setup.md), [bezpieczeństwo](../../../SECURITY.md) i [weryfikację](../../../docs/operators/acceptance.md).
+Użyj nowego projektu i polityki syntetycznej; inicjalizacja zapisuje blokadę. Próba kwalifikuje tylko hosta; flashowanie, UI, VPN, odtwarzanie i odbiór wymagają testu fizycznego dla danej wersji. Community wyłącza rozszerzenia i Seedvault; ręczną kopię/odtwarzanie sprawdź osobno. Zobacz [polecenia](../../../docs/operators/command-reference.md), [automatyzację/MCP](../../../docs/ai-agents/workflow-and-recovery.md), [Docker](../../../docs/operators/host-setup.md), [bezpieczeństwo](../../../SECURITY.md) i [weryfikację](../../../docs/operators/acceptance.md).

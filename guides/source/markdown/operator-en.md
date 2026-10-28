@@ -193,10 +193,12 @@ After provisioning, attestation can use an expired execution plan if measurement
 
 ## 7. Check, finalize and transfer custody
 
-Recipe/probe readiness requires complete results, the exact source action/run and
-retained execution checkpoints. Assisted app setup needs its consumed audit-backed
-witness. Preserve incomplete or ambiguous evidence for inspection; never edit proofs
-to claim readiness. Worker failures preserve newer progress and completed records.
+Recipe/probe readiness requires complete results, exact source lineage and
+audit-backed app-setup receipts. Missing or conflicting recipe checkpoints block
+resume/refresh; PXV never replays UI or repairs evidence. Preserve records, inspect
+the app and complete required recovery before newly reviewed work. Worker failures
+preserve newer/completed records; combined operation/disposal errors show both
+failures.
 
 Before final signoff, you may collect agreed registry values with the three optional device collectors in section 9. Complete collection before debugging is disabled.
 

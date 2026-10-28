@@ -138,6 +138,28 @@ function configuredCommands(policy: ExecutionPolicy): string[] {
   return [...commands];
 }
 
+/** Parse only the requested user's public credential type; never retain the dump. */
+function credentialType(dump: string, userId: number): string {
+  const lines = dump.split(/\r?\n/u);
+  const users = lines.flatMap((line, index) => {
+    const match = /^(\s*)User ([0-9]+)\s*$/u.exec(line);
+    return match && Number(match[2]) === userId ? [{ index, indent: match[1]!.length }] : [];
+  });
+  if (users.length !== 1)
+    throw new AdapterError('Credential state is unavailable; inspect the profile privately');
+  const user = users[0]!;
+  const types: string[] = [];
+  for (const line of lines.slice(user.index + 1)) {
+    if (!line.trim()) continue;
+    if (line.length - line.trimStart().length <= user.indent) break;
+    if (line.trimStart().startsWith('CredentialType:'))
+      types.push(line.trim().slice('CredentialType:'.length).trim());
+  }
+  if (types.length !== 1 || !['NONE', 'PIN', 'PASSWORD', 'PATTERN'].includes(types[0]!))
+    throw new AdapterError('Credential state is unavailable; inspect the profile privately');
+  return types[0]!;
+}
+
 /** Private values are loaded for each call and never become plan or observation data. */
 export class CredentialDefaultsService {
   constructor(
@@ -199,18 +221,35 @@ export class CredentialDefaultsService {
     user: AndroidUserIdentity,
     profile: ProfilePolicy,
     options: OperationOptions,
-  ): Promise<void> {
+  ): Promise<'command-accepted' | 'existing-lock-preserved'> {
     const credential = this.profile(profile, user).defaultCredential;
     if (!credential) throw new AdapterError('Profile has no configured credential default');
+    await this.android.guardUser(target, user, options.signal);
+    const state = async () =>
+      credentialType(
+        await this.android.shell(
+          target,
+          ['dumpsys', 'lock_settings'],
+          options.signal ? { signal: options.signal } : {},
+        ),
+        user.userId,
+      );
+    const initialType = await state();
+    await this.android.guardUser(target, user, options.signal);
+    if (initialType !== 'NONE') return 'existing-lock-preserved';
     const values = await this.values(target, options.signal);
     const command = `set-${credential.type}`;
     await this.supported(target, [command], options.signal);
     await this.android.guardUser(target, user, options.signal);
+    const currentType = await state();
+    await this.android.guardUser(target, user, options.signal);
+    if (currentType !== 'NONE') return 'existing-lock-preserved';
     await this.dispatch(
       target,
       [command, '--user', String(user.userId), '--', valueFor(values, credential.secretRef, credential.type)],
       options,
     );
+    return 'command-accepted';
   }
 
   async setDuress(

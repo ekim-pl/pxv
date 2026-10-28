@@ -48,7 +48,7 @@ export async function atomicWritePrivate(
 
 export async function readBounded(path: string, maxBytes: number): Promise<Buffer> {
   if (!Number.isSafeInteger(maxBytes) || maxBytes < 0) throw new Error('Invalid read limit');
-  const file = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
+  const file = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
   try {
     const metadata = await file.stat();
     if (!metadata.isFile() || metadata.size > maxBytes)
@@ -70,7 +70,7 @@ export async function readBounded(path: string, maxBytes: number): Promise<Buffe
 }
 
 export async function hashFile(path: string): Promise<string> {
-  const file = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
+  const file = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
   try {
     if (!(await file.stat()).isFile()) throw new Error('Hash input must be a regular file');
     const digest = createHash('sha256');

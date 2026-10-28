@@ -375,7 +375,7 @@ describe('frozen distribution candidate', () => {
           signer: 'release',
           dryRun: true,
         }),
-      ).rejects.toThrow('identified by signed release provenance');
+      ).rejects.toThrow('Command failed');
     }
     amendedProvenance.signed = true;
     amendedProvenance.artifacts[0]!.format = 'npm';
@@ -426,5 +426,87 @@ describe('frozen distribution candidate', () => {
       }),
     ).rejects.toThrow('checksum mismatch');
     expect((await readdir(directory)).some((path) => path === 'SHA256SUMS.sig')).toBe(true);
+  });
+  test('publishes only private authenticated snapshot bytes even if originals change during signature verification', async () => {
+    const root = await fixture(),
+      output = await mkdtemp('/tmp/pxv-release-promotion-');
+    const key = join(output, 'signing');
+    await runner.run(['ssh-keygen', '-q', '-t', 'ed25519', '-N', '', '-f', key]);
+    const candidate = await createCandidate({
+      sourceRoot: root,
+      outputRoot: output,
+      supervisorEntry: await supervisorPath(),
+      preview: false,
+    });
+    const [artifact] = await buildFormats(candidate, { formats: ['npm'], signingKey: key });
+    const packageFile = artifact!.path,
+      directory = dirname(packageFile),
+      allowed = join(output, 'allowed');
+    await writeFile(allowed, `release ${await readFile(`${key}.pub`, 'utf8')}`);
+    const original = await readFile(packageFile),
+      provenance = await readFile(join(directory, 'provenance.json'));
+    let snapshot = '',
+      publications = 0;
+    const options = {
+      artifactDirectory: directory,
+      packageFile,
+      registry: 'https://registry.example.org/',
+      allowedSigners: allowed,
+      signer: 'release',
+    };
+    await promoteNpm({
+      ...options,
+      runtime: {
+        run: async (args, input) => {
+          if (args[0] === 'ssh-keygen') {
+            snapshot = dirname(args.at(-1)!);
+            const result = await runner.run(args, input);
+            await writeFile(packageFile, 'unapproved replacement');
+            await writeFile(join(directory, 'provenance.json'), 'unapproved provenance');
+            return result;
+          }
+          expect(args[0]).toBe('npm');
+          expect(args[2]).not.toBe(packageFile);
+          expect(await readFile(args[2]!)).toEqual(original);
+          expect((await stat(args[2]!)).mode & 0o777).toBe(0o400);
+          expect((await stat(dirname(args[2]!))).mode & 0o777).toBe(0o700);
+          publications++;
+          return { code: 0, stdout: '', stderr: '' };
+        },
+      },
+    });
+    expect(publications).toBe(1);
+    await expect(stat(snapshot)).rejects.toMatchObject({ code: 'ENOENT' });
+    await writeFile(packageFile, original);
+    await writeFile(join(directory, 'provenance.json'), provenance);
+    const originalFailure = new Error('npm publication failed');
+    await expect(
+      promoteNpm({
+        ...options,
+        runtime: {
+          run: async (args, input) => {
+            if (args[0] === 'ssh-keygen') {
+              snapshot = dirname(args.at(-1)!);
+              return runner.run(args, input);
+            }
+            throw originalFailure;
+          },
+        },
+      }),
+    ).rejects.toBe(originalFailure);
+    await expect(stat(snapshot)).rejects.toMatchObject({ code: 'ENOENT' });
+    await promoteNpm({
+      ...options,
+      dryRun: true,
+      runtime: {
+        run: async (args, input) => {
+          expect(args[0]).toBe('ssh-keygen');
+          snapshot = dirname(args.at(-1)!);
+          return runner.run(args, input);
+        },
+      },
+    });
+    expect(publications).toBe(1);
+    await expect(stat(snapshot)).rejects.toMatchObject({ code: 'ENOENT' });
   });
 });

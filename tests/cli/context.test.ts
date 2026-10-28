@@ -643,7 +643,8 @@ describe('production dependency wiring and evidence boundaries', () => {
     mocks.discover.mockRejectedValueOnce(new Error('dependency discovery failed'));
     try {
       await expect(application(projectRoot, resources)).rejects.toMatchObject({
-        message: 'Application construction failed and storage disposal failed',
+        message:
+          'Application failed: dependency discovery failed; storage disposal failed: storage disposal failed',
         errors: [
           expect.objectContaining({ message: 'dependency discovery failed' }),
           expect.objectContaining({ message: 'storage disposal failed' }),

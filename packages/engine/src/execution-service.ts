@@ -1,4 +1,7 @@
 import { validateRecipeResult, validateProbeResult } from './capability-results.js';
+import { PendingRecipeQuery } from './pending-recipe.js';
+import { ProofQuery } from './proof-query.js';
+import { EvidenceValidationError } from './evidence-validation.js';
 import {
   digest,
   evaluateObservation,
@@ -49,6 +52,7 @@ import {
   hasFinalizationIntent,
 } from './finalization-guard.js';
 export class ExecutionService {
+  private readonly workflows = new WeakMap<RunRecord, unknown>();
   constructor(
     readonly project: ProjectContext,
     readonly store: Store,
@@ -168,10 +172,21 @@ export class ExecutionService {
     await this.journal.save(
       active.run,
       type,
-      [{ kind: 'set', collection: 'workflow', key: active.target.device.assetId, value: state }],
-      [{ collection: 'workflow', key: active.target.device.assetId, value: active.workflowExpected }],
+      [
+        { kind: 'set', collection: 'workflow', key: active.target.device.assetId, value: state },
+        ...(active.recipeEvidence ? [active.recipeEvidence.change] : []),
+      ],
+      [
+        { collection: 'workflow', key: active.target.device.assetId, value: active.workflowExpected },
+        ...(active.recipeEvidence?.expected ?? active.recipeCheckpoint?.expected ?? []),
+      ],
     );
+    delete active.recipeEvidence;
+    this.trackWorkflow(active, state);
+  }
+  private trackWorkflow(active: ActiveExecution, state: WorkflowState): void {
     active.workflowExpected = state;
+    this.workflows.set(active.run, structuredClone(state));
   }
   private canResume(run: RunRecord): boolean {
     return runPauseReason(run)?.kind === 'manual-step' && Number.isSafeInteger(run.cursor);
@@ -212,7 +227,12 @@ export class ExecutionService {
     const prepared = await this.plans.read(run.planId, undefined, true);
     const assetId = prepared.target.device.assetId;
     const state = await this.store.get<WorkflowState>('workflow', assetId);
-    if (!state || state.planDigest !== prepared.plan.digest || hasFinalizationIntent(state))
+    if (
+      !state ||
+      state.planDigest !== prepared.plan.digest ||
+      hasFinalizationIntent(state) ||
+      (this.workflows.has(run) && digest(state) !== digest(this.workflows.get(run) ?? null))
+    )
       return this.journal.save(run, run.status);
     await this.journal.save(
       run,
@@ -288,6 +308,12 @@ export class ExecutionService {
       resume,
       workflowExpected: await this.store.get('workflow', target.device.assetId),
     };
+    this.workflows.set(run, active.workflowExpected);
+    const recipeCheckpoint = await new PendingRecipeQuery(this.project, this.store, this.plans, run).read(
+      prepared,
+      observation,
+    );
+    if (recipeCheckpoint) active.recipeCheckpoint = recipeCheckpoint;
     if (!(await this.checkExecutionBaseline(active))) return;
     await this.checkCredentialDefaultsPlan(active);
     await this.checkExecutionEffects(active);
@@ -381,19 +407,55 @@ export class ExecutionService {
         kind: action.kind,
         profileId: 'profileId' in action ? action.profileId : '',
       });
-      if (!(await this.executeAction(active, action, index))) return false;
-      if (action.kind === 'manual' || action.kind === 'install-os') continue;
-      active.observation = await this.observations.observe(active.target, active.control.signal);
-      active.run.cursor = index + 1;
-      await this.journal.save(active.run, 'observed', [], [], {
-        kind: action.kind,
-        observationDigest: observationDigest(active.observation),
-      });
+      const before = structuredClone(active.run);
+      try {
+        if (!(await this.executeAction(active, action, index))) return false;
+        if (action.kind === 'manual' || action.kind === 'install-os') continue;
+        active.observation = await this.observations.observeAction(
+          active.target,
+          active.observation,
+          action,
+          active.control.signal,
+        );
+        active.run.cursor = index + 1;
+        await this.saveObservedAction(active, action);
+      } catch (error) {
+        this.restoreRecipeRun(active.run, before, action);
+        throw error;
+      }
     }
     return true;
   }
+  private restoreRecipeRun(run: RunRecord, before: RunRecord, action: Action): void {
+    if (action.kind !== 'recipe') return;
+    for (const key of Object.keys(run)) Reflect.deleteProperty(run, key);
+    Object.assign(run, before);
+  }
+  private async saveObservedAction(active: ActiveExecution, action: Action): Promise<void> {
+    const evidence = active.recipeEvidence;
+    await this.journal.save(
+      active.run,
+      'observed',
+      evidence ? [evidence.change] : [],
+      evidence
+        ? [
+            ...evidence.expected,
+            { collection: 'workflow', key: active.target.device.assetId, value: active.workflowExpected },
+          ]
+        : [],
+      {
+        kind: action.kind,
+        observationDigest: observationDigest(active.observation),
+      },
+    );
+    delete active.recipeEvidence;
+    if (action.kind === 'recipe') delete active.recipeCheckpoint;
+  }
   private async executeAction(active: ActiveExecution, action: Action, index: number): Promise<boolean> {
-    if (action.kind === 'manual') return this.executeManual(active, action, index);
+    if (action.kind === 'manual') {
+      active.observation = await this.observations.observe(active.target, active.control.signal);
+      return this.executeManual(active, action, index);
+    }
     if (action.kind === 'install-os') {
       await invalidateRegistryBindings(
         this.store,
@@ -407,7 +469,12 @@ export class ExecutionService {
     }
     const profile = this.project.policy.profiles.find((value) => value.id === action.profileId);
     if (!profile) throw new Error('Plan references an unknown profile');
-    const live = await this.observations.observe(active.target, active.control.signal);
+    const live = await this.observations.observeAction(
+      active.target,
+      active.observation,
+      action,
+      active.control.signal,
+    );
     this.checkEstablishedUsers(active.observation, live);
     if (action.kind === 'create-user') {
       await invalidateRegistryBindings(
@@ -525,6 +592,7 @@ export class ExecutionService {
     await this.assertCredentialDefaultAllowed(active, action, profile, user, live);
     active.observation = live;
     await this.credentialDefaultCheckpoint(active, action.kind === 'default-duress');
+    let status: 'command-accepted' | 'existing-lock-preserved' = 'command-accepted';
     if (action.kind === 'default-credential') {
       if (!this.port.setCredentialDefault) throw new Error('Credential defaults adapter is unavailable');
       await invalidateRegistryBindings(
@@ -533,7 +601,9 @@ export class ExecutionService {
         profile.id,
         this.clock().toISOString(),
       );
-      await this.port.setCredentialDefault(active.target, user, profile, active.context);
+      status =
+        (await this.port.setCredentialDefault(active.target, user, profile, active.context)) ??
+        'command-accepted';
     } else {
       if (!this.port.setDuressDefault) throw new Error('Duress defaults adapter is unavailable');
       await invalidateRegistryBindings(
@@ -544,7 +614,7 @@ export class ExecutionService {
       );
       await this.port.setDuressDefault(active.target, user, profile, active.context);
     }
-    await this.credentialDefaults.recordAccepted(active.target, action, user, active.run.id);
+    await this.credentialDefaults.recordAccepted(active.target, action, user, active.run.id, status);
   }
   private async assertCredentialDefaultAllowed(
     active: ActiveExecution,
@@ -605,7 +675,7 @@ export class ExecutionService {
         { collection: 'handoff', key: assetId, value: handoff },
       ],
     );
-    active.workflowExpected = state;
+    this.trackWorkflow(active, state);
   }
   private async executeApk(
     active: ActiveExecution,
@@ -709,10 +779,11 @@ export class ExecutionService {
   ): Promise<boolean> {
     if (!this.port.runRecipe) throw new Error('Configured recipe adapter is unavailable');
     const evidenceId = `${active.run.id}:recipe:${index}`;
-    const previousId = index === 0 ? active.prepared.refreshedFrom?.pendingRecipeEvidenceId : undefined;
-    const previous = await this.store.get<RecipeProof>('capability-evidence', previousId ?? evidenceId);
-    if (previous?.status === 'manual-pending')
-      return this.completeManualRecipe(active, action, index, profile, user, live, previous);
+    const checkpoint = active.recipeCheckpoint;
+    if (checkpoint?.actionIndex === index)
+      return this.completeManualRecipe(active, action, index, profile, user, live, checkpoint.proof);
+    if ((await this.store.get('capability-evidence', evidenceId)) !== undefined)
+      throw new Error('Unexpected recipe evidence; preserve it for inspection');
     const result = await this.port.runRecipe(active.target, user, action.recipe, active.context);
     if (result.status === 'manual-pending') {
       await this.writeRecipeEvidence(active, action, index, profile, user, result, 'manual-pending');
@@ -735,12 +806,54 @@ export class ExecutionService {
     validateRecipeResult(action.recipe, previous.result, 'manual-pending');
     if (previous.configurationDigest !== digest(action.recipe) || !sameUser(previous.user, user))
       throw new Error('Recipe checkpoint identity changed');
-    const receipt = await this.currentReceipt(active, 'app_setup', live);
-    if (!receipt || receipt.id === previous.previousReceiptId)
+    const retained = await this.store.get('attestations', active.target.device.assetId);
+    const receipt = this.evidence
+      .parseReceipts(retained)
+      .find(
+        (value) =>
+          value.check === 'app_setup' &&
+          value.planDigest === active.prepared.plan.digest &&
+          value.observationDigest === observationDigest(live),
+      );
+    if (
+      !receipt ||
+      receipt.id === previous.previousReceiptId ||
+      this.usedAppSetupReceipt(active.run, receipt)
+    )
       return this.pauseExecution(active, index, 'app_setup', live, previous.result.instructions);
+    await this.authenticateRecipeReceipt(active, profile.id, receipt, live);
     await this.writeRecipeEvidence(active, action, index, profile, user, previous.result, 'manual-completed');
+    active.recipeEvidence!.expected.push({
+      collection: 'attestations',
+      key: active.target.device.assetId,
+      value: retained,
+    });
     this.consumeSetupReceipt(active.run, receipt, index);
     return true;
+  }
+  private async authenticateRecipeReceipt(
+    active: ActiveExecution,
+    profileId: string,
+    receipt: OperatorAttestation,
+    observation: DeviceObservation,
+  ): Promise<void> {
+    const query = new ProofQuery(
+      { project: this.project, store: this.store, plans: this.plans },
+      {
+        planId: active.prepared.plan.id,
+        planDigest: active.prepared.plan.digest,
+        policyDigest: active.prepared.plan.policyDigest,
+        observation,
+      },
+    );
+    const authenticated = (await query.auditReceipts()).get(receipt.id);
+    if (
+      !authenticated ||
+      digest(authenticated) !== digest(receipt) ||
+      receipt.profileIds.length !== 1 ||
+      receipt.profileIds[0] !== profileId
+    )
+      throw new EvidenceValidationError('Recipe witness audit evidence changed; preserve it for inspection');
   }
   private async writeRecipeEvidence(
     active: ActiveExecution,
@@ -754,7 +867,7 @@ export class ExecutionService {
     validateRecipeResult(action.recipe, result, status);
     const evidenceId = `${active.run.id}:recipe:${index}`;
     const configurationDigest = digest(action.recipe);
-    await this.store.set('capability-evidence', evidenceId, {
+    const proof = {
       kind: 'recipe',
       status,
       runId: active.run.id,
@@ -777,7 +890,17 @@ export class ExecutionService {
       ...(status === 'manual-pending'
         ? { previousReceiptId: (await this.currentReceipt(active, 'app_setup'))?.id ?? null }
         : {}),
-    });
+    };
+    const expected = active.recipeCheckpoint?.expected ?? [];
+    active.recipeEvidence = {
+      change: { kind: 'set', collection: 'capability-evidence', key: evidenceId, value: proof },
+      expected: [
+        ...expected,
+        ...(!expected.some((value) => value.collection === 'capability-evidence' && value.key === evidenceId)
+          ? [{ collection: 'capability-evidence', key: evidenceId, value: undefined }]
+          : []),
+      ],
+    };
     if (status === 'manual-pending') return;
     active.run.capabilityEvidence = [
       ...(active.run.capabilityEvidence ?? []).filter((value) => value.evidenceId !== evidenceId),
