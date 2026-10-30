@@ -312,7 +312,7 @@ describe('public documentation generation', () => {
     for (const [options] of vi.mocked(fixture.page.pdf).mock.calls) {
       expect(options.displayHeaderFooter).toBe(true);
       expect(options.headerTemplate).toBe('<span></span>');
-      expect(options.footerTemplate).toContain('pxv Community');
+      expect(options.footerTemplate).not.toContain('pxv Community');
       expect(options.footerTemplate).toContain('class="pageNumber"');
       expect(options.footerTemplate).toContain('class="totalPages"');
     }
@@ -396,7 +396,7 @@ describe('public documentation generation', () => {
     expect(polish).toContain('<html lang="pl">');
     expect(polish).toContain('<body data-guide-kind="user">');
     expect(polish).toContain('body[data-guide-kind="user"] .guide-cover{min-height:50mm}');
-    expect(polish).toContain('<title>pxv Community - pxv Community</title>');
+    expect(polish).toContain('<title>PRZEWODNIK UŻYTKOWNIKA</title>');
     expect(polish).toContain('class="cover-logo" src="assets/logo.svg"');
     expect(polish).toContain("@font-face{font-family:'Pxv Display'");
     expect(polish).toContain("src:url('assets/font.ttf');font-style:normal;font-weight:400}");

@@ -44,6 +44,15 @@ other field in the existing private `pxv.project.json`; this is an optional frag
 Replace the synthetic contact with a real support route. A support override replaces
 the complete product contact; it requires a name and at least one email, HTTPS URL,
 or phone. Project name and support are independently optional, single-line values.
+The project name becomes each edition's primary title, with its original descriptive
+title as a subtitle, and replaces the running PDF identity label. Without a project
+name, descriptive titles are retained and PDF footers show page numbers only.
+The product name is omitted from covers, page titles and the guide index.
+Operator, user and quick-start guides
+show a localized support block near the title; credential inserts keep their existing
+support field. If no support override is supplied, project editions use the product
+contact routes, omitting a contact name that repeats the product name. Guide body
+text and command names retain their existing wording.
 See [project metadata rules](../../guides/README.md#project-names-and-support-contacts).
 
 From the source checkout, using the project’s already reviewed policy/metadata:
@@ -216,9 +225,9 @@ product contact. Without a support override, the product contact is used. See
 [project names and support contacts](../../guides/README.md#project-names-and-support-contacts)
 for configuration, validation and the required policy-lock/review refresh after edits.
 Shared guide HTML, Markdown, PDFs and QA artifacts remain blank templates, and the
-publishing subprocess receives only the selected insert metadata in addition to the
-project policy, with no registry values or passphrase. Blank credential editions
-include the project name and support contact; credentials stay blank. Insert export is
+publishing subprocess receives only the selected display metadata in addition to the
+project policy, with no registry values or passphrase. All editions use the project
+title and support metadata; credential fields stay blank. Insert export is
 offline and can run after debugging has been disabled.
 
 The PDF includes **all saved values in the latest record**, including ordinary unlocks,

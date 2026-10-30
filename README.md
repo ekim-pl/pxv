@@ -44,6 +44,8 @@ Build with `pxv guides rebuild --policy FILE --output-dir DIRECTORY --chromium P
 to adapt the phone-sized booklet and blank credential/recovery sheets to the installation's
 GrapheneOS user profiles. Profile details describe the intended policy; compare
 them with the actual phone and accepted report before packing.
+Use `--project-root DIRECTORY` instead of `--policy FILE` to apply the project's
+policy, project name and support contact across all English and Polish guide editions.
 See [packing and printing](docs/operators/guides-and-inserts.md) for the complete handoff process.
 
 Start with the operator guide and a disposable canary. Starter packs describe

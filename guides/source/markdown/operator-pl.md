@@ -327,11 +327,17 @@ pxv policy lock --project-root "$P"
 pxv guides rebuild --project-root "$P" --output-dir /prywatny/katalog-poradnikow --chromium /usr/bin/google-chrome
 ```
 
-Powstaną puste wkładki EN/PL z metadanymi i polityką projektu, bez odblokowania
-rejestru. Opcja `--html-only` może zastąpić wskazanie Chromium. Wybierz osobny
-katalog wynikowy i pomiń `--policy`. Obie ścieżki eksportu prywatnego korzystają
-z tych samych danych kontaktowych. Zobacz
-[metadane wkładek projektu](../../../guides/README.md#project-names-and-support-contacts).
+Powstaną wszystkie wydania poradników EN/PL z metadanymi i polityką projektu, bez
+odblokowania rejestru. Nazwa projektu staje się tytułem głównym, a dotychczasowy
+tytuł poradnika podtytułem; nazwa pojawia się też w powtarzanych oznaczeniach PDF.
+Bez nazwy projektu zachowane są tytuły opisowe, a stopki PDF zawierają tylko numery
+stron. Nazwa produktu nie pojawia się na okładkach, w tytułach stron ani w indeksie. Poradniki
+operatora, użytkownika i szybkiego startu pokazują blok kontaktu do wsparcia w języku
+wydania obok tytułu; puste wkładki zachowują swoje pole wsparcia. Opcja
+`--html-only` może zastąpić wskazanie Chromium. Wybierz osobny katalog wynikowy
+i pomiń `--policy`. Obie ścieżki eksportu prywatnego korzystają z tych samych danych
+kontaktowych. Zobacz
+[metadane poradników projektu](../../../guides/README.md#project-names-and-support-contacts).
 
 Flashowanie, tworzenie profilu, zapisy domyślnych blokad i zdarzenia cyklu życia unieważniają odpowiednie powiązania; stare wartości pozostają w historii. Polecenia rejestru są lokalne i offline; nie konfigurują telefonu ani nie dostarczają sekretów do konfiguracji. Użytkownik opisał klucz powiadomienia Oblivion, przypisany do profilu, jako wymazujący cały telefon; zachowanie nie ma kwalifikacji dla konkretnej aplikacji i kompilacji. Oddzielaj te klucze od przymusu GrapheneOS; nigdy nie umieszczaj prawdziwych kluczy w powiadomieniach, logach, zwykłych eksportach ani testach.
 

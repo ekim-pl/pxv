@@ -316,11 +316,12 @@ async function verifyFoldEdition(record, html, qa, options, family, sections) {
   return record;
 }
 
-/** @param {string} destination @param {string} productName */
-async function verifyIndex(destination, productName) {
+/** @param {string} destination */
+async function verifyIndex(destination) {
   const index = await readFile(join(destination, 'index.html'), 'utf8');
-  if (!index.includes(`<h1>${productName}`))
-    throw Error('Guide index does not use the current product brand');
+  const heading = /<h1>([^<]+)<\/h1>/u.exec(index)?.[1];
+  if (!heading || !index.includes(`<title>${heading}</title>`))
+    throw Error('Guide index needs a matching title and heading');
 }
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
@@ -360,7 +361,7 @@ if (names.join(',') !== editionNames.join(','))
 const product = /** @type {{name:string,upstreamVersion:string}} */ (
   JSON.parse(await readFile(join(root, 'product.json'), 'utf8'))
 );
-await verifyIndex(options.destination, product.name);
+await verifyIndex(options.destination);
 await verifyGuideLinks(options.destination, [join(options.destination, 'index.html'), ...outputs]);
 const qa = join(options.destination, 'qa');
 await mkdir(qa, { recursive: true });

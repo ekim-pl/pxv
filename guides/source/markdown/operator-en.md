@@ -318,10 +318,15 @@ pxv policy lock --project-root "$P"
 pxv guides rebuild --project-root "$P" --output-dir /private/project-guides --chromium /usr/bin/google-chrome
 ```
 
-This builds EN/PL blank inserts using project metadata and policy without unlocking
-the registry. `--html-only` can replace the Chromium option. Use a separate output
-directory and omit `--policy`. Both private export paths use the same contact details.
-See [project insert metadata](../../../guides/README.md#project-names-and-support-contacts).
+This builds every EN/PL guide edition using project metadata and policy without
+unlocking the registry. The project name becomes the primary title, with the original
+guide title as a subtitle, and appears in running PDF labels. Without a project name,
+descriptive titles are retained and PDF footers show page numbers only. Guides omit
+the product name from covers, page titles and the index. Operator, user and quick-start guides show a
+localized support block near the title; blank credential inserts keep their support
+field. `--html-only` can replace the Chromium option. Use a separate output directory
+and omit `--policy`. Both private export paths use the same contact details.
+See [project guide metadata](../../../guides/README.md#project-names-and-support-contacts).
 
 Flashing, profile creation, credential defaults and lifecycle changes stale affected registry bindings; history remains. Offline records neither configure phones nor supply provisioning secrets. Oblivion notification-wipe behavior is user-described as phone-wide and unqualified for any exact app/build. Keep its keys separate from GrapheneOS duress; never include real keys in notifications, logs, ordinary exports or tests.
 

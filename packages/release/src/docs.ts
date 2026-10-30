@@ -29,7 +29,7 @@ import {
   validateProduct,
   validateProjectInsertMetadata,
 } from '@pxv/contracts';
-import type { ExecutionPolicy } from '@pxv/contracts';
+import type { ExecutionPolicy, ProductDescriptor } from '@pxv/contracts';
 import { walkPublic } from './candidate.js';
 import { renderPolicyBooklet } from './booklet.js';
 import { renderFoldSections } from './fold-sections.js';
@@ -182,17 +182,18 @@ function guideCover(
   output: string,
   locale: string,
   title: string,
-  productName: string,
   version: string,
   brand: GuideBrand,
+  subtitle?: string,
+  support = '',
 ): string {
   const kind = editionKind(output);
   if (guideFormat(output).size === 'fold')
-    return `<section class="guide-cover compact-cover"><div class="cover-copy"><p class="cover-brand">${escapeHtml(productName)}</p><p class="cover-label">${coverLabel(kind, locale)}</p><h1>${title}</h1><p class="cover-meta">${version} · ${locale.toUpperCase()} · ${foldLayout.panelMm[0]} × ${foldLayout.panelMm[1]} mm</p></div></section>`;
+    return `<section class="guide-cover compact-cover"><div class="cover-copy"><p class="cover-label">${coverLabel(kind, locale)}</p><h1>${title}</h1>${subtitle ? `<p class="cover-subtitle">${subtitle}</p>` : ''}${support}<p class="cover-meta">${version} · ${locale.toUpperCase()} · ${foldLayout.panelMm[0]} × ${foldLayout.panelMm[1]} mm</p></div></section>`;
   const image =
     kind === 'generic' ? '' : `<img class="cover-photo" src="assets/photos/cover-${kind}.png" alt="">`;
   const logo = brand.logo ? `<img class="cover-logo" src="${escapeHtml(brand.logo)}" alt="">` : '';
-  return `<section class="guide-cover">${image}<div class="cover-shade"></div><div class="cover-copy">${logo}<p class="cover-brand">${escapeHtml(productName)}</p><p class="cover-label">${coverLabel(kind, locale)}</p><h1>${title}</h1><p class="cover-subtitle">${coverSubtitle(kind, locale)}</p><p class="cover-meta">${version} · ${locale.toUpperCase()}</p></div></section>`;
+  return `<section class="guide-cover">${image}<div class="cover-shade"></div><div class="cover-copy">${logo}<p class="cover-label">${coverLabel(kind, locale)}</p><h1>${title}</h1><p class="cover-subtitle">${subtitle ?? coverSubtitle(kind, locale)}</p><p class="cover-meta">${version} · ${locale.toUpperCase()}</p></div></section>`;
 }
 
 function guideStyles(brand: GuideBrand, compact: boolean): string {
@@ -227,7 +228,6 @@ li,figure,tr{break-inside:avoid}
 .cover-photo,.cover-shade{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
 .cover-shade{background:linear-gradient(90deg,rgba(12,28,42,.94),rgba(12,28,42,.45))}
 .cover-copy{position:relative;padding:28px 32px}
-.cover-brand{font-size:12px;font-weight:700;letter-spacing:.05em}
 .cover-label{font-size:10px;letter-spacing:.1em;margin:0 0 12px}
 .cover-copy h1{font-size:29px;margin:0 0 14px;color:white}
 .cover-subtitle{margin:0 0 16px;font-size:13px}
@@ -240,7 +240,6 @@ html[data-print-mode="office"] .guide-cover{min-height:0;background:white;color:
 html[data-print-mode="office"] .cover-photo,html[data-print-mode="office"] .cover-shade{display:none}
 html[data-print-mode="office"] .cover-copy{padding:0 0 6mm}
 html[data-print-mode="office"] .cover-copy h1{font-size:23px;color:var(--brand-primary)}
-html[data-print-mode="office"] .cover-brand{font-size:10px}
 html[data-print-mode="office"] .cover-label{font-size:9px}
 html[data-print-mode="office"] .cover-subtitle{font-size:11px}
 html[data-print-mode="office"] .cover-logo{max-width:30mm;max-height:14mm;padding:0}
@@ -249,7 +248,6 @@ html[data-print-mode="print"] .guide-cover{min-height:65mm;margin:0 0 10mm;borde
 html[data-print-mode="print"] .cover-copy{padding:9mm}
 html[data-print-mode="print"] body[data-guide-kind="user"] .guide-cover{min-height:50mm}
 html[data-print-mode="print"] body[data-guide-kind="user"] .cover-copy{padding:6mm}
-html[data-print-mode="print"] body[data-guide-kind="user"] .cover-brand{margin:0 0 2mm}
 html[data-print-mode="print"] body[data-guide-kind="user"] .cover-label{margin-bottom:2mm}
 html[data-print-mode="print"] body[data-guide-kind="user"] .cover-copy h1{margin-bottom:2mm}
 html[data-print-mode="print"] body[data-guide-kind="user"] .cover-subtitle{margin-bottom:2mm}
@@ -265,14 +263,29 @@ html[data-print-mode] body.guide-fold{page:pxvfold;font-family:inherit;font-size
 .guide-fold .guide-cover,html[data-print-mode] .guide-fold .guide-cover{min-height:0;background:white;color:#111;border:0;margin:0 0 3mm}
 .guide-fold .cover-copy,html[data-print-mode] .guide-fold .cover-copy{padding:0}
 .guide-fold .cover-copy h1,html[data-print-mode] .guide-fold .cover-copy h1{font-size:12pt;color:#111;margin:0 0 2mm}
-html[data-print-mode] .guide-fold .cover-brand,html[data-print-mode] .guide-fold .cover-label,html[data-print-mode] .guide-fold .cover-meta{font-size:${foldLayout.typography.metadataPt}pt;letter-spacing:0;margin:0 0 1mm}
+html[data-print-mode] .guide-fold .cover-label,html[data-print-mode] .guide-fold .cover-meta{font-size:${foldLayout.typography.metadataPt}pt;letter-spacing:0;margin:0 0 1mm}
+.guide-fold .cover-subtitle,html[data-print-mode] .guide-fold .cover-subtitle{font-size:${foldLayout.typography.bodyPt}pt;margin:0 0 2mm}
 html[data-fold-group="ordinary"] [data-fold-group="erasure"],html[data-fold-group="erasure"] [data-fold-group="ordinary"]{display:none}
 @media screen{body.guide-fold{max-width:90mm}.guide-fold .fold-section{margin-top:8mm}}
 `;
 }
 
+function guideHeading(rendered: string, fallbackTitle: string) {
+  const heading = /<h1(?:\s[^>]*)?>(.*?)<\/h1>/isu.exec(rendered);
+  const title = heading?.[1] ?? escapeHtml(fallbackTitle);
+  let body = heading ? rendered.replace(heading[0], '') : rendered;
+  const subtitle = /<p class="guide-subtitle">(.*?)<\/p>/isu.exec(body);
+  if (subtitle) body = body.replace(subtitle[0], '');
+  const pageTitle = subtitle ? `${title} - ${subtitle[1]}` : title.replace(/<[^>]*>/gu, '');
+  return { title, subtitle: subtitle?.[1], body, pageTitle };
+}
+
+function guideSupport(body: string, compact: boolean) {
+  const support = compact ? /<p class="guide-support">.*?<\/p>/isu.exec(body) : null;
+  return { body: support ? body.replace(support[0], '') : body, support: support?.[0] ?? '' };
+}
+
 function guideHtml(
-  productName: string,
   version: string,
   locale: string,
   rendered: string,
@@ -280,22 +293,20 @@ function guideHtml(
   output: string,
   policy?: ExecutionPolicy,
 ): string {
-  const heading = /<h1(?:\s[^>]*)?>(.*?)<\/h1>/isu.exec(rendered);
-  const title = heading?.[1] ?? escapeHtml(productName);
-  let body = heading ? rendered.replace(heading[0], '') : rendered;
+  const heading = guideHeading(rendered, coverLabel(editionKind(output), locale));
   const compact = guideFormat(output).size === 'fold';
+  const { body, support } = guideSupport(heading.body, compact);
   const folded = compact
     ? renderFoldSections(body, editionKind(output) === 'credentials', locale === 'pl' ? 'pl' : 'en', policy)
     : { html: body, styles: '' };
-  body = folded.html;
-  const cover = guideCover(output, locale, title, productName, version, brand);
+  const cover = guideCover(output, locale, heading.title, version, brand, heading.subtitle, support);
   const language = locale === 'pl' ? 'pl' : 'en';
   const context =
     locale === 'pl'
       ? 'Instrukcja ogólna. Stan konkretnego telefonu potwierdza jego raport przekazania.'
       : 'General instructions. Use the handoff report for the status of a specific phone.';
   const sizeClass = guideFormat(output).size === 'fold' ? ' class="guide-fold"' : '';
-  return `<!doctype html><html lang="${language}"><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src file: data:; font-src file: data:"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(productName)} - ${escapeHtml(title.replace(/<[^>]*>/gu, ''))}</title><style>${guideStyles(brand, compact)}${folded.styles}</style></head><body data-guide-kind="${editionKind(output)}"${sizeClass}>${compact ? `<div data-fold-group="ordinary">${cover}<p>${foldPrintingInstructions(language)}</p></div>` : cover}<main class="guide-content"><p class="html-edition">${escapeHtml(productName)} | ${version} | ${locale.toUpperCase()} | ${context}</p>${body}</main></body></html>`;
+  return `<!doctype html><html lang="${language}"><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src file: data:; font-src file: data:"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${heading.pageTitle}</title><style>${guideStyles(brand, compact)}${folded.styles}</style></head><body data-guide-kind="${editionKind(output)}"${sizeClass}>${compact ? `<div data-fold-group="ordinary">${cover}<p>${foldPrintingInstructions(language)}</p></div>` : cover}<main class="guide-content"><p class="html-edition">${version} | ${locale.toUpperCase()} | ${context}</p>${folded.html}</main></body></html>`;
 }
 
 function indexLabel(name: string): string {
@@ -312,13 +323,16 @@ function indexLabel(name: string): string {
 }
 
 function guideIndex(
-  productName: string,
+  projectName: string | undefined,
   version: string,
   brand: GuideBrand,
   editions: string[],
   pdfOutput: boolean,
   policy?: ExecutionPolicy,
 ): string {
+  const title = projectName
+    ? `${escapeHtml(projectName)} — Guides`
+    : 'Pixel preparation and device user guides';
   const rows = editions
     .map((name) => {
       const size = guideFormat(name).size;
@@ -333,7 +347,7 @@ function guideIndex(
   const installation = policy
     ? `<p>Folded packets describe the intended configuration for policy ${escapeHtml(policy.id)} (${policy.profiles.length} user accounts). This is document configuration, not device acceptance.</p>`
     : '';
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(productName)} ${version} guides</title><style>body{font:16px/1.6 system-ui,sans-serif;max-width:900px;margin:3rem auto;padding:0 1rem;color:#17222d}h1{color:${brand.primary}}a{color:${brand.secondary}}li{margin:.8rem 0}small{color:#526374}</style></head><body><h1>${escapeHtml(productName)} ${version} guides</h1><p>Operator and device user guides, phone-sized recipient quick starts and blank private credential inserts in English and Polish. Use the accepted handoff report for the status of a specific phone.</p><p>PDFs and HTML are generated from the source checkout with <code>pxv guides rebuild</code>. Credential inserts are blank templates; completed copies contain private device information.</p>${installation}<ul>${rows}</ul></body></html>`;
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title><style>body{font:16px/1.6 system-ui,sans-serif;max-width:900px;margin:3rem auto;padding:0 1rem;color:#17222d}h1{color:${brand.primary}}a{color:${brand.secondary}}li{margin:.8rem 0}small{color:#526374}</style></head><body><h1>${title}</h1><p>${version} · Operator and device user guides, phone-sized recipient quick starts and blank private credential inserts in English and Polish. Use the accepted handoff report for the status of a specific phone.</p><p>PDFs and HTML are generated from the source checkout with <code>pxv guides rebuild</code>. Credential inserts are blank templates; completed copies contain private device information.</p>${installation}<ul>${rows}</ul></body></html>`;
 }
 
 async function setPrintPageBoxes(path: string, format: GuideFormat): Promise<void> {
@@ -442,13 +456,13 @@ async function renderFoldPdf(page: Page, output: string, destination: string): P
     });
 }
 
-function footerOptions(productName: string, brand: GuideBrand) {
+function footerOptions(productName: string, brand: GuideBrand, widthMm = 210) {
   const color = brand.secondary;
   const padding = 18;
   return {
     displayHeaderFooter: true,
     headerTemplate: '<span></span>',
-    footerTemplate: `<div style="font-family:Arial,sans-serif;font-size:8px;color:${color};width:100%;padding:0 ${padding}mm;display:flex;justify-content:space-between"><span>${escapeHtml(productName)}</span><span><span class="pageNumber"></span> / <span class="totalPages"></span></span></div>`,
+    footerTemplate: `<div style="font-family:Arial,sans-serif;font-size:8px;color:${color};box-sizing:border-box;width:${widthMm}mm;padding:0 ${padding}mm;display:flex;justify-content:space-between"><span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(productName)}</span><span style="flex-shrink:0;margin-left:8px"><span class="pageNumber"></span> / <span class="totalPages"></span></span></div>`,
   };
 }
 
@@ -480,7 +494,7 @@ async function renderPrintPdf(
     margin: { top: '0', right: '0', bottom: '0', left: '0' },
     printBackground: true,
     preferCSSPageSize: false,
-    ...footerOptions(productName, brand),
+    ...footerOptions(productName, brand, format.width + 6),
   });
   try {
     await setPrintPageBoxes(path, format);
@@ -488,6 +502,13 @@ async function renderPrintPdf(
     await unlink(path).catch(() => undefined);
     throw error;
   }
+}
+
+function guideMetadata(product: ProductDescriptor, input: unknown) {
+  if (input === undefined) return { metadata: undefined, pdfLabel: '' };
+  const configuration = validateProjectInsertMetadata(input);
+  const metadata = resolveInsertMetadata(product, configuration);
+  return { metadata, pdfLabel: metadata.projectName ?? '' };
 }
 
 export async function buildDocumentation(
@@ -501,10 +522,7 @@ export async function buildDocumentation(
   if (policy || options.insertMetadata !== undefined)
     await ensureSeparatePolicyDestination(root, destination);
   const product = validateProduct(parseDocument(await readFile(join(root, 'product.json'), 'utf8')));
-  const metadata =
-    options.insertMetadata === undefined
-      ? undefined
-      : resolveInsertMetadata(product, validateProjectInsertMetadata(options.insertMetadata));
+  const { metadata, pdfLabel } = guideMetadata(product, options.insertMetadata);
   const paths = await walkPublic(root, 'guides/source/markdown', new Set(['.md']));
   if (!paths.length) throw new Error('No public guide sources found');
   await mkdir(destination, { recursive: true });
@@ -515,7 +533,6 @@ export async function buildDocumentation(
     root,
     destination,
     paths,
-    product.name,
     product.upstreamVersion,
     brand,
     assets,
@@ -526,9 +543,9 @@ export async function buildDocumentation(
   const editions = outputs.map((path) => path.slice(path.lastIndexOf('/') + 1, -5));
   await writeFile(
     join(destination, 'index.html'),
-    guideIndex(product.name, product.upstreamVersion, brand, editions, options.pdf ?? false, policy),
+    guideIndex(metadata?.projectName, product.upstreamVersion, brand, editions, options.pdf ?? false, policy),
   );
-  if (options.pdf) await renderGuidePdfs(outputs, destination, options, product.name, brand);
+  if (options.pdf) await renderGuidePdfs(outputs, destination, options, pdfLabel, brand);
   return outputs;
 }
 
@@ -589,14 +606,33 @@ function adaptGuideSource(
   if (policy && (kind === 'quickstart' || kind === 'credentials'))
     adapted = renderPolicyBooklet(adapted, kind, policy, locale);
   if (metadata && kind === 'credentials') adapted = renderBlankInsertMetadata(adapted, metadata, locale);
+  if (metadata) adapted = renderProjectGuideMetadata(adapted, kind, locale, metadata);
   return adapted;
+}
+
+/** Raw HTML keeps configuration values literal in generated Markdown and HTML. */
+function renderProjectGuideMetadata(
+  source: string,
+  kind: GuideKind,
+  locale: 'en' | 'pl',
+  metadata: ResolvedInsertMetadata,
+): string {
+  return source.replace(/^# (.+)$/mu, (heading: string, title: string) => {
+    const projectTitle = metadata.projectName
+      ? `<h1>${escapeHtml(metadata.projectName)}</h1>\n\n<p class="guide-subtitle">${escapeHtml(title)}</p>`
+      : heading;
+    const support =
+      kind === 'credentials'
+        ? ''
+        : `\n\n<p class="guide-support"><strong>${locale === 'pl' ? 'Wsparcie' : 'Support'}:</strong> ${escapeHtml(metadata.support)}</p>`;
+    return projectTitle + support;
+  });
 }
 
 async function renderGuideHtmlSources(
   root: string,
   destination: string,
   paths: string[],
-  productName: string,
   version: string,
   brand: GuideBrand,
   assets: string[],
@@ -617,7 +653,7 @@ async function renderGuideHtmlSources(
       'src="../../assets/',
       'src="assets/',
     );
-    const html = guideHtml(productName, version, locale, rendered, brand, path, policy);
+    const html = guideHtml(version, locale, rendered, brand, path, policy);
     const outputPath = path.slice('guides/source/markdown/'.length).replace(/\.md$/u, '.html');
     editions.push({ sourcePath: path, outputPath, html });
   }

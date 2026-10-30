@@ -17,9 +17,10 @@ export function resolveInsertMetadata(
   const metadata = validateProjectInsertMetadata(input);
   const support = metadata.support ?? product.support;
   const routes = [support.email, 'phone' in support ? support.phone : undefined, support.url].filter(Boolean);
+  const name = metadata.support || support.name !== product.name ? `${support.name}: ` : '';
   return {
     ...(metadata.projectName ? { projectName: metadata.projectName } : {}),
-    support: support.name + ': ' + routes.join(' · '),
+    support: name + routes.join(' · '),
   };
 }
 

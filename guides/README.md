@@ -62,7 +62,7 @@ Only selected configuration fields enter the editions. The shared builder does n
 
 ## Project names and support contacts
 
-To personalize credential inserts, add an optional `insertMetadata` object to the existing
+To personalize all guide editions, add an optional `insertMetadata` object to the existing
 `pxv.project.json` in your private project. Preserve all its other fields:
 
 ```json
@@ -82,9 +82,17 @@ To personalize credential inserts, add an optional `insertMetadata` object to th
 Both `projectName` and `support` are optional. A support override requires a name and
 at least one email, HTTPS website or phone number. It replaces the whole product
 contact: omitted contact routes are not filled from the product. Without an override,
-project inserts use the product contact; without a project name, they omit that line.
+project editions use the product contact routes. A contact name that repeats the
+product name is omitted. Without a project name, descriptive guide titles are retained,
+PDF footers show page numbers only, and inserts omit the project-name line.
 Use nonblank single-line values of at most 4096 characters. Text is printed literally.
-These details appear in EN/PL inserts; the project name does not rename the product.
+In English and Polish project editions, the project name becomes the primary title
+with each guide's original descriptive title as a subtitle, and appears in running PDF
+labels. Long running labels end with an ellipsis; the title keeps the full name.
+Operator, user and quick-start guides show a localized support block near the
+title; credential inserts keep their existing introductory support field. Covers,
+browser titles, indexes and PDF labels do not add the product name. Explicit project
+names and support contacts are printed literally; command names retain their wording.
 
 Project metadata is part of the resolved policy identity. After editing it, run
 `pxv policy lock --project-root DIRECTORY` and prepare fresh operational reviews.
@@ -99,15 +107,15 @@ pxv guides rebuild --project-root DIRECTORY --output-dir PROJECT_GUIDE_DIRECTORY
 This uses the project's policy and metadata without opening the encrypted registry.
 Use `--html-only` to generate HTML without Chromium. An explicit separate output
 directory is required; do not combine `--project-root` with `--policy`. Both languages
-are built. Project metadata fills the introductory support contact in credential
-editions; fields for credentials, recovery and alternate support routes stay blank.
+are built. Project metadata personalizes titles and support details across the editions;
+fields for credentials, recovery and alternate support routes stay blank.
 Only the selected display metadata enters the publisher, through a temporary file
 removed on success or failure. The generated project-specific Markdown, HTML and
 PDFs contain the chosen contact details; review them before sharing.
 
 The same metadata is used by `pxv registry print-insert` and the separate
 `guides rebuild --private-insert-output` export. Builds without `--project-root`
-keep their generic blank contact fields.
+keep their existing titles and generic blank contact fields.
 
 ## Build verification
 
@@ -121,7 +129,7 @@ Generated HTML, PDFs and `qa/` are ignored build outputs. Keep reviewed copies w
 
 ## Fork branding
 
-[assets/brand.json](assets/brand.json) supplies the brand name, three colors, font family and optional local logo/font paths. Keep `brandName` equal to `product.json.name`. The optional [branding scaffold](../tools/optional/branding/scaffold.mjs) creates this theme together with a product identity and an empty starter project:
+[assets/brand.json](assets/brand.json) supplies three colors, a font family and optional local logo/font paths. The optional `brandName` field must match `product.json.name` when supplied; it is not printed in guides. The optional [branding scaffold](../tools/optional/branding/scaffold.mjs) creates this theme together with a product identity and an empty starter project:
 
 ```sh
 pnpm whitelabel:scaffold -- --config ./config/templates/white-label.example.json

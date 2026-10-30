@@ -36,7 +36,7 @@ const args = (...extra: string[]) => [
 ];
 
 for (const failure of [undefined, 'build', 'publishing'] as const) {
-  it(`projects only insert metadata without opening registry storage and cleans up after ${failure ?? 'success'}`, async () => {
+  it(`projects only display metadata without opening registry storage and cleans up after ${failure ?? 'success'}`, async () => {
     let metadataPath = '';
     let calls = 0;
     const context = await parseCli(args(), io);
@@ -82,16 +82,25 @@ it('rejects project/policy conflicts and missing or authoritative output directo
   }
 });
 
-it('runs the project-specific blank pipeline in both languages without initializing storage', async () => {
+it('runs all project-specific editions in both languages without initializing storage', async () => {
   await guidesRebuildCommand(await parseCli(args(), io));
-  for (const locale of ['en', 'pl']) {
-    const markdown = await readFile(join(root, `output/source/markdown/credentials-${locale}.md`), 'utf8');
-    const html = await readFile(join(root, `output/credentials-${locale}.html`), 'utf8');
-    for (const content of [markdown, html]) {
-      expect(content).toContain('Zażółć &lt;Fleet&gt;');
-      expect(content).toContain('Local support: +48 123');
-      expect(content).not.toContain(product.support.email);
+  for (const kind of ['operator', 'user', 'quickstart', 'credentials']) {
+    for (const locale of ['en', 'pl']) {
+      const markdown = await readFile(join(root, `output/source/markdown/${kind}-${locale}.md`), 'utf8');
+      const html = await readFile(join(root, `output/${kind}-${locale}.html`), 'utf8');
+      for (const content of [markdown, html]) {
+        expect(content).toContain('Zażółć &lt;Fleet&gt;');
+        expect(content).toContain('Local support: +48 123');
+        expect(content).not.toContain(product.support.email);
+      }
+      expect(markdown).toContain('<p class="guide-subtitle">');
+      expect(html).toContain('<p class="cover-subtitle">');
+      expect(/<h1\b[^>]*>(.*?)<\/h1>/su.exec(html)?.[1]).toBe('Zażółć &lt;Fleet&gt;');
+      expect(markdown).toContain(
+        locale === 'en' ? '<strong>Support:</strong>' : '<strong>Wsparcie:</strong>',
+      );
     }
   }
   await expect(access(join(projectRoot, 'state/pxv.sqlite3'))).rejects.toThrow();
+  await expect(access(join(projectRoot, 'secrets/phone-registry.pxv'))).rejects.toThrow();
 });
