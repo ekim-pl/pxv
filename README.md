@@ -113,6 +113,11 @@ automation output; progress and diagnostics go to stderr. Run `pxv COMMAND --hel
 for a command's supported flags. Run history is paginated, so follow `nextCursor`
 when reading `agent runs --json` or MCP `list_runs` results.
 
+From a source checkout, run `pxv install` to add `~/.local/bin/pxv`, or
+`pxv install --global` to add `/usr/local/bin/pxv`. Remove the matching link with
+`pxv uninstall` or `pxv uninstall --global`; global operations need write access
+to `/usr/local/bin`.
+
 ```sh
 pnpm build:preview
 pnpm build:preview --formats portable,oci

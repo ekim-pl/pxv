@@ -8,6 +8,7 @@ Structured commands print readable summaries by default. Add `--json` for one JS
 
 | Area | Commands and purpose |
 | --- | --- |
+| Launcher | From a source checkout, `pxv install` and `pxv uninstall` manage `~/.local/bin/pxv`; add `--global` to use `/usr/local/bin/pxv` (requires write access). |
 | Project | `project init --path NEW_DIRECTORY [--policy FILE]` creates distinct project state. |
 | Policy | `policy validate` checks a fully pinned authoring policy and reports `policyLockStatus` (`current`, `missing`, `stale`, `invalid`); `policy lock --yes` writes the canonical lock. |
 | App resolution | `policy resolve-apps [--project-root DIR \| --policy FILE] (--asset ID [--transport usb\|wifi\|emulator] \| --sdk N --abi ABI[,ABI...]) [--output FILE] [--dry-run] [--yes] [--json]` fills missing app pins from direct, local or authenticated repository sources and verifies supplied pins exactly. Default writes in place; `--output` preserves the source draft. Standalone files require explicit SDK/ABIs. See [source resolution](policy-reference.md#resolving-app-sources-into-pins). |

@@ -1,6 +1,75 @@
 #!/usr/bin/env bash
 set -euo pipefail
-root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)"
+source="${BASH_SOURCE[0]}"
+while [[ -L "$source" ]]; do
+  directory="$(cd -P -- "$(dirname -- "$source")" && pwd)"
+  target="$(readlink -- "$source")"
+  if [[ "$target" = /* ]]; then
+    source="$target"
+  else
+    source="$directory/$target"
+  fi
+done
+root="$(cd -- "$(dirname -- "$source")/.." && pwd -P)"
+script="$root/bin/pxv"
+
+if [[ "${1:-}" == install || "${1:-}" == uninstall ]]; then
+  action="$1"
+  shift
+  global=false
+  if [[ "${1:-}" == --help ]]; then
+    echo "Usage: pxv $action [--global]"
+    if [[ "$action" == install ]]; then
+      echo 'Install a link in ~/.local/bin, or /usr/local/bin with --global.'
+    else
+      echo 'Remove the link from ~/.local/bin, or /usr/local/bin with --global.'
+    fi
+    exit 0
+  fi
+  if [[ "${1:-}" == --global ]]; then
+    global=true
+    shift
+  fi
+  if [[ "$#" -ne 0 ]]; then
+    echo "Usage: pxv $action [--global]" >&2
+    exit 2
+  fi
+  if [[ "$global" == true ]]; then
+    link='/usr/local/bin/pxv'
+  else
+    if [[ -z "${HOME:-}" ]]; then
+      echo 'HOME must be set for a local installation.' >&2
+      exit 2
+    fi
+    link="$HOME/.local/bin/pxv"
+  fi
+  if [[ "$action" == install ]]; then
+    mkdir -p -- "$(dirname -- "$link")"
+    if [[ -L "$link" && "$(readlink -- "$link")" == "$script" ]]; then
+      echo "pxv is already installed at $link"
+      exit 0
+    fi
+    if [[ -e "$link" || -L "$link" ]]; then
+      echo "Refusing to replace existing path: $link" >&2
+      exit 2
+    fi
+    ln -s -- "$script" "$link"
+    echo "Installed pxv at $link"
+  else
+    if [[ ! -L "$link" ]]; then
+      echo "No pxv symlink found at $link"
+      exit 0
+    fi
+    if [[ "$(readlink -- "$link")" != "$script" ]]; then
+      echo "Refusing to remove symlink not owned by this checkout: $link" >&2
+      exit 2
+    fi
+    rm -- "$link"
+    echo "Removed pxv symlink at $link"
+  fi
+  exit 0
+fi
+
 if [[ ! -f "$root/packages/cli/dist/main.js" ]]; then
   echo 'Build pxv first with pnpm build.' >&2
   exit 2
