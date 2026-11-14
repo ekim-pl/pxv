@@ -1,0 +1,43 @@
+name: GitHub Pages
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: github-pages
+  cancel-in-progress: false
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Install exact Node and pnpm
+        run: |
+          curl --fail --silent --show-error --output "$RUNNER_TEMP/node.tar.xz" https://nodejs.org/dist/v24.22.0/node-v24.22.0-linux-x64.tar.xz
+          echo "cc2f601cee82d9a5a233302fe307abc600727035fd7d2c3a3571755989e95008  $RUNNER_TEMP/node.tar.xz" | sha256sum -c -
+          tar -xJf "$RUNNER_TEMP/node.tar.xz" -C "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/node-v24.22.0-linux-x64/bin" >> "$GITHUB_PATH"
+      - name: Build public site
+        run: |
+          npm install --global pnpm@12.11.2
+          pnpm install --frozen-lockfile
+          pnpm build
+          mkdir -p "$RUNNER_TEMP/pxv-pages"
+          cp site/style.css assets/logo.svg "$RUNNER_TEMP/pxv-pages/"
+          node -e 'const fs = require("node:fs"); const repo = process.env.GITHUB_REPOSITORY; if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repo)) throw Error("Invalid repository name"); fs.writeFileSync(process.env.RUNNER_TEMP + "/pxv-pages/index.html", fs.readFileSync("site/index.html", "utf8").replaceAll("__REPO__", `https://github.com/${repo}`));'
+          pnpm pxv guides rebuild --html-only --output-dir "$RUNNER_TEMP/pxv-pages/guides"
+      - uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b
+        with:
+          path: ${{ runner.temp }}/pxv-pages
+  deploy:
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e

@@ -20,6 +20,18 @@ physical confirmations remain explicit checkpoints.
 
 The [documentation index](docs/README.md) links the complete audience sections.
 
+## GitHub Pages
+
+The public landing page and the English and Polish HTML guides are built by
+`.github/workflows/pages.yml` from the checked-out sources. After creating the
+GitHub repository, select **Settings → Pages → Build and deployment → GitHub
+Actions**, then run the **GitHub Pages** workflow manually. Check the site's
+visibility before deploying, since a private repository does not necessarily
+make its Pages site private. The
+workflow publishes a fresh, separate output directory; it does not include local
+projects, device records or private credential inserts. Guides on the site are
+generic blank templates, not an accepted device configuration.
+
 ## Printable guides
 
 Preparing and using your own phone? Follow the English
@@ -113,8 +125,8 @@ automation output; progress and diagnostics go to stderr. Run `pxv COMMAND --hel
 for a command's supported flags. Run history is paginated, so follow `nextCursor`
 when reading `agent runs --json` or MCP `list_runs` results.
 
-From a source checkout, run `pxv install` to add `~/.local/bin/pxv`, or
-`pxv install --global` to add `/usr/local/bin/pxv`. Remove the matching link with
+From a source checkout, run `./pxv install` to add `~/.local/bin/pxv`, or
+`./pxv install --global` to add `/usr/local/bin/pxv`. Remove the matching link with
 `pxv uninstall` or `pxv uninstall --global`; global operations need write access
 to `/usr/local/bin`.
 

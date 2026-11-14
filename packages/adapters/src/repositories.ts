@@ -70,6 +70,14 @@ function strictJson(source: string): unknown {
   return parseDocument(source);
 }
 
+function selectPackages(packages: Row, selected?: Set<string>): Row {
+  return selected
+    ? Object.fromEntries(
+        [...selected].filter((id) => Object.hasOwn(packages, id)).map((id) => [id, packages[id]]),
+      )
+    : packages;
+}
+
 export class RepositoryService {
   readonly runner: CommandRunner;
   readonly verifierPath: string;
@@ -213,11 +221,7 @@ export class RepositoryService {
       this.assertFresh(repository, timestamp, floor);
       const rawPackages = object(index['packages'], 'package set');
       const selected = options.packageIds ? new Set(options.packageIds.map(packageId)) : undefined;
-      const selectedPackages = selected
-        ? Object.fromEntries(
-            [...selected].filter((id) => Object.hasOwn(rawPackages, id)).map((id) => [id, rawPackages[id]]),
-          )
-        : rawPackages;
+      const selectedPackages = selectPackages(rawPackages, selected);
       const packages = this.normalize(repository, selectedPackages, isV2);
       const entrySha256 = await fileDigest(jar, 32 * 1024 * 1024, options.signal);
       const materialFiles = isV2

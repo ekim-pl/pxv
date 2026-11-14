@@ -451,7 +451,8 @@ describe('production dependency wiring and evidence boundaries', () => {
     const nextDestination = `${destination}.next.apk`;
     const nextEvidence = { ...evidence, timestamp: 2, indexSha256: hashA };
     mocks.repositoryIndex.mockResolvedValue({ evidence: nextEvidence, packages: {} });
-    await configured.engine.artifacts.snapshot(approved, nextDestination, undefined, target);
+    const nextPlan = await openApp();
+    await nextPlan.engine.artifacts.snapshot(approved, nextDestination, undefined, target);
     await configured.engine.artifacts.validateBeforeExecution?.({ ...approved, path: destination }, target);
     expect(mocks.validateEvidence).toHaveBeenLastCalledWith(repository, evidence);
     await configured.engine.artifacts.validateBeforeExecution?.(

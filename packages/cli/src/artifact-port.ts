@@ -81,11 +81,11 @@ function storedProvenance(retained: unknown): Partial<StoredArtifactProvenance> 
   return { evidence: retained as RepositoryEvidence };
 }
 
-export function createArtifactPort(deps: ApplicationDependencies): ArtifactPort {
-  const { tools, project, artifacts, images, store, repositories } = deps;
+function createRepositoryIndex(deps: ApplicationDependencies) {
+  const { repositories } = deps;
   const packagesByRepository = repositoryPackagesByKey(deps);
   const repositoryIndexes = new Map<string, Promise<AuthenticatedRepository>>();
-  const repositoryIndex = (
+  return (
     repository: RepositoryPolicy,
     artifact: ArtifactPolicy,
     signal?: AbortSignal,
@@ -109,6 +109,11 @@ export function createArtifactPort(deps: ApplicationDependencies): ArtifactPort 
     }
     return index;
   };
+}
+
+export function createArtifactPort(deps: ApplicationDependencies): ArtifactPort {
+  const { tools, project, artifacts, images, store, repositories } = deps;
+  const repositoryIndex = createRepositoryIndex(deps);
   return {
     async snapshot(artifact, destination, signal, target) {
       await Promise.all([tools.require('aapt'), tools.require('apksigner')]);

@@ -480,6 +480,56 @@ describe('observation-scoped shared APK inspection', () => {
     expect(updated.profiles.map((profile) => profile.permissions[0]?.granted)).toEqual([false, false]);
     expect(previous.profiles[0]?.packages[0]?.versionCode).toBe(1);
   });
+  it('rejects missing profiles, missing package effects and user changes during action observation', async () => {
+    const runner = new FakeRunner();
+    const android = adapter(runner);
+    const previous = await android.inspect(target, policy);
+    const setting = {
+      kind: 'setting' as const,
+      profileId: 'missing',
+      setting: { namespace: 'secure' as const, key: 'x', value: '1' },
+    };
+    await expect(android.inspectAction(target, policy, previous, setting)).rejects.toThrow(
+      'profile is absent',
+    );
+    android.inspectSharedEffects = () => Promise.resolve([]);
+    await expect(
+      android.inspectAction(target, policy, previous, {
+        kind: 'install-apk',
+        profileId: 'work',
+        artifact: policy.profiles[0]!.packages[0]!,
+      }),
+    ).rejects.toThrow('effects are missing');
+    const users = android.users.bind(android);
+    let calls = 0;
+    android.users = async (...args) => {
+      const result = await users(...args);
+      return ++calls === 2 ? [...result, { userId: 99, serialNo: 99, name: 'new' }] : result;
+    };
+    await expect(
+      android.inspectAction(target, policy, previous, { ...setting, profileId: 'work' }),
+    ).rejects.toThrow('users changed');
+  });
+  it('adds newly observed permissions and global settings to the selected profile', async () => {
+    const runner = new FakeRunner();
+    const android = adapter(runner);
+    const previous = await android.inspect(target, policy);
+    previous.profiles[0]!.permissions = [];
+    const updated = await android.inspectAction(target, policy, previous, {
+      kind: 'permission',
+      profileId: 'work',
+      permission: policy.profiles[0]!.permissions[0]!,
+    });
+    expect(updated.profiles[0]!.permissions).toHaveLength(1);
+    const setting = { namespace: 'global' as const, key: 'new_setting', value: '1' };
+    runner.values.set('global:new_setting', '1');
+    const withSetting = await android.inspectAction(target, policy, updated, {
+      kind: 'setting',
+      profileId: 'work',
+      setting,
+    });
+    expect(withSetting.profiles[0]!.settings).toContainEqual(setting);
+  });
   it('keeps metadata inspection for optional split packages but rejects managed splits without mutation', async () => {
     const runner = new FakeRunner();
     const android = adapter(runner);
