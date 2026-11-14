@@ -4,7 +4,7 @@ Use [build](build.md) for compilation and [guide generation](../operators/guides
 
 ## Release procedure
 
-1. Freeze the source/product descriptor, assets, manifests, configuration templates and exact toolchain. Community remains MIT and local workflows remain available without activation.
+1. Freeze the source/product descriptor, assets, manifests, configuration templates and exact toolchain. pxv remains MIT and local workflows remain available without activation.
 2. Run `pnpm quality:setup`, run `pnpm build`, then `PXV_REQUIRE_CRYPTO=1 pnpm quality`. Retain the unchanged-source component reports, zero unexplained development/production TypeScript repository findings, native faults, genuine crypto and signed helper checks. Every TypeScript module/package must meet 90% lines/85% branches; all enforced function metrics must pass.
 3. Complete the advertised policy/UI/restore/EN-PL/physical acceptance matrix. Keep pending checks visible; never replace missing live evidence with a generic emulator.
 4. Build one frozen engine candidate. Inspect its public allowlist, secret-sentinel checks, dependency notices, SPDX SBOM, source digest and tool hashes.
@@ -116,7 +116,7 @@ identity and collect its own reviews/checks. Do not clone project UUIDs, approva
 credentials or device evidence from a reference phone. A private primary-phone backup
 must not become a fleet seed. See [device roles and recovery](../operators/recovery-and-maintenance.md).
 
-Community disables extensions and experimental Seedvault through `product.features`.
+pxv disables extensions and experimental Seedvault through `product.features`.
 A fork can explicitly enable a reviewed optional system; descriptor changes alter
 reviewed identity and need fresh locks/plans. Legacy descriptors without `features`
 retain compatibility behavior. Trusted extensions and recovery still require their
@@ -137,6 +137,6 @@ Ordinary preview builds do not publish or replace installations. Add optional fo
 explicitly and follow the [publication checklist](#release-procedure) for
 signature, exact-artifact and live acceptance requirements. Keep extension sources,
 registry authentication, customer inventories, credentials and backup data outside
-Community sources and release artifacts.
+pxv sources and release artifacts.
 
 Release candidates and release provenance use schema 2. They record Node, supervisor JavaScript, Koffi version/platform/Node-API version, loader/addon hashes and artifact hashes. Schema 1 candidates must be regenerated. Portable, Debian, npm, OCI and experimental SEA formats include the supervisor bundle, Koffi loader and selected glibc x64 prebuild with reviewed notices. Existing ownership records, IPC protocol and receipts remain schema/protocol 1; policies are unversioned. Never clear host control state to regenerate a candidate. Engine integrity binds source/build bytes and the selected supervisor, addon and loader.

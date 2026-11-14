@@ -84,7 +84,7 @@ Do not deliberately interrupt flashing or erase a primary phone to test restorat
 
 A single person can operate several test devices. A full backup/restore result needs
 an authorized clean restore target; if none is available, keep that result **pending**
-and preserve the original. Offline tests do not replace it. Community's experimental
+and preserve the original. Offline tests do not replace it. pxv's experimental
 Seedvault automation and trusted extensions remain disabled.
 
 For full acceptance, every mandatory result below must pass, all five profile rows

@@ -85,16 +85,16 @@ export const project: ProjectConfig = {
 export const product: ProductDescriptor = {
   schemaVersion: 1,
   id: 'pxv',
-  name: 'pxv Community',
+  name: 'pxv',
   command: 'pxv',
   packageName: '@pxv/cli',
   debName: 'pxv',
-  image: 'pxv/community',
+  image: 'pxv',
   upstreamVersion: '0.1.0',
   engineApi: 1,
   assets: { logo: 'assets/logo.svg' },
   defaultPolicy: 'policy-packs/fleet-nerd/policy.json',
-  support: { name: 'Community', email: 'support@example.org', url: 'https://example.org/pxv' },
+  support: { name: 'pxv', email: 'support@example.org', url: 'https://example.org/pxv' },
 };
 export const obligation: RecoveryObligation = {
   schemaVersion: 1,

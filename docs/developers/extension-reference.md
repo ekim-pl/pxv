@@ -2,14 +2,14 @@
 
 For a complete first build, follow [creating extensions](creating-extensions.md). This reference defines API v1 packaging, contribution, installation, and worker constraints.
 
-This is an optional compatibility subsystem. The default Community descriptor sets
+This is an optional compatibility subsystem. The default pxv descriptor sets
 `features.extensions: false`: listing, inspection, guide reading and explicit removal
 remain available, while installation and invocation are refused. Use an explicitly
 extension-enabled product descriptor for the workflow below. Changing product
 identity requires fresh locks and reviews; existing extension references are never
 silently ignored. See [optional tooling](../../tools/optional/README.md).
 
-Extensions provide commands, declared policy packs, guides and integration adapters. Community does not contact an activation server. A commercial publisher keeps source private and distributes an exact compiled bundle through an authenticated npm-compatible registry. Operators can also install local tarballs for testing. Installation and updates
+Extensions provide commands, declared policy packs, guides and integration adapters. pxv does not contact an activation server. A commercial publisher keeps source private and distributes an exact compiled bundle through an authenticated npm-compatible registry. Operators can also install local tarballs for testing. Installation and updates
 require native host execution; Docker workers and container-hosted MCP reject those
 operations before downloading or opening an archive. Other permitted extension
 operations retain their existing review requirements and read-only bundle mounts.

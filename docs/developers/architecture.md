@@ -6,7 +6,7 @@ The workspace separates contracts/policy, runtime/storage, Android/artifact adap
 
 `WorkflowEngine` preserves the public constructor and method façade. Its composition root creates separate observation, plan repository, preparation, review, execution, evidence/readiness, attestation, handoff and recovery services. Those services consume explicit interfaces for observations, plans, evidence, ownership and the run journal; none receives the façade or its bound private methods. Shared ownership services enforce lock ordering and freshness, while the journal owns atomic run checkpoints and native receipt reconciliation.
 
-The façade's retained public port, plan, run/state and emulator-evidence type exports are marked `@public`. They remain supported application API even when Community does not itself consume every export. The public contracts and extension SDK entry points remain available to external authors.
+The façade's retained public port, plan, run/state and emulator-evidence type exports are marked `@public`. They remain supported application API even when pxv does not itself consume every export. The public contracts and extension SDK entry points remain available to external authors.
 
 ## Core data flow
 
@@ -225,7 +225,7 @@ Native completion events retain their first-observation timestamp, including tim
 
 ## Product and extension boundaries
 
-Community ships the local workflow without runtime activation. Its descriptor
+pxv ships the local workflow without runtime activation. Its descriptor
 explicitly disables extensions and experimental Seedvault recovery. Descriptors
 without the optional `features` object preserve legacy behavior. A separately reviewed
 product can explicitly enable either optional feature. Unsupported extension-dependent projects refuse execution,

@@ -312,7 +312,7 @@ describe('public documentation generation', () => {
     for (const [options] of vi.mocked(fixture.page.pdf).mock.calls) {
       expect(options.displayHeaderFooter).toBe(true);
       expect(options.headerTemplate).toBe('<span></span>');
-      expect(options.footerTemplate).not.toContain('pxv Community');
+      expect(options.footerTemplate).not.toContain('pxv');
       expect(options.footerTemplate).toContain('class="pageNumber"');
       expect(options.footerTemplate).toContain('class="totalPages"');
     }
@@ -350,7 +350,7 @@ describe('public documentation generation', () => {
     const destination = join(directory, 'output');
     const base = {
       schemaVersion: 1,
-      brandName: 'pxv Community',
+      brandName: 'pxv',
       colors: { primary: '#17324D', secondary: '#2F6873', accent: '#D9952B' },
       fontFamily: 'DejaVu Sans',
     };
@@ -379,7 +379,7 @@ describe('public documentation generation', () => {
       join(directory, 'guides/assets/brand.json'),
       JSON.stringify({
         schemaVersion: 1,
-        brandName: 'pxv Community',
+        brandName: 'pxv',
         colors: { primary: '#17324D', secondary: '#2F6873', accent: '#D9952B' },
         fontFamily: 'Pxv Display',
         fontAsset: 'assets/font.ttf',

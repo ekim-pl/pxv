@@ -50,7 +50,7 @@ describe('isolated project data', () => {
       features: { extensions: false, seedvault: false },
       defaultPolicy: 'policy-packs/fleet-nerd/policy.json',
       assets: { logo: 'assets/logo.svg' },
-      support: { name: 'pxv Community', email: 'support@example.org', url: 'https://example.org/pxv' },
+      support: { name: 'pxv', email: 'support@example.org', url: 'https://example.org/pxv' },
     });
     await expect(createProject(context.root, product, toPolicyDocument(basePolicy()))).rejects.toThrow(
       'existing',

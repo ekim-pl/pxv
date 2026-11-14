@@ -61,5 +61,5 @@ public resources before final packaging, rerun source-bound quality and follow t
 
 Brand forks retain MIT attribution, upstream API markers and safety tests. Use the
 [white-label instructions](docs/developers/distribution.md) for the optional scaffold. Keep private
-extension sources and customer data outside Community/release assets; trusted
+extension sources and customer data outside pxv/release assets; trusted
 extensions still submit typed actions through normal review and recovery.

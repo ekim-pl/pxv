@@ -11,7 +11,7 @@ These tools remain available for explicit use from a source checkout:
 
 Experimental Seedvault orchestration lives in
 `packages/engine/src/experimental/seedvault` and is loaded on demand. It is disabled
-by the Community product's `features.seedvault: false`. A reviewed recovery-enabled
+by the pxv product's `features.seedvault: false`. A reviewed recovery-enabled
 product descriptor can opt in; no production UI adapter is qualified by this change.
 Historical reports, inspected cleanup, reservations and source records are retained.
 

@@ -32,5 +32,5 @@ contracts, then bundle their authoring dependencies into a standalone installati
 Keep live projects, signing keys, credentials, customer records, and populated
 inserts outside the checkout. Source checks and physical acceptance are distinct;
 see [evidence boundaries](../operators/acceptance.md#evidence-and-qualification).
-Community disables extension installation/invocation; the tutorial explains the
+pxv disables extension installation/invocation; the tutorial explains the
 explicit product opt-in needed for extension development.

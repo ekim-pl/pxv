@@ -62,7 +62,7 @@ pauses, measured-state freshness, final signoff order, and continuation through 
 ## Extension operations
 
 Read operations work with verified local bundles; invocation does not fetch updates.
-Community disables extension install/update, policy selection, command, and adapter
+pxv disables extension install/update, policy selection, command, and adapter
 execution. Explicit removal remains permitted with mutation mode. Runtime feature
 gates can reject a registered tool even when it appears in discovery.
 
@@ -73,7 +73,7 @@ gates can reject a registered tool even when it appears in discovery.
 | `extension_guide` | Default | `id`, `contribution`; returns declared contained guide text as a JSON string. |
 | `extension_install` | Mutation + extensions enabled + native host | `source`, `reviewed: true`; optional `registry`; installs verified bytes and updates project extension references. |
 | `extension_update` | Mutation + extensions enabled + native host | `id`, `source`, `reviewed: true`; optional `registry`; explicitly updates an installed exact version. |
-| `extension_remove` | Mutation; permitted in Community | `id`, `reviewed: true`; removes the project reference, retaining shared immutable installed bytes. |
+| `extension_remove` | Mutation; permitted in pxv | `id`, `reviewed: true`; removes the project reference, retaining shared immutable installed bytes. |
 | `extension_policy` | Mutation + extensions enabled | `id`, `contribution`, `reviewed: true`; selects a declared policy and invalidates prior approvals. |
 | `extension_command` | Mutation + extensions enabled | `assetId`, `id`, `contribution`; optional `input` (default `{}`); invokes the declared command name and returns a prepared review. |
 | `extension_adapter` | Mutation + extensions enabled | `assetId`, `id`, `contribution`; optional `input` (default `{}`); invokes the declared adapter path and returns a prepared review. |

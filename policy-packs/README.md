@@ -2,7 +2,7 @@
 
 These packs demonstrate one, two, three, five and arbitrary profile layouts. They are structural templates, not certified hardening policies. No live device acceptance is claimed.
 
-Use each pack's `policy.json` for Community projects. Its shared app catalog,
+Use each pack's `policy.json` for pxv projects. Its shared app catalog,
 profile app references and per-codename OS pins follow the [policy format](../docs/operators/policy-reference.md).
 
 Before using a pack on a phone, a product maintainer must add reviewed OS provenance, required settings, permission grants and service-specific network configuration. All packs include pinned apps listed below; review their versions, sources and signer pins for the deployment. Add repository trust anchors if using repository-backed artifacts. Changes to the normalized execution policy change its resolved digest and invalidate the previous reviewed plan. Authoring-only changes, such as adding an unused app catalog entry, do not change that digest. Validate and lock the edited policy before reviewing a new plan.

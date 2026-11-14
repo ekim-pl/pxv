@@ -1,8 +1,8 @@
-# pxv Community
+# pxv
 
 A local CLI and MCP toolkit for preparing one Google Pixel or a small fleet with
 GrapheneOS, predefined Android user profiles, pinned apps and reviewed configuration.
-Linux x86_64 is the initial platform. Community is free under the [MIT license](LICENSE).
+Linux x86_64 is the initial platform. pxv is free under the [MIT license](LICENSE).
 
 A fleet is a local inventory with bounded parallel execution, independent phone
 state and inspected recovery. It does not provide remote MDM or cross-workstation
@@ -140,7 +140,7 @@ are optional compatibility formats. Formats derive from a frozen candidate with
 checksums, provenance and notices. Ordinary builds do not publish or install globally.
 See [publication](docs/developers/distribution.md).
 
-Community disables trusted extensions and experimental Seedvault recovery in its
+pxv disables trusted extensions and experimental Seedvault recovery in its
 product descriptor. Explicitly enabled products retain those optional workflows;
 retained records remain available for inspection and recovery. [Optional source
 tooling](tools/optional/README.md) covers branding and guide publishing.

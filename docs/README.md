@@ -30,7 +30,7 @@ Start with a disposable canary. Starter policies require deployment-specific tru
 and configuration. Passing source checks does not qualify a phone, network route,
 or restore method; read [acceptance and evidence](operators/acceptance.md).
 
-Community disables extension installation/invocation and experimental Seedvault
+pxv disables extension installation/invocation and experimental Seedvault
 automation. Their references explain explicitly enabled products and retained
 inspection/recovery behavior. See [security boundaries](../SECURITY.md) and use the
 actual support contact supplied with your phone or product.

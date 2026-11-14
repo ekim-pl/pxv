@@ -10,7 +10,7 @@ invocation needs an enrolled authorized target and the matching policy.
 
 ## Enable extension development explicitly
 
-Community’s `product.json` has `features.extensions: false`: install, update,
+pxv’s `product.json` has `features.extensions: false`: install, update,
 policy selection, and invocation are refused. Use a separately reviewed development
 product/fork. In its descriptor, preserve the other fields and explicitly set:
 
@@ -24,7 +24,7 @@ The [branding scaffold](distribution.md#scaffold-a-reviewable-fork) can generate
 this configuration through `product.features`. Use the fork’s own product/command
 identity and resource root. Descriptor changes change reviewed identity; initialize
 a distinct development project for a new product, and renew locks and reviews for
-existing compatible project configuration changes. Do not reuse Community approvals.
+existing compatible project configuration changes. Do not reuse pxv approvals.
 
 Run all install/update commands on the native host, including when using MCP.
 Container-hosted install/update is refused before archive acquisition. Extensions

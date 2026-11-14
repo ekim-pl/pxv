@@ -291,7 +291,7 @@ describe('capability-based readiness and private setup', () => {
     ).toEqual(['normal_credentials', 'default-duress', 'duress']);
   });
 
-  it('loads starter packs, the project template and the active Community product', () => {
+  it('loads starter packs, the project template and the active pxv product', () => {
     for (const name of ['fleet-nerd', 'single-simple', 'fleet-custom']) {
       const loaded = validatePolicy(parseDocument(readFileSync(`policy-packs/${name}/policy.json`, 'utf8')));
       expect(loaded.profiles.filter((profile) => profile.kind === 'owner')).toHaveLength(1);
@@ -303,7 +303,7 @@ describe('capability-based readiness and private setup', () => {
     const activeProduct = validateProduct(parseDocument(readFileSync('product.json', 'utf8')));
     expect(activeProduct).toMatchObject({
       id: 'pxv',
-      name: 'pxv Community',
+      name: 'pxv',
       engineApi: 1,
       features: { extensions: false, seedvault: false },
       defaultPolicy: 'policy-packs/fleet-nerd/policy.json',

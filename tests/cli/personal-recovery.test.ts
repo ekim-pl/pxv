@@ -172,7 +172,7 @@ it('requires an explicit recovery mode and defaults recovery finalization while 
     'never provisions',
   );
 });
-it('recovery help remains available and Community dry-run refuses before any CLI call or filesystem change', async () => {
+it('recovery help remains available and pxv dry-run refuses before any CLI call or filesystem change', async () => {
   for (const mode of ['create', 'recover']) {
     const help = spawnSync(process.execPath, [join(repo, 'tools/personal-recovery.mjs'), mode, '--help'], {
       encoding: 'utf8',

@@ -36,9 +36,9 @@ async function json<T>(path: string): Promise<T> {
   return JSON.parse(await readFile(path, 'utf8')) as T;
 }
 
-it('generates a simple default brand and fresh project/device starter without changing Community', async () => {
+it('generates a simple default brand and fresh project/device starter without changing pxv', async () => {
   const root = await scratch();
-  const communityBefore = await readFile(join(repo, 'product.json'), 'utf8');
+  const productBefore = await readFile(join(repo, 'product.json'), 'utf8');
   const config = await json<Record<string, unknown>>(join(repo, 'config/templates/white-label.example.json'));
   delete config['starter'];
   delete (config['product'] as Record<string, unknown>)['features'];
@@ -75,7 +75,7 @@ it('generates a simple default brand and fresh project/device starter without ch
     extensions: [],
   });
   expect(inventory.devices).toEqual([]);
-  expect(await readFile(join(repo, 'product.json'), 'utf8')).toBe(communityBefore);
+  expect(await readFile(join(repo, 'product.json'), 'utf8')).toBe(productBefore);
 });
 
 it.each([

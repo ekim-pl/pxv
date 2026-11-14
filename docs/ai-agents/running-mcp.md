@@ -74,7 +74,7 @@ refresh, and extension mutation tools, append `--allow-mutations`:
 ```
 
 Restart/reconnect after changing launch options and rediscover tools. A mutation
-tool’s presence does not override product feature gates: Community still refuses
+tool’s presence does not override product feature gates: pxv still refuses
 extension installation/invocation, while inspection and explicit removal remain
 available as documented. See [the catalogue](operations.md).
 

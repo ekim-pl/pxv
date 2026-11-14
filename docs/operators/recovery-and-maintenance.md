@@ -32,7 +32,7 @@ The reusable reference is the reviewed policy, assets, configurations and exact 
 | Phone data restore             | The selected OS backup service and each app's supported export/import or account recovery | Only the data and behavior actually restored and checked                                           |
 | Operator project/host recovery | Preserve current evidence and inspect a consistent private backup with a maintainer       | Historical state is available for reconciliation; old approvals do not establish current readiness |
 
-In an explicitly Seedvault-enabled product, the typed `seedvault inspect|backup|restore` workflow and [personal recovery tooling](#personal-recovery-tool) supervise qualified exact-build Seedvault UI operations across profiles. Community disables new Seedvault operations, and no production adapter is currently qualified. Read [adapter acceptance and recovery limits](#qualified-adapter-format). PXV has no general phone cloning or project-state import command. A policy's `backup` requirement measures whether backup is enabled and which transport is selected. The `backup_recovery` check records a witnessed representative restore. Neither observation proves that every app, profile or future backup is recoverable. Android apps may use separate backup APIs and exclusions; see [Android Auto Backup](https://developer.android.com/identity/data/autobackup) and verify the exact app and transport before making a coverage claim.
+In an explicitly Seedvault-enabled product, the typed `seedvault inspect|backup|restore` workflow and [personal recovery tooling](#personal-recovery-tool) supervise qualified exact-build Seedvault UI operations across profiles. pxv disables new Seedvault operations, and no production adapter is currently qualified. Read [adapter acceptance and recovery limits](#qualified-adapter-format). PXV has no general phone cloning or project-state import command. A policy's `backup` requirement measures whether backup is enabled and which transport is selected. The `backup_recovery` check records a witnessed representative restore. Neither observation proves that every app, profile or future backup is recoverable. Android apps may use separate backup APIs and exclusions; see [Android Auto Backup](https://developer.android.com/identity/data/autobackup) and verify the exact app and transport before making a coverage claim.
 
 For an identified master, use the existing CLI on one enrolled asset at a time. Keep the project, request, adapter evidence, backup destination and report in the access-controlled set for that role:
 
@@ -347,7 +347,7 @@ Host SDK/JDK and ADB selection follows [host dependencies](host-setup.md#environ
 
 ## Optional Seedvault automation
 
-This is an optional experimental recovery module. Community disables new recovery
+This is an optional experimental recovery module. pxv disables new recovery
 operations through `features.seedvault: false`; a reviewed recovery-enabled product
 can opt in. Historical reports, connection listing/disconnection and inspected cleanup
 remain available. Ordinary provisioning does not construct the recovery services.

@@ -105,7 +105,7 @@ Extensions execute trusted code. Worker/archive/input/IPC bounds contain acciden
 faults; they are not a security sandbox. Install only exact approved bundles and keep
 registry authentication external. Optional Seedvault automation needs exact-build
 qualification and demonstrated restore scope. Neither feature is enabled by default
-in Community.
+in pxv.
 
 Offline tests, a successful command and copied backup bytes do not establish
 production acceptance. Retain exact-build GrapheneOS provenance, authorized physical
