@@ -13,9 +13,10 @@ jobs:
     runs-on: ubuntu-24.04
     env:
       PXV_REQUIRE_CRYPTO: '1'
-      PXV_QUALITY_TOOLS: ${{ runner.temp }}/pxv-quality-tools
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Configure quality tool directory
+        run: echo "PXV_QUALITY_TOOLS=$RUNNER_TEMP/pxv-quality-tools" >> "$GITHUB_ENV"
       - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3
         with:
           distribution: temurin
