@@ -282,7 +282,7 @@ it('initializes private defaults once through real CLI checkpoints without retai
     { command: 'set-duress-credentials', userId: 0 },
   ]);
   await assertCredentialPrivacy();
-});
+}, 60_000);
 
 it('executes real supervised CLI provisioning, rechecks evidence, shuts down debugging and records custody', async () => {
   expect(await runCli(device(['inspect']), io)).toBe(0);

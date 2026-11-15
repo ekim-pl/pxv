@@ -50,7 +50,13 @@ jobs:
           done
           test -d "$ANDROID_HOME"
           test -x "$JAVA_HOME/bin/java"
-          echo "PXV_CHROMIUM=$pxv_chromium" >> "$GITHUB_ENV"
+          # Ubuntu 24.04 restricts user namespaces for the downloaded Chromium binary.
+          # Playwright disables its sandbox; direct PDF tests need the same CI-only setup.
+          pxv_test_chromium="$RUNNER_TEMP/pxv-test-chromium"
+          printf '#!/bin/sh\nexec "%s" --no-sandbox "$@"\n' "$pxv_chromium" > "$pxv_test_chromium"
+          chmod 700 "$pxv_test_chromium"
+          env -i PATH=/usr/bin:/bin HOME="$RUNNER_TEMP" "$pxv_test_chromium" --headless --disable-gpu --dump-dom about:blank
+          echo "PXV_CHROMIUM=$pxv_test_chromium" >> "$GITHUB_ENV"
           echo "PXV_ANDROID_HOME=$ANDROID_HOME" >> "$GITHUB_ENV"
           echo "PXV_JAVA_HOME=$JAVA_HOME" >> "$GITHUB_ENV"
       - name: Audit frozen dependencies against current advisories

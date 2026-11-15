@@ -1,11 +1,16 @@
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
-import { afterEach, expect, it } from '../test-api.js';
+import { afterEach, beforeEach, expect, it } from '../test-api.js';
 import { renderBlankInsertMetadata, resolveInsertMetadata } from '@pxv/guides';
 import { buildDocumentation } from '../../packages/release/src/docs.js';
-import { product } from '../contracts/fixtures.js';
+import { createGuideFixture, product } from './guide-fixture.js';
 
 const roots: string[] = [];
+let source: string;
+beforeEach(async () => {
+  source = await createGuideFixture();
+  roots.push(source);
+});
 const editions = ['operator', 'user', 'quickstart', 'credentials'].flatMap((kind) =>
   ['en', 'pl'].map((locale) => `${kind}-${locale}`),
 );
@@ -15,7 +20,10 @@ afterEach(async () => {
 
 it('resolves product fallback and replaces the complete contact with any project route', () => {
   expect(resolveInsertMetadata(product)).toEqual({
-    support: `${product.support.name}: ${product.support.email} · ${product.support.url}`,
+    support: `${product.support.email} · ${product.support.url}`,
+  });
+  expect(resolveInsertMetadata({ ...product, support: { ...product.support, name: 'Help desk' } })).toEqual({
+    support: `Help desk: ${product.support.email} · ${product.support.url}`,
   });
   const matchingProduct = { ...product, support: { ...product.support, name: product.name } };
   expect(resolveInsertMetadata(matchingProduct)).toEqual({
@@ -56,7 +64,7 @@ it('personalizes every edition literally and preserves descriptive titles, comma
   const templates = new Map<string, string>();
   for (const edition of editions)
     templates.set(edition, await readFile(`guides/source/markdown/${edition}.md`, 'utf8'));
-  await buildDocumentation(process.cwd(), output, { insertMetadata: { projectName, support } });
+  await buildDocumentation(source, output, { insertMetadata: { projectName, support } });
   const escapedName =
     'Zażółć &lt;script&gt; **literal** &amp; [link](https://malicious.example) $&amp; $$ $`';
   for (const edition of editions) {
@@ -99,7 +107,7 @@ it('personalizes every edition literally and preserves descriptive titles, comma
 it('preserves generic editions when no project metadata is supplied', async () => {
   const output = await mkdtemp('/tmp/pxv-generic-guides-');
   roots.push(output);
-  await buildDocumentation(process.cwd(), output);
+  await buildDocumentation(source, output);
   for (const edition of editions) {
     const template = await readFile(`guides/source/markdown/${edition}.md`, 'utf8');
     expect(await readFile(join(output, `source/markdown/${edition}.md`), 'utf8')).toBe(template);
@@ -129,7 +137,7 @@ it('handles independently optional project names and support overrides across al
   ];
   for (const [index, { metadata, name, contact }] of variants.entries()) {
     const destination = join(output, String(index));
-    await buildDocumentation(process.cwd(), destination, { insertMetadata: metadata });
+    await buildDocumentation(source, destination, { insertMetadata: metadata });
     for (const edition of editions) {
       const template = await readFile(`guides/source/markdown/${edition}.md`, 'utf8');
       const html = await readFile(join(destination, `${edition}.html`), 'utf8');
@@ -151,7 +159,7 @@ it('handles independently optional project names and support overrides across al
 it('preserves explicit project names and support names even when they match the product', async () => {
   const output = await mkdtemp('/tmp/pxv-explicit-guide-name-');
   roots.push(output);
-  await buildDocumentation(process.cwd(), output, {
+  await buildDocumentation(source, output, {
     insertMetadata: { projectName: product.name, support: { name: product.name, phone: '+48 999' } },
   });
   for (const edition of editions) {
@@ -165,10 +173,10 @@ it('preserves explicit project names and support names even when they match the 
 it('rejects authoritative output directories and invalid project metadata', async () => {
   const output = await mkdtemp('/tmp/pxv-invalid-guide-metadata-');
   roots.push(output);
+  await expect(buildDocumentation(source, join(source, 'guides'), { insertMetadata: {} })).rejects.toThrow(
+    'outside',
+  );
   await expect(
-    buildDocumentation(process.cwd(), join(process.cwd(), 'guides'), { insertMetadata: {} }),
-  ).rejects.toThrow('outside');
-  await expect(
-    buildDocumentation(process.cwd(), join(output, 'invalid'), { insertMetadata: { support: {} } }),
+    buildDocumentation(source, join(output, 'invalid'), { insertMetadata: { support: {} } }),
   ).rejects.toThrow();
 });

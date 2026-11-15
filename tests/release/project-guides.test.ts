@@ -2,10 +2,18 @@ import { execFileSync } from 'node:child_process';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { PDFDocument, type PDFPage } from 'pdf-lib';
-import { expect, it } from '../test-api.js';
+import { afterEach, beforeEach, expect, it } from '../test-api.js';
 import { buildDocumentation } from '../../packages/release/src/docs.js';
 import { assertFoldPanelBounds } from '../../tools/optional/publishing/fold-qa.mjs';
-import { product } from '../contracts/fixtures.js';
+import { createGuideFixture, product } from './guide-fixture.js';
+
+let source: string;
+beforeEach(async () => {
+  source = await createGuideFixture();
+});
+afterEach(async () => {
+  await rm(source, { recursive: true, force: true });
+});
 
 const normalized = (value: string): string => value.replace(/\s+/gu, ' ').trim();
 
@@ -49,7 +57,7 @@ it('prints literal project titles, descriptive subtitles, support and running la
   const projectName = 'Zażółć <Flota> & **nazwa**';
   const support = { name: 'Wsparcie <Telefonów>', phone: '+48 (123) 456 789' };
   try {
-    await buildDocumentation(process.cwd(), root, {
+    await buildDocumentation(source, root, {
       pdf: true,
       chromiumExecutable: chromium,
       insertMetadata: { projectName, support },
@@ -89,7 +97,7 @@ it('omits automatic product identity from generic and fallback-support PDFs in E
   try {
     for (const [index, metadata] of [undefined, {}].entries()) {
       const output = join(root, String(index));
-      await buildDocumentation(process.cwd(), output, {
+      await buildDocumentation(source, output, {
         pdf: true,
         chromiumExecutable: chromium,
         insertMetadata: metadata,
