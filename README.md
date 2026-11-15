@@ -1,5 +1,10 @@
 # pxv
 
+[![Validation](https://github.com/ekim-pl/pxv/actions/workflows/validate.yml/badge.svg)](https://github.com/ekim-pl/pxv/actions/workflows/validate.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Node.js: 24.22.0](https://img.shields.io/badge/node-24.22.0-339933?logo=node.js&logoColor=white)](package.json)
+[![pnpm: 12.11.2](https://img.shields.io/badge/pnpm-12.11.2-F69220?logo=pnpm&logoColor=white)](package.json)
+
 A local CLI and MCP toolkit for preparing one Google Pixel or a small fleet with
 GrapheneOS, predefined Android user profiles, pinned apps and reviewed configuration.
 Linux x86_64 is the initial platform. pxv is free under the [MIT license](LICENSE).
